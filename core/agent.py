@@ -1,16 +1,17 @@
 import ollama
 import json
+import os
 from datetime import datetime
 from colorama import Fore, Style
 from .tools import ToolManager
 from .memory import Memory
-from config import DEFAULT_MODEL  # <--- Import here
+from config import DEFAULT_MODEL
 
 class LocalClawAgent:
     def __init__(self, model=DEFAULT_MODEL):
         self.model = model
-        self.memory = Memory()  # 1. Create Memory first
-        self.tools = ToolManager(self.memory) # 2. Pass it to Tools
+        self.memory = Memory()
+        self.tools = ToolManager(self.memory)
         self.history = []
 
     def _log(self, title, content):
@@ -19,7 +20,6 @@ class LocalClawAgent:
         print(f"{Fore.LIGHTBLACK_EX}{content}{Style.RESET_ALL}\n")
 
     def _build_system_prompt(self):
-        # The agent reads its own soul every time it thinks
         soul_content = self.memory.read_soul()
         current_env = self.tools.get_system_identity()
         
@@ -39,26 +39,23 @@ Capture significant events by updating your memory files.
         return prompt
 
     def chat(self, user_input, verbose=True):
+        # 1. Prepare Messages
         if user_input == "INIT_BOOTSTRAP":
-            # Direct instruction to follow the BOOTSTRAP.md file
             instruction = "You just woke up. Follow the instructions in BOOTSTRAP.md to introduce yourself and start your first conversation."
-            messages = [{"role": "system", "content": self._build_system_prompt()}, 
+            system_prompt = self._build_system_prompt()
+            messages = [{"role": "system", "content": system_prompt}, 
                         {"role": "user", "content": instruction}]
         else:
             self.history.append({"role": "user", "content": user_input})
-        # 1. Add User Input to History
-        self.history.append({"role": "user", "content": user_input})
-        self.memory.add_log("user", user_input)
-
-        # 2. Construct Messages
-        system_prompt = self._build_system_prompt()
-        messages = [{"role": "system", "content": system_prompt}] + self.history
+            self.memory.add_log("user", user_input)
+            system_prompt = self._build_system_prompt()
+            messages = [{"role": "system", "content": system_prompt}] + self.history
 
         if verbose:
             self._log("Context Window (Last message)", messages[-1])
             self._log("System Prompt (Snippet)", system_prompt[:200] + "...")
 
-        # 3. Call Ollama
+        # 2. Call Ollama
         if verbose: print(f"{Fore.YELLOW}[DEBUG] Thinking...{Style.RESET_ALL}")
         response = ollama.chat(model=self.model, messages=messages)
         content = response['message']['content']
@@ -66,8 +63,7 @@ Capture significant events by updating your memory files.
         if verbose:
             self._log("Raw Model Output", content)
 
-        # 4. Check for Tool Usage
-        # We clean the content to handle cases where small models add Markdown formatting like ```json ... ```
+        # 3. Check for Tool Usage
         clean_content = content.strip().replace("```json", "").replace("```", "")
 
         if clean_content.startswith("{") and "tool" in clean_content:
@@ -85,27 +81,30 @@ Capture significant events by updating your memory files.
                 if verbose:
                     self._log("Tool Result", tool_result)
                 
-                # Feed tool result back to LLM
-                tool_msg = f"Tool output: {tool_result}"
-                self.history.append({"role": "assistant", "content": clean_content})
-                self.history.append({"role": "system", "content": tool_msg})
+                # Logic: If Identity is written, delete Bootstrap
                 if tool_name == "write_file" and "IDENTITY.md" in args:
                     bootstrap_path = os.path.join(self.memory.base_path, "BOOTSTRAP.md")
                     if os.path.exists(bootstrap_path):
                         try:
-				                    os.remove(bootstrap_path)
-				                    if verbose: 
-				                        self._log("Lifecycle Update", "BOOTSTRAP.md deleted. Ritual complete.")
+                            os.remove(bootstrap_path)
+                            if verbose: 
+                                self._log("Lifecycle Update", "BOOTSTRAP.md deleted. Ritual complete.")
                         except Exception as e:
-				                    if verbose:
-				                        self._log("Error", f"Could not delete bootstrap: {e}")                
+                            if verbose:
+                                self._log("Error", f"Could not delete bootstrap: {e}")
+
+                # Feed tool result back to LLM
+                tool_msg = f"Tool output: {tool_result}"
+                self.history.append({"role": "assistant", "content": clean_content})
+                self.history.append({"role": "system", "content": tool_msg})
+                
                 # Get final answer
                 final_response = ollama.chat(model=self.model, messages=messages + self.history)
                 return final_response['message']['content']
                 
             except json.JSONDecodeError as e:
                 if verbose: self._log("JSON Parse Error", str(e))
-                pass # Failed to parse, return raw text
+                pass 
 
         self.history.append({"role": "assistant", "content": content})
         self.memory.add_log("assistant", content)
