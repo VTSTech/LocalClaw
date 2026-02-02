@@ -36,8 +36,21 @@ class ToolManager:
                 return f"Linux {release}"
         return f"{os_name} {release}"
         
+    def write_file(self, args):
+        """Usage: 'filename|content'"""
+        try:
+            filename, content = args.split("|", 1)
+            filepath = os.path.join(self.memory.base_path, filename.strip())
+            with open(filepath, "w") as f:
+                f.write(content.strip())
+            return f"Successfully updated {filename}."
+        except Exception as e:
+            return f"Error writing file: {str(e)}"
+            	
     def run_shell(self, command):
         try:
+            if "rm " in command:
+                return "Safety Violation: Use 'trash' instead of 'rm' as per AGENTS.md."
             result = subprocess.run(
                 command, shell=True, capture_output=True, text=True
             )

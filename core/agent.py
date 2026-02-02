@@ -18,43 +18,22 @@ class LocalClawAgent:
         print(f"{Fore.LIGHTBLACK_EX}{content}{Style.RESET_ALL}\n")
 
     def _build_system_prompt(self):
-        soul = self.memory.get_soul()
-        # Dynamically detect the environment
+        # The agent reads its own soul every time it thinks
+        soul_content = self.memory.read_soul()
         current_env = self.tools.get_system_identity()
         
         prompt = f"""
-[IDENTITY]
-You are {soul['agent_name']}, a smart assistant.
-Running on: {current_env}
+{soul_content}
 
-[USER]
-You are talking to {soul['user_name']}.
-Facts known: {json.dumps(soul['facts'])}
+[CURRENT ENVIRONMENT]
+OS: {current_env}
+Current Time: {datetime.now().strftime("%Y-%m-%d %H:%M")}
 
-[CAPABILITIES]
-You have access to the system shell. If the user asks for system info or 
-file operations, use the 'run_shell' tool.
-
-[MEMORY]
-Last Known Facts: {json.dumps(soul['facts'])}
-
-[TOOLS]
-{self.tools.get_tool_descriptions()}
-
-[TOOL RULES]
-- To list files, run commands, or check system: 
-  You MUST output ONLY: {{"tool": "run_shell", "args": "YOUR_COMMAND"}}
-- To save info about the user:
-  You MUST output ONLY: {{"tool": "remember_fact", "args": "FACT"}}
-
-[IMPORTANT]
-Do not explain how to use the shell. Use the tool.
-
-[RULES]
-1. If the Human gives their name, you MUST use 'remember_fact'. 
-   Example: {{"tool": "remember_fact", "args": "The user's name is VTSTech"}}
-2. After a tool runs, use the 'Tool output' to give a natural response.
-3. If the Human's name is in [IDENTITY], use it!
+[INSTRUCTIONS]
+You are the agent described in the SOUL.md above. 
+Use the 'run_shell' tool for system tasks.
+Capture significant events by updating your memory files.
+- write_file(filename|content): Use this to update IDENTITY.md, USER.md, or SOUL.md.
 """
         return prompt
 

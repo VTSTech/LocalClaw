@@ -4,14 +4,31 @@ import chromadb
 from datetime import datetime
 
 class Memory:
-    def __init__(self, persistence_dir="./memory_store"):
-        self.facts_file = os.path.join(persistence_dir, "soul_facts.json")
-        os.makedirs(persistence_dir, exist_ok=True)
+    def __init__(self, base_path="memory_store"):
+        self.base_path = base_path
+        self.memory_dir = os.path.join(base_path, "memory")
+        os.makedirs(self.memory_dir, exist_ok=True)
+
+    def read_soul(self):
+        """Reads SOUL.md, USER.md, and MEMORY.md to build context."""
+        context = ""
+        files_to_read = ['SOUL.md', 'USER.md', 'MEMORY.md', 'AGENTS.md']
         
-        # Load Long-term Facts (The Soul)
-        if not os.path.exists(self.facts_file):
-            with open(self.facts_file, 'w') as f:
-                json.dump({"agent_name": "LocalClaw", "user_name": "User", "facts": []}, f)
+        for filename in files_to_read:
+            path = os.path.join(self.base_path, filename)
+            if os.path.exists(path):
+                with open(path, 'r') as f:
+                    context += f"\n--- {filename} ---\n{f.read()}\n"
+        return context
+
+    def log_daily(self, role, content):
+        """Writes to memory/YYYY-MM-DD.md as per OpenClaw spec."""
+        date_str = datetime.now().strftime("%Y-%m-%d")
+        file_path = os.path.join(self.memory_dir, f"{date_str}.md")
+        timestamp = datetime.now().strftime("%H:%M:%S")
+        
+        with open(file_path, "a") as f:
+            f.write(f"**{timestamp} - {role.upper()}**: {content}\n\n")
         
         self.chroma_client = chromadb.Client() # In-memory for now, can be persistent
         self.collection = self.chroma_client.create_collection(name="conversation")
