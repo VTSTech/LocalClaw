@@ -2,6 +2,8 @@ import os
 from colorama import Fore, Style
 from core.agent import LocalClawAgent
 
+global LOCALCLAW_BUILD, LOCALCLAW_BUILD_DATE, LOCALCLAW_BUILD_TIME
+
 def start_cli(model_override):
     # If a model was provided via CLI, use it; otherwise, the Agent 
     # will fall back to DEFAULT_MODEL from config.py
