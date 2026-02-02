@@ -1,5 +1,6 @@
 import ollama
 import json
+from datetime import datetime
 from colorama import Fore, Style
 from .tools import ToolManager
 from .memory import Memory

@@ -5,11 +5,13 @@ import os
 class ToolManager:
     # Change from def __init__(self):
     def __init__(self, memory_instance): 
-        self.memory = memory_instance  # Store the reference to the "Soul"
+        self.memory = memory_instance
         self.tools = {
             "run_shell": self.run_shell,
             "get_os_info": self.get_os_info,
-            "remember_fact": self.remember_fact
+            "remember_fact": self.remember_fact,
+            "write_file": self.write_file,    # <--- Added
+            "manage_secret": self.manage_secret # <--- Added
         }
 
     def get_tool_descriptions(self):
