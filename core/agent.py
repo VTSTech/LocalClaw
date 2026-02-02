@@ -92,11 +92,11 @@ Capture significant events by updating your memory files.
                 if tool_name == "write_file" and "IDENTITY.md" in args:
                     bootstrap_path = os.path.join(self.memory.base_path, "BOOTSTRAP.md")
                     if os.path.exists(bootstrap_path):
-				                try:
+                        try:
 				                    os.remove(bootstrap_path)
 				                    if verbose: 
 				                        self._log("Lifecycle Update", "BOOTSTRAP.md deleted. Ritual complete.")
-				                except Exception as e:
+                        except Exception as e:
 				                    if verbose:
 				                        self._log("Error", f"Could not delete bootstrap: {e}")                
                 # Get final answer
