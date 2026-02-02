@@ -14,6 +14,7 @@ class ToolManager:
 
     def get_tool_descriptions(self):
         pass
+        
     # Ensure your methods accept the 'args' passed by the agent
     def get_os_info(self, *args):
         return f"{platform.system()} {platform.release()}"
@@ -41,3 +42,11 @@ class ToolManager:
             except Exception as e:
                 return f"Execution Error: {str(e)}"
         return f"Tool {tool_name} not found."
+    def manage_secret(self, args):
+        """Usage: 'service_name:key_value'"""
+        try:
+            service, value = args.split(":")
+            keyring.set_password("LocalClaw", service.strip(), value.strip())
+            return f"Successfully encrypted and stored key for {service}."
+        except:
+            return "Error: Use format 'service:key'"        

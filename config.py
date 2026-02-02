@@ -17,3 +17,11 @@ def save_api_key(service_name, key_value):
 
 def get_api_key(service_name):
     return keyring.get_password("LocalClaw", service_name)
+
+def store_secret(service, value):
+    # This stores the key in the OS-level secure vault
+    keyring.set_password("LocalClaw", service, value)
+    return f"Secret for {service} stored securely."
+
+def get_secret(service):
+    return keyring.get_password("LocalClaw", service)    
