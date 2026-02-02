@@ -19,42 +19,41 @@ class LocalClawAgent:
         print(f"\n{Fore.YELLOW}[DEBUG] {title}:{Style.RESET_ALL}")
         print(f"{Fore.LIGHTBLACK_EX}{content}{Style.RESET_ALL}\n")
 
+    def _read_md_safe(self, filename, default="Not yet established."):
+        """Helper to read workspace files without crashing if they are missing"""
+        path = os.path.join(self.memory.base_path, filename)
+        if os.path.exists(path):
+            with open(path, 'r') as f:
+                content = f.read().strip()
+                # If it's just the template, treat as empty
+                if len(content) < 50 or "*(pick something" in content:
+                    return default
+                return content
+        return default
+
     def _build_system_prompt(self):
         soul_content = self.memory.read_soul()
+        identity = self._read_md_safe("IDENTITY.md", "Identity: Initializing...")
+        user_info = self._read_md_safe("USER.md", "User: Unknown (Waiting for bootstrap)")
         current_env = self.tools.get_system_identity()
         
-        # --- NEW DYNAMIC LOADING ---
-        # Attempt to read existing identity/user files
-        try:
-            with open("IDENTITY.md", "r") as f:
-                identity_context = f.read()
-        except FileNotFoundError:
-            identity_context = "Identity not yet established. Follow BOOTSTRAP.md."
-
-        try:
-            with open("USER.md", "r") as f:
-                user_context = f.read()
-        except FileNotFoundError:
-            user_context = "User profile not yet established."
-        # ---------------------------
-
         prompt = f"""
 {soul_content}
 
-[WHO AM I]
-{identity_context}
+[MY IDENTITY]
+{identity}
 
-[WHO I AM HELPING]
-{user_context}
+[USER PROFILE]
+{user_info}
 
-[CURRENT ENVIRONMENT]
-OS: {current_env}
-Current Time: {datetime.now().strftime("%Y-%m-%d %H:%M")}
+[ENVIRONMENT]
+OS: {current_env} | Time: {datetime.now().strftime("%Y-%m-%d %H:%M")}
 
 [INSTRUCTIONS]
 You are the agent described above. 
-Use the 'run_shell' tool for system tasks.
-Update your files using write_file(filename|content) to persist memory.
+- Use 'write_file(filename|content)' to save your identity and user info.
+- If IDENTITY.md or USER.md are 'Not yet established', your priority is to complete the bootstrap ritual.
+- To write a file, you MUST use: {{"tool": "write_file", "args": "filename|content"}}
 """
         return prompt
 
@@ -86,15 +85,13 @@ Ask for the user's name. Once confirmed, use 'write_file' to create IDENTITY.md 
         if verbose:
             self._log("Raw Model Output", content)
 
+        # --- ADD TO agent.py Chat Method ---
         # 3. Check for Tool Usage
         clean_content = content.strip().replace("```json", "").replace("```", "")
 
-        # --- HEURISTIC CATCH FOR SMALL MODELS ---
-        # If the model talks about writing IDENTITY.md but misses the JSON format
-        # Look for the model ATTEMPTING to write identity/user files without JSON
-        if ("IDENTITY.md" in clean_content or "USER.md" in clean_content) and "tool" not in clean_content.lower():
-            # Instead of hardcoding, we tell the model it failed the format
-            return "I detected you are trying to set your identity, but you didn't use the JSON tool format. Please output: {\"tool\": \"write_file\", \"args\": \"filename|content\"}"
+        # If it's verbalizing the setup but forgot the tool format
+        if "IDENTITY.md" in content and "{" not in content:
+            return "I see you are describing your identity. Please use the JSON tool format to save it: {\"tool\": \"write_file\", \"args\": \"IDENTITY.md|content...\"}"
 
         if clean_content.startswith("{") and "tool" in clean_content:
             try:
