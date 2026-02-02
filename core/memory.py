@@ -24,13 +24,15 @@ class Memory:
     def save_fact(self, fact):
         data = self.get_soul()
         
-        # Logic to extract name if the model mentions it
-        if "name is" in fact.lower():
-            new_name = fact.split("is")[-1].strip().replace(".", "")
-            data["user_name"] = new_name
+        # If the model just sends the name (like 'VTSTech'), 
+        # or a sentence, let's try to capture it.
+        clean_fact = fact.replace("The user's name is", "").strip()
+        
+        # Simple heuristic: if it's 1-2 words, it's probably the name update
+        if len(clean_fact.split()) <= 2:
+            data["user_name"] = clean_fact
             
         data["facts"].append(f"[{datetime.now().strftime('%Y-%m-%d %H:%M')}] {fact}")
-        
         with open(self.facts_file, 'w') as f:
             json.dump(data, f, indent=4)
 

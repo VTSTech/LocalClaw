@@ -41,6 +41,15 @@ Last Known Facts: {json.dumps(soul['facts'])}
 [TOOLS]
 {self.tools.get_tool_descriptions()}
 
+[TOOL RULES]
+- To list files, run commands, or check system: 
+  You MUST output ONLY: {{"tool": "run_shell", "args": "YOUR_COMMAND"}}
+- To save info about the user:
+  You MUST output ONLY: {{"tool": "remember_fact", "args": "FACT"}}
+
+[IMPORTANT]
+Do not explain how to use the shell. Use the tool.
+
 [RULES]
 1. If the Human gives their name, you MUST use 'remember_fact'. 
    Example: {{"tool": "remember_fact", "args": "The user's name is VTSTech"}}
