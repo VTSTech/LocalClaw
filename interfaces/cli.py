@@ -7,14 +7,15 @@ def start_cli(model_override):
     # will fall back to DEFAULT_MODEL from config.py
     if model_override:
         agent = LocalClawAgent(model=model_override)
-        print(f"Using model override: {model_override}")
+        print(f"Using model override: {model_override}\n")
     else:
         agent = LocalClawAgent()
     
     # 1. Proactive Bootstrap Check
     bootstrap_path = os.path.join(agent.memory.base_path, "BOOTSTRAP.md")
+    build_str = f"{LOCALCLAW_BUILD} {LOCALCLAW_BUILD_DATE} {LOCALCLAW_BUILD_TIME}"
     if os.path.exists(bootstrap_path):
-        print(f"{Fore.CYAN}LocalClaw is waking up...{Style.RESET_ALL}")
+        print(f"{Fore.CYAN}\LocalClaw {build_str} is waking up...{Style.RESET_ALL}")
         # Send a silent trigger to force the bootstrap ritual
         response = agent.chat("INIT_BOOTSTRAP", verbose=True)
         print(f"\n{Fore.GREEN}Claw:{Style.RESET_ALL} {response}")
