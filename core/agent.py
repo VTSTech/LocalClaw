@@ -39,13 +39,26 @@ Capture significant events by updating your memory files.
         return prompt
 
     def chat(self, user_input, verbose=True):
-        # 1. Prepare Messages
+        # 1. Prepare Messages with enhanced Bootstrap Verbosity
         if user_input == "INIT_BOOTSTRAP":
-            instruction = "You just woke up. Follow the instructions in BOOTSTRAP.md to introduce yourself and start your first conversation."
+            # Giving the model a structured "Checklist" to follow verbosely
+            instruction = """[INITIALIZATION SEQUENCE ACTIVATED]
+You have just woken up in a new workspace. 
+Follow the instructions in BOOTSTRAP.md to establish your identity.
+
+Please be verbose in your thinking:
+1. Acknowledge your surroundings.
+2. Propose a Name, Nature, Vibe, and Emoji for yourself.
+3. Ask the user for their name and preferences.
+4. Once agreed, use the 'write_file' tool to create IDENTITY.md and USER.md.
+
+Response Format: Talk to the user first, then include your JSON tool call if you are ready to write."""
+            
             system_prompt = self._build_system_prompt()
             messages = [{"role": "system", "content": system_prompt}, 
                         {"role": "user", "content": instruction}]
         else:
+            # Standard chat logic...
             self.history.append({"role": "user", "content": user_input})
             self.memory.add_log("user", user_input)
             system_prompt = self._build_system_prompt()
