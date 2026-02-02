@@ -16,7 +16,7 @@ def start_cli(model_override=None):
     if os.path.exists(bootstrap_path):
         print(f"{Fore.CYAN}LocalClaw is waking up...{Style.RESET_ALL}")
         # Send a silent trigger to force the bootstrap ritual
-        response = agent.chat("INIT_BOOTSTRAP", verbose=False)
+        response = agent.chat("INIT_BOOTSTRAP", verbose=True)
         print(f"\n{Fore.GREEN}Claw:{Style.RESET_ALL} {response}")
 
     # 2. Main Loop
