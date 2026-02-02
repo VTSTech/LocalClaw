@@ -39,6 +39,13 @@ Capture significant events by updating your memory files.
         return prompt
 
     def chat(self, user_input, verbose=True):
+        if user_input == "INIT_BOOTSTRAP":
+            # Direct instruction to follow the BOOTSTRAP.md file
+            instruction = "You just woke up. Follow the instructions in BOOTSTRAP.md to introduce yourself and start your first conversation."
+            messages = [{"role": "system", "content": self._build_system_prompt()}, 
+                        {"role": "user", "content": instruction}]
+        else:
+            self.history.append({"role": "user", "content": user_input})
         # 1. Add User Input to History
         self.history.append({"role": "user", "content": user_input})
         self.memory.add_log("user", user_input)
