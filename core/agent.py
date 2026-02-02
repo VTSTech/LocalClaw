@@ -58,7 +58,7 @@ Update your files using write_file(filename|content) to persist memory.
 """
         return prompt
 
-def chat(self, user_input, verbose=True):
+    def chat(self, user_input, verbose=True):
         # 1. Prepare Messages
         if user_input == "INIT_BOOTSTRAP":
             # Directing the agent to follow the birth ritual in BOOTSTRAP.md
