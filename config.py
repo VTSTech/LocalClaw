@@ -5,8 +5,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 LOCALCLAW_BUILD = "R0"
-LOCALCLAW_BUILD_DATE = "02.02.2026"
-LOCALCLAW_BUILD_TIME = "6:27:54PM"
+LOCALCLAW_BUILD_DATE = "02.02.2026 6:27:54PM"
 
 # Global Configuration
 DEFAULT_MODEL = "llama3.2:1b"  # Change this to "llama3" or others easily
