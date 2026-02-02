@@ -6,10 +6,10 @@ from .memory import Memory
 from config import DEFAULT_MODEL  # <--- Import here
 
 class LocalClawAgent:
-    def __init__(self, model=DEFAULT_MODEL): # <--- Use as default
+    def __init__(self, model=DEFAULT_MODEL):
         self.model = model
-        self.tools = ToolManager()
-        self.memory = Memory()
+        self.memory = Memory()  # 1. Create Memory first
+        self.tools = ToolManager(self.memory) # 2. Pass it to Tools
         self.history = []
 
     def _log(self, title, content):
@@ -18,32 +18,25 @@ class LocalClawAgent:
         print(f"{Fore.LIGHTBLACK_EX}{content}{Style.RESET_ALL}\n")
 
     def _build_system_prompt(self):
-		        soul = self.memory.get_soul()
-		        prompt = f"""
-		        You are {soul['agent_name']}, a smart assistant running on {self.tools.get_os_info()}.
-		        
-		        [USER DATA]
-		        Name: {soul['user_name']}
-		        Facts: {json.dumps(soul['facts'])}
-		        
-		        [TOOLS AVAILABLE]
-		        {self.tools.get_tool_descriptions()}
-		        
-		        [INSTRUCTIONS]
-		        1. FOR GENERAL CHAT (Greetings, questions, coding):
-		           - JUST REPLY normally. Do NOT use JSON.
-		           
-		        2. FOR ACTIONS (System checks, executing commands):
-		           - Output valid JSON ONLY: {{"tool": "tool_name", "args": "exact_argument"}}
-		           
-		        [EXAMPLES]
-		        User: "Hello"
-		        You: "Hi there! How can I help?"
-		        
-		        User: "List files"
-		        You: {{"tool": "run_shell", "args": "ls -al"}}
-		        """
-		        return prompt
+        soul = self.memory.get_soul()
+        prompt = f"""
+[SITUATION]
+You are the AI, named {soul['agent_name']}.
+The Human is named {soul['user_name']}.
+
+[MEMORY]
+Current Human Name: {soul['user_name']}
+Facts: {json.dumps(soul['facts'])}
+
+[TOOLS]
+{self.tools.get_tool_descriptions()}
+
+[RULES]
+1. If the Human tells you their name, you MUST call: {{"tool": "remember_fact", "args": "The user's name is..."}}
+2. If you don't know the name, address them as 'User'.
+3. Never confuse your name with the Human's name.
+        """
+        return prompt
 
     def chat(self, user_input, verbose=True):
         # 1. Add User Input to History

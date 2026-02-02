@@ -3,41 +3,42 @@ import platform
 import os
 
 class ToolManager:
-    def __init__(self):
+    # Change from def __init__(self):
+    def __init__(self, memory_instance): 
+        self.memory = memory_instance  # Store the reference to the "Soul"
         self.tools = {
             "run_shell": self.run_shell,
-            "get_os_info": self.get_os_info
+            "get_os_info": self.get_os_info,
+            "remember_fact": self.remember_fact
         }
 
-    def get_tool_descriptions(self):
-        return """
-        - run_shell(command): Executes a command in the system shell. Use cautiously.
-        - get_os_info(): Returns information about the current operating system.
-        """
+    # Ensure your methods accept the 'args' passed by the agent
+    def get_os_info(self, *args):
+        import platform
+        return f"{platform.system()} {platform.release()}"
 
     def run_shell(self, command):
-        """Executes shell commands with a safety check."""
-        forbidden = ["rm -rf /", "format c:"] # Basic safety
-        if any(f in command for f in forbidden):
-            return "Error: Command blocked for safety."
-        
+        import subprocess
+        import os
         try:
-            # shell=True is required for complex commands, but risky.
             result = subprocess.run(
-                command, 
-                shell=True, 
-                capture_output=True, 
-                text=True,
-                cwd=os.getcwd() # Run in current directory
+                command, shell=True, capture_output=True, text=True
             )
             return result.stdout if result.stdout else result.stderr
         except Exception as e:
             return str(e)
 
-    def get_os_info(self):
-        return f"{platform.system()} {platform.release()}"
+    def remember_fact(self, fact):
+        """Saves a permanent fact to the memory store."""
+        # Now this works because self.memory was passed in __init__
+        self.memory.save_fact(fact)
+        return f"Successfully saved to my soul: {fact}"
 
     def execute(self, tool_name, args):
         if tool_name in self.tools:
-            return self.tools[tool_name](args)
-        return "Error: Tool not found."
+            # We use a try block here to catch issues like 0.5b sending weird args
+            try:
+                return self.tools[tool_name](args)
+            except Exception as e:
+                return f"Execution Error: {str(e)}"
+        return f"Tool {tool_name} not found."
