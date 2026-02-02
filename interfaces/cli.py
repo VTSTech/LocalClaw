@@ -1,29 +1,31 @@
-from core.agent import LocalClawAgent
-import colorama
+import os
 from colorama import Fore, Style
-
-colorama.init(autoreset=True)
+from core.agent import LocalClawAgent
 
 def start_cli():
     agent = LocalClawAgent()
     
-    # Check if this is the first run
-    if os.path.exists("memory_store/BOOTSTRAP.md"):
-        # We trigger a "silent" first turn to let the agent speak first
+    # 1. Proactive Bootstrap Check
+    bootstrap_path = os.path.join(agent.memory.base_path, "BOOTSTRAP.md")
+    if os.path.exists(bootstrap_path):
         print(f"{Fore.CYAN}LocalClaw is waking up...{Style.RESET_ALL}")
+        # Send a silent trigger to force the bootstrap ritual
         response = agent.chat("INIT_BOOTSTRAP", verbose=False)
         print(f"\n{Fore.GREEN}Claw:{Style.RESET_ALL} {response}")
 
-    while True:
-        user_input = input(f"\n{Fore.BLUE}You:{Style.RESET_ALL} ")
-        if user_input.lower() in ['exit', 'quit']:
-            break
+    # 2. Main Loop
+    try:
+        while True:
+            user_input = input(f"\n{Fore.BLUE}You:{Style.RESET_ALL} ")
             
-            # You can also move verbose=True to a config variable if you like
+            if user_input.lower() in ['exit', 'quit']:
+                print("Goodbye!")
+                break
+                
             response = agent.chat(user_input, verbose=True)
+            print(f"\n{Fore.GREEN}Claw:{Style.RESET_ALL} {response}")
             
-            print(Fore.MAGENTA + "Claw: " + Style.RESET_ALL + response)
-            
-        except KeyboardInterrupt:
-            print("\nExiting...")
-            break
+    except KeyboardInterrupt:
+        print("\nSession ended by user.")
+    except Exception as e:
+        print(f"\nAn error occurred: {e}")
