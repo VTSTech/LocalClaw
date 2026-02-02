@@ -90,8 +90,8 @@ Capture significant events by updating your memory files.
                 self.history.append({"role": "assistant", "content": clean_content})
                 self.history.append({"role": "system", "content": tool_msg})
                 if tool_name == "write_file" and "IDENTITY.md" in args:
-				            bootstrap_path = os.path.join(self.memory.base_path, "BOOTSTRAP.md")
-				            if os.path.exists(bootstrap_path):
+                    bootstrap_path = os.path.join(self.memory.base_path, "BOOTSTRAP.md")
+                    if os.path.exists(bootstrap_path):
 				                try:
 				                    os.remove(bootstrap_path)
 				                    if verbose: 
