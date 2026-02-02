@@ -12,14 +12,13 @@ class ToolManager:
             "remember_fact": self.remember_fact
         }
 
+    def get_tool_descriptions(self):
+        pass
     # Ensure your methods accept the 'args' passed by the agent
     def get_os_info(self, *args):
-        import platform
         return f"{platform.system()} {platform.release()}"
 
     def run_shell(self, command):
-        import subprocess
-        import os
         try:
             result = subprocess.run(
                 command, shell=True, capture_output=True, text=True

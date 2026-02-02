@@ -23,7 +23,14 @@ class Memory:
 
     def save_fact(self, fact):
         data = self.get_soul()
-        data["facts"].append(f"[{datetime.now()}] {fact}")
+        
+        # Logic to extract name if the model mentions it
+        if "name is" in fact.lower():
+            new_name = fact.split("is")[-1].strip().replace(".", "")
+            data["user_name"] = new_name
+            
+        data["facts"].append(f"[{datetime.now().strftime('%Y-%m-%d %H:%M')}] {fact}")
+        
         with open(self.facts_file, 'w') as f:
             json.dump(data, f, indent=4)
 

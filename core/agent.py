@@ -20,22 +20,22 @@ class LocalClawAgent:
     def _build_system_prompt(self):
         soul = self.memory.get_soul()
         prompt = f"""
-[SITUATION]
-You are the AI, named {soul['agent_name']}.
-The Human is named {soul['user_name']}.
+[IDENTITY]
+AI Name: {soul['agent_name']}
+Human Name: {soul['user_name']}
 
 [MEMORY]
-Current Human Name: {soul['user_name']}
-Facts: {json.dumps(soul['facts'])}
+Last Known Facts: {json.dumps(soul['facts'])}
 
 [TOOLS]
 {self.tools.get_tool_descriptions()}
 
 [RULES]
-1. If the Human tells you their name, you MUST call: {{"tool": "remember_fact", "args": "The user's name is..."}}
-2. If you don't know the name, address them as 'User'.
-3. Never confuse your name with the Human's name.
-        """
+1. If the Human gives their name, you MUST use 'remember_fact'. 
+   Example: {{"tool": "remember_fact", "args": "The user's name is VTSTech"}}
+2. After a tool runs, use the 'Tool output' to give a natural response.
+3. If the Human's name is in [IDENTITY], use it!
+"""
         return prompt
 
     def chat(self, user_input, verbose=True):
