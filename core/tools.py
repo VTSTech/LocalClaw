@@ -18,7 +18,24 @@ class ToolManager:
     # Ensure your methods accept the 'args' passed by the agent
     def get_os_info(self, *args):
         return f"{platform.system()} {platform.release()}"
-
+        
+    def get_system_identity(self):
+        """Returns a string describing the current environment."""
+        os_name = platform.system()
+        release = platform.release()
+        
+        if os_name == "Windows":
+            return f"Windows {platform.release()} (Version: {platform.version()})"
+        elif os_name == "Linux":
+            # Try to get specific distro like 'Ubuntu'
+            try:
+                import subprocess
+                distro = subprocess.check_output("lsb_release -is", shell=True, text=True).strip()
+                return f"{distro} Linux {release}"
+            except:
+                return f"Linux {release}"
+        return f"{os_name} {release}"
+        
     def run_shell(self, command):
         try:
             result = subprocess.run(

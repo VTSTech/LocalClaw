@@ -19,10 +19,21 @@ class LocalClawAgent:
 
     def _build_system_prompt(self):
         soul = self.memory.get_soul()
+        # Dynamically detect the environment
+        current_env = self.tools.get_system_identity()
+        
         prompt = f"""
 [IDENTITY]
-AI Name: {soul['agent_name']}
-Human Name: {soul['user_name']}
+You are {soul['agent_name']}, a smart assistant.
+Running on: {current_env}
+
+[USER]
+You are talking to {soul['user_name']}.
+Facts known: {json.dumps(soul['facts'])}
+
+[CAPABILITIES]
+You have access to the system shell. If the user asks for system info or 
+file operations, use the 'run_shell' tool.
 
 [MEMORY]
 Last Known Facts: {json.dumps(soul['facts'])}
