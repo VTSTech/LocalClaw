@@ -23,7 +23,7 @@ class Memory:
         for filename in files_to_read:
             path = os.path.join(self.base_path, filename)
             if os.path.exists(path):
-                with open(path, 'r', encoding='utf-8') as f:
+                with open(path, 'r', encoding='utf-8', errors='replace') as f:
                     context += f"\n--- {filename} ---\n{f.read()}\n"
         return context
 
