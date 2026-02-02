@@ -7,7 +7,7 @@ load_dotenv()
 LOCALCLAW_BUILD = "R0"
 LOCALCLAW_BUILD_DATE = "02.02.2026"
 LOCALCLAW_BUILD_TIME = "2026-02-02 6:27:54PM"
-	
+
 # Global Configuration
 DEFAULT_MODEL = "llama3.2:1b"  # Change this to "llama3" or others easily
 DEBUG_MODE = True               # Toggle verbosity globally if you want

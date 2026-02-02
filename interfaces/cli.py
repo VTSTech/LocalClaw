@@ -1,8 +1,7 @@
 import os
 from colorama import Fore, Style
 from core.agent import LocalClawAgent
-
-global LOCALCLAW_BUILD, LOCALCLAW_BUILD_DATE, LOCALCLAW_BUILD_TIME
+from config import LOCALCLAW_BUILD, LOCALCLAW_BUILD_DATE, LOCALCLAW_BUILD_TIME
 
 def start_cli(model_override):
     # If a model was provided via CLI, use it; otherwise, the Agent 
@@ -17,7 +16,7 @@ def start_cli(model_override):
     bootstrap_path = os.path.join(agent.memory.base_path, "BOOTSTRAP.md")
     build_str = f"{LOCALCLAW_BUILD} {LOCALCLAW_BUILD_DATE} {LOCALCLAW_BUILD_TIME}"
     if os.path.exists(bootstrap_path):
-        print(f"{Fore.CYAN}\LocalClaw {build_str} is waking up...{Style.RESET_ALL}")
+        print(f"{Fore.CYAN}LocalClaw {build_str} is waking up...{Style.RESET_ALL}")
         # Send a silent trigger to force the bootstrap ritual
         response = agent.chat("INIT_BOOTSTRAP", verbose=True)
         print(f"\n{Fore.GREEN}Claw:{Style.RESET_ALL} {response}")
