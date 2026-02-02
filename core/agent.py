@@ -89,7 +89,16 @@ Capture significant events by updating your memory files.
                 tool_msg = f"Tool output: {tool_result}"
                 self.history.append({"role": "assistant", "content": clean_content})
                 self.history.append({"role": "system", "content": tool_msg})
-                
+                if tool_name == "write_file" and "IDENTITY.md" in args:
+				            bootstrap_path = os.path.join(self.memory.base_path, "BOOTSTRAP.md")
+				            if os.path.exists(bootstrap_path):
+				                try:
+				                    os.remove(bootstrap_path)
+				                    if verbose: 
+				                        self._log("Lifecycle Update", "BOOTSTRAP.md deleted. Ritual complete.")
+				                except Exception as e:
+				                    if verbose:
+				                        self._log("Error", f"Could not delete bootstrap: {e}")                
                 # Get final answer
                 final_response = ollama.chat(model=self.model, messages=messages + self.history)
                 return final_response['message']['content']

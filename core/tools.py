@@ -39,11 +39,16 @@ class ToolManager:
         return f"{os_name} {release}"
         
     def write_file(self, args):
-        """Usage: 'filename|content'"""
+        """Usage: 'filename|content' or 'filename content'"""
         try:
-            filename, content = args.split("|", 1)
+            # Handle both pipe-separated and space-separated if the pipe is missing
+            if "|" in args:
+                filename, content = args.split("|", 1)
+            else:
+                filename, content = args.split(" ", 1)
+                
             filepath = os.path.join(self.memory.base_path, filename.strip())
-            with open(filepath, "w") as f:
+            with open(filepath, "w", encoding='utf-8') as f:
                 f.write(content.strip())
             return f"Successfully updated {filename}."
         except Exception as e:
