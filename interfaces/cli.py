@@ -4,8 +4,7 @@ from core.agent import LocalClawAgent
 from config import LOCALCLAW_BUILD, LOCALCLAW_BUILD_DATE, LOCALCLAW_BUILD_TIME
 
 def start_cli(model_override):
-    # If a model was provided via CLI, use it; otherwise, the Agent 
-    # will fall back to DEFAULT_MODEL from config.py
+    
     if model_override:
         agent = LocalClawAgent(model=model_override)
         print(f"Using model override: {model_override}\n")
@@ -14,7 +13,9 @@ def start_cli(model_override):
     
     # 1. Proactive Bootstrap Check
     bootstrap_path = os.path.join(agent.memory.base_path, "BOOTSTRAP.md")
-    build_str = f"{LOCALCLAW_BUILD} {LOCALCLAW_BUILD_DATE} {LOCALCLAW_BUILD_TIME}"
+    
+    build_str = f"{LOCALCLAW_BUILD} {LOCALCLAW_BUILD_DATE}"
+    
     if os.path.exists(bootstrap_path):
         print(f"{Fore.CYAN}LocalClaw {build_str} is waking up...{Style.RESET_ALL}")
         # Send a silent trigger to force the bootstrap ritual
