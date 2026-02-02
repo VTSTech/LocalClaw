@@ -6,12 +6,15 @@ from interfaces.cli import start_cli
 def main():
     parser = argparse.ArgumentParser(description="LocalClaw Agent Runner")
     parser.add_argument('--mode', choices=['cli', 'web'], default='cli', help="Interface mode")
+    # Add the model argument here
+    parser.add_argument('--model', type=str, default='qwen3:0.6b', help="Override the default Ollama model")
+    
     args = parser.parse_args()
 
     if args.mode == 'cli':
-        start_cli()
+        # Pass the model argument to the CLI start function
+        start_cli(model_override=args.model)
     elif args.mode == 'web':
-        # Streamlit needs to be run via `streamlit run`, so we use subprocess if called via python
         import os
         os.system("streamlit run interfaces/web.py")
 

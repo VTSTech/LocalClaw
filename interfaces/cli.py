@@ -2,8 +2,14 @@ import os
 from colorama import Fore, Style
 from core.agent import LocalClawAgent
 
-def start_cli():
-    agent = LocalClawAgent()
+def start_cli(model_override=None):
+    # If a model was provided via CLI, use it; otherwise, the Agent 
+    # will fall back to DEFAULT_MODEL from config.py
+    if model_override:
+        agent = LocalClawAgent(model=model_override)
+        print(f"Using model override: {model_override}")
+    else:
+        agent = LocalClawAgent()
     
     # 1. Proactive Bootstrap Check
     bootstrap_path = os.path.join(agent.memory.base_path, "BOOTSTRAP.md")
