@@ -23,7 +23,7 @@ class Memory:
         for filename in files_to_read:
             path = os.path.join(self.base_path, filename)
             if os.path.exists(path):
-                with open(path, 'r') as f:
+                with open(path, 'r', encoding='utf-8') as f:
                     context += f"\n--- {filename} ---\n{f.read()}\n"
         return context
 
@@ -33,7 +33,7 @@ class Memory:
         file_path = os.path.join(self.memory_dir, f"{date_str}.md")
         timestamp = datetime.now().strftime("%H:%M:%S")
         
-        with open(file_path, "a") as f:
+        with open(file_path, "a", encoding='utf-8') as f:
             f.write(f"### {timestamp} - {role.upper()}\n{content}\n\n")
 
     def get_soul(self):
