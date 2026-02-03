@@ -50,6 +50,11 @@ class LocalClawAgent:
 3. Use RUN_WRITE: filename | content to save data.
 4. Use RUN_READ: filename to view logs.
 
+### COMMANDS
+- To SAVE a file: RUN_WRITE: filename | content
+- To READ a file: RUN_READ: filename
+- To RUN SHELL: RUN_SHELL: command
+	
 ### GOAL
 Assist {human_identity} with system tasks and maintain your resident persona.
 """
@@ -93,7 +98,21 @@ Assist {human_identity} with system tasks and maintain your resident persona.
             self.history.append({"role": "system", "content": f"FILE CONTENT OF {filename}:\n{result}"})
             final_resp = ollama.chat(model=self.model, messages=messages + self.history)
             return final_resp['message']['content']
+        # Search for RUN_SHELL: command
+        shell_match = re.search(r'RUN_SHELL:\s*(.*)', content, re.IGNORECASE)
 
+        if shell_match:
+            command = shell_match.group(1).strip()
+            # Execute the shell tool
+            result = self.tools.run_shell(command)
+            if verbose: self._log("Action", f"Executed Shell: {command}")
+            
+            # Feed the output back to the model
+            self.history.append({"role": "assistant", "content": content})
+            self.history.append({"role": "system", "content": f"SHELL OUTPUT:\n{result}"})
+            final_resp = ollama.chat(model=self.model, messages=messages + self.history)
+            return final_resp['message']['content']
+            
         self.history.append({"role": "assistant", "content": content})
         self.memory.add_log("assistant", content)
         return content

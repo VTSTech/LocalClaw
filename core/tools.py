@@ -66,6 +66,16 @@ class ToolManager:
 		                return f.read()
 		        return f"Error: File {filename} not found in memory store."   
 		    	      	
+    def list_files(self, args=None):
+        """Usage: RUN_LIST: memory"""
+        try:
+            files = os.listdir(self.memory.base_path)
+            if not files:
+                return "The memory store is currently empty."
+            return "\n".join([f"- {f}" for f in files])
+        except Exception as e:
+            return f"Error listing files: {str(e)}"
+            	
     def run_shell(self, command):
         try:
             if "rm " in command:
