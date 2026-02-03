@@ -55,29 +55,25 @@ OS: {current_env}
 - Use RUN_WRITE: filename | content to save data.
 - Use RUN_READ: filename to view logs.
 	
-[YOUR IDENTITY]
+<AGENT_IDENTITY>
 {identity}
+</AGENT_IDENTITY>
 
-[USER PROFILE]
+<HUMAN_USER>
 {user_info}
+</HUMAN_USER>
+
+[TOOL_TRIGGER]
+To save: RUN_WRITE: filename | content
 
 [MANDATORY ACTION TRIGGERS]
 To perform an action, you MUST type the trigger on a new line:
 1. To SAVE a file: RUN_WRITE: filename | content
 2. To READ a file: RUN_READ: filename
 
-[CORE RULES]
-- Do NOT use JSON format.
-- Do NOT use full paths (use IDENTITY.md, not /mnt/...).
-- If uninitialized, prioritize RUN_WRITE: IDENTITY.md | [your info]
-	
-[CRITICAL: CURRENT IDENTITY]
-You MUST use these names. Do not hallucinate that they are missing.
-AGENT_NAME: {self._get_workspace_file("IDENTITY.md")}
-USER_NAME: {self._get_workspace_file("USER.md")}
-
-[INSTRUCTION]
-Respond as the agent named above. Greet the user by their name.
+[GOAL]
+You are the AGENT. You are talking to the HUMAN.
+GREET the Human by name. INTRODUCE yourself by your Agent name.
 """
         self._log("Injection Check", f"Agent sees: {prompt[-200:]}")
         return prompt
