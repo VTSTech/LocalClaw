@@ -32,7 +32,6 @@ class LocalClawAgent:
 
     def _build_system_prompt(self):
         soul_content = self.memory.read_soul()
-        # Dynamically pull current state from files
         identity_context = self._get_workspace_file("IDENTITY.md")
         user_context = self._get_workspace_file("USER.md")
         current_env = self.tools.get_system_identity()
@@ -49,11 +48,13 @@ class LocalClawAgent:
 [ENVIRONMENT]
 OS: {current_env} | Time: {datetime.now().strftime("%Y-%m-%d %H:%M")}
 
-[CORE INSTRUCTION]
-You are a resident agent. If IDENTITY.md or USER.md are unitialized, 
-follow the BOOTSTRAP.md ritual to establish them immediately.
-To act, you MUST use the following JSON format:
-{{"tool": "tool_name", "args": "arguments"}}
+[CORE RULES]
+1. DO NOT use full paths like /mnt/... Just use the filename (e.g., IDENTITY.md).
+2. To save info, you MUST use the tool call format below.
+3. Arguments for write_file must use the PIPE character: filename|content
+
+[TOOL FORMAT]
+{{"tool": "write_file", "args": "filename|content"}}
 """
         return prompt
 
