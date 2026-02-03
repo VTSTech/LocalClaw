@@ -55,11 +55,16 @@ class ToolManager:
             return f"Error writing file: {str(e)}"
             	
     def read_file(self, args):
-		    path = os.path.join(self.memory.base_path, args.strip())
-		    if os.path.exists(path):
-		        with open(path, 'r') as f:
-		            return f.read()
-		    return f"Error: File {args} not found."      
+		        """Usage: RUN_READ: filename"""
+		        filename = args.strip()
+		        # Prevent the model from escaping the memory_store
+		        safe_name = os.path.basename(filename) 
+		        path = os.path.join(self.memory.base_path, safe_name)
+		        
+		        if os.path.exists(path):
+		            with open(path, 'r', errors='ignore') as f:
+		                return f.read()
+		        return f"Error: File {filename} not found in memory store."   
 		    	      	
     def run_shell(self, command):
         try:
