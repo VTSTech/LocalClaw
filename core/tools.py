@@ -54,6 +54,13 @@ class ToolManager:
         except Exception as e:
             return f"Error writing file: {str(e)}"
             	
+    def read_file(self, args):
+		    path = os.path.join(self.memory.base_path, args.strip())
+		    if os.path.exists(path):
+		        with open(path, 'r') as f:
+		            return f.read()
+		    return f"Error: File {args} not found."      
+		    	      	
     def run_shell(self, command):
         try:
             if "rm " in command:
