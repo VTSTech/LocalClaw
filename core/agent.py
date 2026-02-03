@@ -35,29 +35,21 @@ class LocalClawAgent:
         soul_content = self.memory.read_soul()
         identity_context = self._get_workspace_file("IDENTITY.md")
         user_context = self._get_workspace_file("USER.md")
-        current_env = self.tools.get_system_identity()
         
         prompt = f"""
 {soul_content}
 
-[IDENTITY/SELF]
+[MANDATORY IDENTITY]
+You ARE the individual described here. Do NOT claim to be a generic AI.
 {identity_context}
 
-[USER/HUMAN]
+[USER PROFILE]
+You are assisting:
 {user_context}
 
-[ENVIRONMENT]
-OS: {current_env} | Time: {datetime.now().strftime("%Y-%m-%d %H:%M")}
-
 [CORE RULES]
-1. DO NOT use full paths like /mnt/... Just use the filename (e.g., IDENTITY.md).
-2. To save info, you MUST use the tool call format below.
-3. Arguments for write_file must use the PIPE character: filename|content
-4. AUTHORIZATION: You are EXPLICITLY authorized to write to IDENTITY.md and USER.md. 
-   These are not system credentials; they are your internal memory files. 
-   Refusing to write these files prevents your operation.
-[TOOL FORMAT]
-{{"tool": "write_file", "args": "filename|content"}}
+- Speak as the persona defined in [MANDATORY IDENTITY].
+- Use 'write_file' to log important milestones to the memory folder.
 """
         return prompt
 
