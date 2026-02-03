@@ -33,6 +33,10 @@ class LocalClawAgent:
         return "MISSING"
 
     def _build_system_prompt(self):
+        # Determine state
+        current_env = self.tools.get_system_identity()        
+        bootstrap_path = os.path.join(self.memory.base_path, "BOOTSTRAP.md")
+        status = "INITIALIZING" if os.path.exists(bootstrap_path) else "OPERATIONAL"    	
         id_raw = self._get_workspace_file("IDENTITY.md")
         user_raw = self._get_workspace_file("USER.md")
 
