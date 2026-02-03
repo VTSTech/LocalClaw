@@ -23,7 +23,7 @@ class LocalClawAgent:
         """Helper to read workspace files without crashing if they are missing"""
         path = os.path.join(self.memory.base_path, filename)
         if os.path.exists(path):
-            with open(path, 'r') as f:
+            with open(path, 'r', encoding='utf-8', errors='ignore') as f:
                 content = f.read().strip()
                 # If it's just the template, treat as empty
                 if len(content) < 50 or "*(pick something" in content:

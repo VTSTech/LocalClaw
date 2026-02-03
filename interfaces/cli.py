@@ -1,7 +1,7 @@
 import os
 from colorama import Fore, Style
 from core.agent import LocalClawAgent
-from config import LOCALCLAW_BUILD, LOCALCLAW_BUILD_DATE, LOCALCLAW_BUILD_TIME
+from config import LOCALCLAW_BUILD, LOCALCLAW_BUILD_DATE
 
 def start_cli(model_override):
     
