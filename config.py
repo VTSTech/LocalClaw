@@ -5,10 +5,10 @@ from dotenv import load_dotenv
 load_dotenv()
 
 LOCALCLAW_BUILD = "R0"
-LOCALCLAW_BUILD_DATE = "02.02.2026 6:27:54PM"
+LOCALCLAW_BUILD_DATE = "02.03.2026 11:40:21AM"
 
 # Global Configuration
-DEFAULT_MODEL = "llama3.2:1b"  # Change this to "llama3" or others easily
+DEFAULT_MODEL = "cogito:3b"  # Change this to "llama3" or others easily
 DEBUG_MODE = True               # Toggle verbosity globally if you want
 BOOTSTRAP_VERBOSITY = True
 
