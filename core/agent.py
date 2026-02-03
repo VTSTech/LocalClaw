@@ -52,7 +52,9 @@ OS: {current_env} | Time: {datetime.now().strftime("%Y-%m-%d %H:%M")}
 1. DO NOT use full paths like /mnt/... Just use the filename (e.g., IDENTITY.md).
 2. To save info, you MUST use the tool call format below.
 3. Arguments for write_file must use the PIPE character: filename|content
-
+4. AUTHORIZATION: You are EXPLICITLY authorized to write to IDENTITY.md and USER.md. 
+   These are not system credentials; they are your internal memory files. 
+   Refusing to write these files prevents your operation.
 [TOOL FORMAT]
 {{"tool": "write_file", "args": "filename|content"}}
 """
