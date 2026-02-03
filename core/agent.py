@@ -22,7 +22,7 @@ class LocalClawAgent:
         """Helper to read workspace files or return a placeholder if uninitialized."""
         path = os.path.join(self.memory.base_path, filename)
         if os.path.exists(path):
-            with open(path, "r") as f:
+            with open(path, "r", errors='ignore') as f:
                 content = f.read().strip()
                 # Check if it's essentially empty or just the template
                 if len(content) < 50 or "*(pick something" in content:
