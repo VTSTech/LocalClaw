@@ -51,8 +51,6 @@ class LocalClawAgent:
 ### OPERATIONAL RULES
 1. You are a resident agent. Speak as {ai_identity}.
 2. Always address the human as {human_identity}.
-3. Use RUN_WRITE: filename | content to save data.
-4. Use RUN_READ: filename to view logs.
 
 ### COMMANDS
 - To SAVE a file: RUN_WRITE: filename | content
@@ -106,27 +104,26 @@ Assist {human_identity} with system tasks and maintain your resident persona.
         shell_match = re.search(r'RUN_SHELL:\s*`?(.*?)`?\s*$', content, re.IGNORECASE | re.MULTILINE)
 
         if shell_match:
-            # 2. Clean the command (remove any markdown backticks)
             command = shell_match.group(1).strip().replace('`', '')
             if verbose: self._log("Action", f"Executing Cleaned Shell: {command}")
             
-            # 3. Execute the tool via your ToolManager
+            # 1. Run the tool
             result = self.tools.run_shell(command)
             
-            # 4. FEEDBACK LOOP: Tell the model what happened
-            # We add its own thought and the shell's output to the history
+            # 2. Update History (Important!)
             self.history.append({"role": "assistant", "content": content})
-            self.history.append({
-                "role": "system", 
-                "content": f"SHELL EXECUTION RESULT:\n{result}\n\nNow, summarize this output for VTSTech."
-            })
+            self.history.append({"role": "system", "content": f"SHELL OUTPUT:\n{result}"})
             
-            # 5. Get the FINAL response where the AI actually sees the data
-            final_resp = ollama.chat(
+            # 3. Call the model AGAIN so it can see the result and talk to the user
+            # Use the full prompt + history so it remembers who it is
+            final_response = ollama.chat(
                 model=self.model, 
                 messages=[{"role": "system", "content": self._build_system_prompt()}] + self.history
             )
-            return final_resp['message']['content']
+            
+            final_content = final_response['message']['content']
+            self.history.append({"role": "assistant", "content": final_content})
+            return final_content
             
         self.history.append({"role": "assistant", "content": content})
         self.memory.add_log("assistant", content)
