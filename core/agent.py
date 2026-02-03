@@ -1,6 +1,7 @@
 import ollama
 import json
 import os
+import re
 from datetime import datetime
 from colorama import Fore, Style
 from .tools import ToolManager
@@ -98,12 +99,19 @@ OS: {current_env} | Time: {datetime.now().strftime("%Y-%m-%d %H:%M")}
                 
                 return "Protocol enforced. I have written your IDENTITY.md and USER.md for you since you were struggling with the format. Ritual complete."
 
-        # 4. Handle JSON Tool Calls
-        if clean_content.startswith("{") and "tool" in clean_content:
+        # 4. ENHANCED Tool Handling (Replaces your old Step 4)
+        # This regex looks for {"tool": ... } anywhere in the text
+        tool_match = re.search(r'\{"tool":\s*".*?"\s*,\s*"args":\s*".*?"\}', clean_content, re.DOTALL)
+
+        if tool_match:
             try:
-                command_data = json.loads(clean_content)
+                # Extract the JSON portion from the chatter
+                json_str = tool_match.group(0)
+                command_data = json.loads(json_str)
                 tool_name = command_data.get("tool")
                 args = command_data.get("args")
+                
+                if verbose: self._log("Regex Match", f"Found tool call: {tool_name}")
                 
                 tool_result = self.tools.execute(tool_name, args)
                 
@@ -112,14 +120,15 @@ OS: {current_env} | Time: {datetime.now().strftime("%Y-%m-%d %H:%M")}
                     bootstrap_path = os.path.join(self.memory.base_path, "BOOTSTRAP.md")
                     if os.path.exists(bootstrap_path):
                         os.remove(bootstrap_path)
-                        if verbose: self._log("Lifecycle", "BOOTSTRAP.md deleted. Ritual complete.")
+                        if verbose: self._log("Lifecycle", "BOOTSTRAP.md deleted.")
 
                 self.history.append({"role": "assistant", "content": content})
                 self.history.append({"role": "system", "content": f"Tool output: {tool_result}"})
                 
                 final_response = ollama.chat(model=self.model, messages=messages + self.history)
                 return final_response['message']['content']
-            except json.JSONDecodeError:
+            except (json.JSONDecodeError, Exception) as e:
+                if verbose: self._log("Tool Error", str(e))
                 pass 
 
         self.history.append({"role": "assistant", "content": content})
