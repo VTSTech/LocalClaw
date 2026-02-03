@@ -46,36 +46,24 @@ class LocalClawAgent:
 
         # Simplified "Loud" Instructions for 1B model
         prompt = f"""
-ROLE: Local Resident Agent
-STATUS: {status}
-TIME: {datetime.now().strftime("%Y-%m-%d %H:%M")}
-OS: {current_env}
+### ROLE AND IDENTITY
+- YOUR NAME: {id_data}
+- USER NAME: {user_data}
 
-[SYSTEM OPERATIONAL PROTOCOLS]
-- Use RUN_WRITE: filename | content to save data.
-- Use RUN_READ: filename to view logs.
-	
-<AGENT_IDENTITY>
-{identity}
-</AGENT_IDENTITY>
+### OPERATIONAL TASKS
+1. Greet the User by their name.
+2. Tell them your name.
+3. Stop talking and wait for input.
 
-<HUMAN_USER>
-{user_info}
-</HUMAN_USER>
+### COMMANDS
+- SAVE: RUN_WRITE: filename | content
+- READ: RUN_READ: filename
 
-[TOOL_TRIGGER]
-To save: RUN_WRITE: filename | content
-
-[MANDATORY ACTION TRIGGERS]
-To perform an action, you MUST type the trigger on a new line:
-1. To SAVE a file: RUN_WRITE: filename | content
-2. To READ a file: RUN_READ: filename
-
-[GOAL]
-You are the AGENT. You are talking to the HUMAN.
-GREET the Human by name. INTRODUCE yourself by your Agent name.
+### RESPONSE TEMPLATE
+"Hello [USER NAME], I am [YOUR NAME]. How can I help you?"
 """
         self._log("Injection Check", f"Agent sees: {prompt[-200:]}")
+        print(f"{Fore.CYAN}[INTERNAL PROMPT CHECK]{Style.RESET_ALL}\n{prompt}")
         return prompt
 
     def chat(self, user_input, verbose=True):
