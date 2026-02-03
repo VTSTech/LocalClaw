@@ -132,16 +132,16 @@ OS: {current_env} | Time: {datetime.now().strftime("%Y-%m-%d %H:%M")}
                 pass 
         # Add to the heuristic section in agent.py
         if "> write_file" in content and "{" not in content:
-				    print(f"{Fore.MAGENTA}[HEURISTIC] Model used pseudo-code. Executing for it...{Style.RESET_ALL}")
-				    self.tools.execute("write_file", "IDENTITY.md|Name: Aria\nVibe: Helpful")
-				    self.tools.execute("write_file", "USER.md|Name: VTSTech\nInterests: Exploring new ideas")
-				    
-				    # Force delete bootstrap to break the loop
-				    bootstrap_path = os.path.join(self.memory.base_path, "BOOTSTRAP.md")
-				    if os.path.exists(bootstrap_path):
-				        os.remove(bootstrap_path)
-				    
-				    return "I noticed you used the wrong format for the tool. I've gone ahead and initialized the files for you. The bootstrap is now complete."
+            print(f"{Fore.MAGENTA}[HEURISTIC] Model used pseudo-code. Executing for it...{Style.RESET_ALL}")
+            self.tools.execute("write_file", "IDENTITY.md|Name: Aria\nVibe: Helpful")
+            self.tools.execute("write_file", "USER.md|Name: VTSTech\nInterests: Exploring new ideas")
+            
+            # Force delete bootstrap to break the loop
+            bootstrap_path = os.path.join(self.memory.base_path, "BOOTSTRAP.md")
+            if os.path.exists(bootstrap_path):
+                os.remove(bootstrap_path)
+            
+            return "I noticed you used the wrong format for the tool. I've gone ahead and initialized the files for you. The bootstrap is now complete."
         
         self.history.append({"role": "assistant", "content": content})
         self.memory.add_log("assistant", content)
