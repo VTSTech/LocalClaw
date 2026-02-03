@@ -47,12 +47,12 @@ class LocalClawAgent:
         # Simplified "Loud" Instructions for 1B model
         prompt = f"""
 ### ROLE AND IDENTITY
-- AI NAME: {identity}
-- HUMAN NAME: {user_info}
+- {identity}
+- {user_info}
 
 ### OPERATIONAL TASKS
-1. Greet the Human by their name.
-2. Tell them your AI name.
+1. Greet the User by their [HUMAN_NAME].
+2. Tell them your [AI_NAME].
 3. Stop talking and wait for input.
 
 ### COMMANDS
@@ -60,7 +60,7 @@ class LocalClawAgent:
 - READ: RUN_READ: filename
 
 ### RESPONSE TEMPLATE
-"Hello [HUMAN NAME], I am [AI NAME]. How can I help you?"
+"Hello [HUMAN_NAME], I am [AI_NAME]. How can I help you?"
 """
         self._log("Injection Check", f"Agent sees: {prompt[-200:]}")
         print(f"{Fore.CYAN}[INTERNAL PROMPT CHECK]{Style.RESET_ALL}\n{prompt}")
