@@ -103,18 +103,29 @@ Assist {human_identity} with system tasks and maintain your resident persona.
             final_resp = ollama.chat(model=self.model, messages=messages + self.history)
             return final_resp['message']['content']
         # Search for RUN_SHELL: command
-        shell_match = re.search(r'RUN_SHELL:\s*(.*)', content, re.IGNORECASE)
+        shell_match = re.search(r'RUN_SHELL:\s*`?(.*?)`?\s*$', content, re.IGNORECASE | re.MULTILINE)
 
         if shell_match:
-            command = shell_match.group(1).strip()
-            # Execute the shell tool
-            result = self.tools.run_shell(command)
-            if verbose: self._log("Action", f"Executed Shell: {command}")
+            # 2. Clean the command (remove any markdown backticks)
+            command = shell_match.group(1).strip().replace('`', '')
+            if verbose: self._log("Action", f"Executing Cleaned Shell: {command}")
             
-            # Feed the output back to the model
+            # 3. Execute the tool via your ToolManager
+            result = self.tools.run_shell(command)
+            
+            # 4. FEEDBACK LOOP: Tell the model what happened
+            # We add its own thought and the shell's output to the history
             self.history.append({"role": "assistant", "content": content})
-            self.history.append({"role": "system", "content": f"SHELL OUTPUT:\n{result}"})
-            final_resp = ollama.chat(model=self.model, messages=messages + self.history)
+            self.history.append({
+                "role": "system", 
+                "content": f"SHELL EXECUTION RESULT:\n{result}\n\nNow, summarize this output for VTSTech."
+            })
+            
+            # 5. Get the FINAL response where the AI actually sees the data
+            final_resp = ollama.chat(
+                model=self.model, 
+                messages=[{"role": "system", "content": self._build_system_prompt()}] + self.history
+            )
             return final_resp['message']['content']
             
         self.history.append({"role": "assistant", "content": content})
