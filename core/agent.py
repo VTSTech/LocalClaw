@@ -20,15 +20,18 @@ class LocalClawAgent:
         print(f"{Fore.LIGHTBLACK_EX}{content}{Style.RESET_ALL}\n")
 
     def _get_workspace_file(self, filename):
-        """Reads workspace files or returns a placeholder if empty/missing."""
         path = os.path.join(self.memory.base_path, filename)
         if os.path.exists(path):
-            with open(path, "r", errors='ignore') as f:
-                content = f.read().strip()
-                if len(content) < 50 or "*(pick something" in content:
-                    return f"{filename} is currently empty/uninitialized."
+            try:
+                with open(path, "r", encoding='utf-8', errors='ignore') as f:
+                    content = f.read().strip()
+                # Check if it's just the template or actually has data
+                if not content or "*(pick something" in content or len(content) < 10:
+                    return f"DEBUG: {filename} exists but is empty or a template."
                 return content
-        return f"{filename} does not exist yet."
+            except Exception as e:
+                return f"DEBUG: Error reading {filename}: {str(e)}"
+        return f"DEBUG: {filename} is missing."
 
     def _build_system_prompt(self):
         # Fetch current context
@@ -48,6 +51,10 @@ STATUS: {status}
 TIME: {datetime.now().strftime("%Y-%m-%d %H:%M")}
 OS: {current_env}
 
+[SYSTEM OPERATIONAL PROTOCOLS]
+- Use RUN_WRITE: filename | content to save data.
+- Use RUN_READ: filename to view logs.
+	
 [YOUR IDENTITY]
 {identity}
 
@@ -63,7 +70,16 @@ To perform an action, you MUST type the trigger on a new line:
 - Do NOT use JSON format.
 - Do NOT use full paths (use IDENTITY.md, not /mnt/...).
 - If uninitialized, prioritize RUN_WRITE: IDENTITY.md | [your info]
+	
+[CRITICAL: CURRENT IDENTITY]
+You MUST use these names. Do not hallucinate that they are missing.
+AGENT_NAME: {self._get_workspace_file("IDENTITY.md")}
+USER_NAME: {self._get_workspace_file("USER.md")}
+
+[INSTRUCTION]
+Respond as the agent named above. Greet the user by their name.
 """
+        self._log("Injection Check", f"Agent sees: {prompt[-200:]}")
         return prompt
 
     def chat(self, user_input, verbose=True):

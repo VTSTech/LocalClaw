@@ -7,7 +7,7 @@ def main():
     parser = argparse.ArgumentParser(description="LocalClaw Agent Runner")
     parser.add_argument('--mode', choices=['cli', 'web'], default='cli', help="Interface mode")
     # Add the model argument here
-    parser.add_argument('--model', type=str, default='llama3.2:1b', help="Override the default Ollama model")
+    parser.add_argument('--model', type=str, default='cogito:3b', help="Override the default Ollama model")
     
     args = parser.parse_args()
 
