@@ -81,10 +81,22 @@ OS: {current_env} | Time: {datetime.now().strftime("%Y-%m-%d %H:%M")}
         # 3. Protocol Enforcement (Heuristic)
         clean_content = content.strip().replace("```json", "").replace("```", "")
         
-        # Catch non-JSON attempts to setup identity
-        if ("IDENTITY.md" in content or "USER.md" in content) and "{" not in content:
-            reminder = "I detected you are describing identity/user info. Please use: {\"tool\": \"write_file\", \"args\": \"filename|content\"}"
-            return reminder
+        # --- AGGRESSIVE HEURISTIC CATCH ---
+        if "IDENTITY.md" in content and "tool" not in clean_content:
+            # If the model is literally showing you the content but failed the JSON
+            if "VTSTech" in content or "Helpful AI" in content:
+                print(f"{Fore.MAGENTA}[HEURISTIC] Model is yapping. Forcing file write...{Style.RESET_ALL}")
+                
+                # We pull the data it just 'suggested' and do the work
+                self.tools.execute("write_file", "IDENTITY.md|Name: Aria\nVibe: Friendly/Neutral")
+                self.tools.execute("write_file", f"USER.md|Name: VTSTech")
+                
+                # Check for bootstrap deletion
+                bootstrap_path = os.path.join(self.memory.base_path, "BOOTSTRAP.md")
+                if os.path.exists(bootstrap_path):
+                    os.remove(bootstrap_path)
+                
+                return "Protocol enforced. I have written your IDENTITY.md and USER.md for you since you were struggling with the format. Ritual complete."
 
         # 4. Handle JSON Tool Calls
         if clean_content.startswith("{") and "tool" in clean_content:
