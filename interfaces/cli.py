@@ -1,53 +1,44 @@
 import os
 from colorama import Fore, Style
 from core.agent import LocalClawAgent
-from config import LOCALCLAW_BUILD, LOCALCLAW_BUILD_DATE, BOOTSTRAP_DONE
+from config import LOCALCLAW_BUILD, LOCALCLAW_BUILD_DATE
 
 def start_cli(model_override):
-    
     if model_override:
         agent = LocalClawAgent(model=model_override)
         print(f"Using model override: {model_override}\n")
     else:
         agent = LocalClawAgent()
     
-    # 1. Proactive Bootstrap Check
     bootstrap_path = os.path.join(agent.memory.base_path, "BOOTSTRAP.md")
-    
     build_str = f"{LOCALCLAW_BUILD} {LOCALCLAW_BUILD_DATE}"
-    
+
+    def force_bootstrap():
+        print(f"{Fore.MAGENTA}[ADMIN] Forcing Manual Bootstrap...{Style.RESET_ALL}")
+        id_content = "AI_NAME: VTSBot\nVibe: Adventurous & Curious\n"
+        user_content = "HUMAN_NAME: VTSTech\nStatus: System Architect"
+        agent.tools.execute("write_file", f"IDENTITY.md|{id_content}")
+        agent.tools.execute("write_file", f"USER.md|{user_content}")
+        if os.path.exists(bootstrap_path):
+            os.remove(bootstrap_path)
+        print(f"{Fore.GREEN}[SUCCESS] Resident files created. BOOTSTRAP.md removed.{Style.RESET_ALL}")
+
     if os.path.exists(bootstrap_path):
-        print(f"{Fore.CYAN}LocalClaw {build_str} is waking up...{Style.RESET_ALL}")
-        # Send a silent trigger to force the bootstrap ritual
+        print(f"{Fore.CYAN}LocalClaw {build_str} is waking up (New Install)...{Style.RESET_ALL}")
+        force_bootstrap()
         response = agent.chat("INIT_BOOTSTRAP", verbose=True)
         print(f"\n{Fore.GREEN}Claw:{Style.RESET_ALL} {response}")
-        response = agent.chat("/bootstrap", verbose=True)
-        print(f"\n{Fore.GREEN}Claw:{Style.RESET_ALL} {response}")
-        BOOTSTRAP_DONE = True
+    else:
+        print(f"{Fore.CYAN}LocalClaw {build_str} is resuming...{Style.RESET_ALL}")
 
-    # 2. Main Loop
     try:
-        print(f"{Fore.CYAN}LocalClaw {build_str} is waking up...{Style.RESET_ALL}")
         while True:
             user_input = input(f"\n{Fore.BLUE}You:{Style.RESET_ALL} ")
-            # --- NEW ADMIN COMMAND ---
+            
             if user_input.startswith("/bootstrap"):
-                print(f"{Fore.MAGENTA}[ADMIN] Forcing Manual Bootstrap...{Style.RESET_ALL}")
-                # Define the setup
-                id_content = "AI_NAME: VTSBot\nVibe: Adventurous & Curious\n"
-                user_content = "HUMAN_NAME: VTSTech\nStatus: System Architect"
-                
-                # Use the agent's tool manager to write them
-                agent.tools.execute("write_file", f"IDENTITY.md|{id_content}")
-                agent.tools.execute("write_file", f"USER.md|{user_content}")
-                
-                # Cleanup the bootstrap file
-                if os.path.exists(bootstrap_path):
-                    os.remove(bootstrap_path)
-                
-                print(f"{Fore.GREEN}[SUCCESS] IDENTITY.md and USER.md created. BOOTSTRAP.md removed.{Style.RESET_ALL}")
+                force_bootstrap()
                 continue 
-            # -------------------------            
+                       
             if user_input.lower() in ['exit', 'quit']:
                 print("Goodbye!")
                 break
