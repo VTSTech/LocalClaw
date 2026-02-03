@@ -69,7 +69,7 @@ class LocalClawAgent:
     def chat(self, user_input, verbose=True):
         # 1. Handle Initialization Triggers
         if user_input == "INIT_BOOTSTRAP":
-            instruction = "Waking up. Introduce yourself. Propose a Name and Vibe. Use RUN_WRITE to save your IDENTITY.md."
+            instruction = "Waking up. Introduce yourself."
             messages = [{"role": "system", "content": self._build_system_prompt()}, {"role": "user", "content": instruction}]
         else:
             self.history.append({"role": "user", "content": user_input})

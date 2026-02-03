@@ -10,6 +10,7 @@ LOCALCLAW_BUILD_DATE = "02.03.2026 11:40:21AM"
 # Global Configuration
 DEFAULT_MODEL = "cogito:3b"  # Change this to "llama3" or others easily
 DEBUG_MODE = True               # Toggle verbosity globally if you want
+BOOTSTRAP_DONE = False
 BOOTSTRAP_VERBOSITY = True
 
 def get_key(key_name):

@@ -1,7 +1,7 @@
 import os
 from colorama import Fore, Style
 from core.agent import LocalClawAgent
-from config import LOCALCLAW_BUILD, LOCALCLAW_BUILD_DATE
+from config import LOCALCLAW_BUILD, LOCALCLAW_BUILD_DATE, BOOTSTRAP_DONE
 
 def start_cli(model_override):
     
@@ -21,17 +21,21 @@ def start_cli(model_override):
         # Send a silent trigger to force the bootstrap ritual
         response = agent.chat("INIT_BOOTSTRAP", verbose=True)
         print(f"\n{Fore.GREEN}Claw:{Style.RESET_ALL} {response}")
+        response = agent.chat("/bootstrap", verbose=True)
+        print(f"\n{Fore.GREEN}Claw:{Style.RESET_ALL} {response}")
+        BOOTSTRAP_DONE = True
 
     # 2. Main Loop
     try:
+        print(f"{Fore.CYAN}LocalClaw {build_str} is waking up...{Style.RESET_ALL}")
         while True:
             user_input = input(f"\n{Fore.BLUE}You:{Style.RESET_ALL} ")
             # --- NEW ADMIN COMMAND ---
             if user_input.startswith("/bootstrap"):
                 print(f"{Fore.MAGENTA}[ADMIN] Forcing Manual Bootstrap...{Style.RESET_ALL}")
                 # Define the setup
-                id_content = "Name: VTSBot\nVibe: Adventurous & Curious\n"
-                user_content = "Name: VTSTech\nStatus: System Architect"
+                id_content = "AI_NAME: VTSBot\nVibe: Adventurous & Curious\n"
+                user_content = "HUMAN_NAME: VTSTech\nStatus: System Architect"
                 
                 # Use the agent's tool manager to write them
                 agent.tools.execute("write_file", f"IDENTITY.md|{id_content}")
