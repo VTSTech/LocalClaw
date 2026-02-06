@@ -38,6 +38,21 @@ def handle_command(cmd, context):
             print("(empty)")
         return True
 
+    if cmd == "/verify" and state:
+        last_file = state.files_written[-1] if state.files_written else None
+        if last_file:
+            actual = run_shell(f"cat {last_file}")
+            print(f"\n[VERIFY] File: {last_file}")
+            print(f"  Expected (Memory): {state.last_result}")
+            print(f"  Actual (Disk):     {actual}")
+            if state.last_result.strip() == actual.strip():
+                print("  STATUS: MATCH ?")
+            else:
+                print("  STATUS: MISMATCH ? (Hallucination Detected)")
+        else:
+            print("No files written yet.")
+        return True
+        
     if cmd == "/context":
         for i, m in enumerate(messages):
             print(f"{i:02d} | {m['role']} | {m.get('content','')[:80]}")
