@@ -13,7 +13,7 @@ def chat_api(model: str, messages: list, tools: list, retries=2):
 
     for attempt in range(retries + 1):
         try:
-            r = requests.post(OLLAMA_URL, json=payload, timeout=45)
+            r = requests.post(OLLAMA_URL, json=payload, timeout=1000)
             r.raise_for_status()
             return r.json()
         except requests.exceptions.ReadTimeout:
@@ -23,7 +23,7 @@ def chat_api(model: str, messages: list, tools: list, retries=2):
 
 def get_model_info(model: str, field: str) -> str:
     try:
-        r = requests.post(SHOW_URL, json={"name": model}, timeout=10)
+        r = requests.post(SHOW_URL, json={"name": model}, timeout=120)
         if r.status_code == 200:
             return r.json().get(field, "Field not found.")
         return f"Error: {r.status_code}"
