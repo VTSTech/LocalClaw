@@ -5,65 +5,53 @@ from prompts import SYSTEM_PROMPT
 from cli import handle_command
 
 TOOLS = [
-    {"type": "function", "function": {"name": "run_shell", "parameters": {"type": "object","properties": {"command": {"type": "string"}},"required": ["command"]}}},
-    {"type": "function", "function": {"name": "read_file", "parameters": {"type": "object","properties": {"filename": {"type": "string"}},"required": ["filename"]}}},
-    {"type": "function", "function": {"name": "write_file", "parameters": {"type": "object","properties": {"filename": {"type": "string"}},"required": ["filename"]}}},
+    {"type": "function", "function": {
+        "name": "run_shell",
+        "parameters": {"type": "object", "properties": {
+            "command": {"type": "string"}
+        }, "required": ["command"]}
+    }},
+    {"type": "function", "function": {
+        "name": "read_file",
+        "parameters": {"type": "object", "properties": {
+            "filename": {"type": "string"}
+        }, "required": ["filename"]}
+    }},
+    {"type": "function", "function": {
+        "name": "write_file",
+        "parameters": {"type": "object", "properties": {
+            "filename": {"type": "string"}
+        }, "required": ["filename"]}
+    }},
 ]
 
-def goal_satisfied(state):
-    # Never complete without doing at least one action
-    if state.step == 0:
-        return False
-
-    # If a tool was required, ensure it was actually used
-    if goal_requires_environment(state.goal):
-        return state.collected["environment"]
-
-    # Otherwise require some observable result
-    return state.last_result is not None
-    
 def run_agent(model):
     print(f"--- Agent Online (Model: {model}) ---")
-
     messages = [{"role": "system", "content": SYSTEM_PROMPT}]
-    last_goal = None
-    last_state = None
+    state = None
     trace = []
 
     while True:
-        user_input = input("\nUser> ").strip()
-        if not user_input:
+        user = input("\nUser> ").strip()
+        if not user:
             continue
-
-        if user_input.lower() in ["/exit", "/quit"]:
+        if user.lower() in ["/exit", "/quit"]:
             break
 
-        context = {
+        if handle_command(user.lower(), {
             "messages": messages,
-            "model": model,
-            "state": last_state,
-            "trace": trace
-        }
-
-        if handle_command(user_input.lower(), context):
+            "state": state,
+            "trace": trace,
+            "model": model
+        }):
             continue
 
-        last_goal = user_input
-        state = AgentState(goal=user_input)
-        last_state = state
+        state = AgentState(goal=user)
         trace.clear()
+        messages.append({"role": "user", "content": user})
 
-        messages.append({"role": "user", "content": user_input})
-
-        for _ in range(8):
+        for _ in range(6):
             state.step += 1
-
-            if goal_requires_environment(state.goal) and not state.collected["environment"]:
-                messages.append({
-                    "role": "system",
-                    "content": "The goal requires operating system environment details."
-                })
-
             res = chat_api(model, messages, TOOLS)
             msg = res["message"]
             messages.append(msg)
@@ -74,29 +62,19 @@ def run_agent(model):
                     args = call["function"]["arguments"]
 
                     if name == "run_shell":
-                        obs = run_shell(args.get("command"))
-                        cmd = args.get("command", "").lower()
-                        if any(x in cmd for x in ["env", "printenv", "uname", "os-release", "lsb_release"]):
-                            state.collected["environment"] = True
-                        if "date" in cmd:
-                            state.collected["time"] = True
-
+                        obs = run_shell(args["command"])
+                        state.collected["environment"] = True
                     elif name == "read_file":
-                        obs = read_file(args.get("filename"))
-
+                        obs = read_file(args["filename"])
                     elif name == "write_file":
-                        obs = write_file(args.get("filename"), state.last_result)
-                        state.files_written.append(args.get("filename"))
+                        obs = write_file(args["filename"], state.last_result)
+                        state.files_written.append(args["filename"])
 
-                    trace.append({"tool": name, "args": args, "result": obs})
                     state.last_result = obs
+                    trace.append({"tool": name, "args": args, "result": obs})
                     messages.append({"role": "tool", "content": obs})
+                    print(f"\nAgent (tool:{name})>\n{obs}")
 
-                if goal_satisfied(state):
-                    state.completed = True
-                    print("\nAgent> Task completed.")
-                    break
-
-            elif msg.get("content"):
-                print(f"\nAgent> {msg['content']}")
+            if goal_satisfied(state):
+                print("\nAgent> Task completed.")
                 break

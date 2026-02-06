@@ -1,56 +1,57 @@
 import json
 import time
-from ollama import get_model_info
 
 def handle_command(cmd, context):
     messages = context["messages"]
-    model = context["model"]
     state = context.get("state")
     trace = context["trace"]
+    model = context["model"]
 
-    if cmd == "/status":
-        print("\n" + "=" * 60)
-        print(f"Model:        {model}")
-        print(f"Messages:     {len(messages)}")
-        print(f"Last Step:    {state.step if state else 'N/A'}")
-        print("=" * 60)
+    if cmd == "/help":
+        print("/status /context /trace /env /last /files /clear /reset /exit")
         return True
 
-    if cmd == "/context":
-        print("\n" + "-" * 60)
-        for i, m in enumerate(messages):
-            role = m["role"].upper()
-            text = m.get("content", "").replace("\n", " ")
-            if len(text) > 80:
-                text = text[:77] + "..."
-            print(f"{i:02d} | {role:9} | {text}")
-        print("-" * 60)
+    if cmd == "/status":
+        print(f"\nModel: {model}")
+        print(f"Messages: {len(messages)}")
+        print(f"Last step: {state.step if state else 'N/A'}")
+        return True
+
+    if cmd == "/last" and state:
+        print(state.last_result or "(none)")
+        return True
+
+    if cmd == "/files" and state:
+        print("\n".join(state.files_written) or "(none)")
+        return True
+
+    if cmd == "/env" and state:
+        print(state.collected)
         return True
 
     if cmd == "/trace":
         print("\n--- TOOL TRACE ---")
         for i, t in enumerate(trace):
             print(f"{i+1}. {t['tool']}({t['args']})")
-            print(f"   ? {t['result']}")
+            print(f"   -> {t['result']}")
         if not trace:
             print("(empty)")
-        print("------------------")
         return True
 
-    if cmd == "/template":
-        print(get_model_info(model, "template"))
-        return True
-
-    if cmd == "/save":
-        fname = f"agent_save_{int(time.time())}.json"
-        with open(fname, "w") as f:
-            json.dump(context, f, indent=2, default=str)
-        print(f"Saved to {fname}")
+    if cmd == "/context":
+        for i, m in enumerate(messages):
+            print(f"{i:02d} | {m['role']} | {m.get('content','')[:80]}")
         return True
 
     if cmd == "/clear":
-        messages[:] = [messages[0]]
+        messages[:] = messages[:1]
         print("Context cleared.")
+        return True
+
+    if cmd == "/reset":
+        messages[:] = messages[:1]
+        trace.clear()
+        print("Agent reset.")
         return True
 
     return False

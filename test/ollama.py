@@ -1,6 +1,6 @@
 import requests
 
-OLLAMA_URL = "http://127.0.0.1:11434/api/chat"
+CHAT_URL = "http://127.0.0.1:11434/api/chat"
 SHOW_URL = "http://127.0.0.1:11434/api/show"
 
 def chat_api(model: str, messages: list, tools: list, retries=2):
@@ -13,19 +13,20 @@ def chat_api(model: str, messages: list, tools: list, retries=2):
 
     for attempt in range(retries + 1):
         try:
-            r = requests.post(OLLAMA_URL, json=payload, timeout=1000)
+            r = requests.post(CHAT_URL, json=payload, timeout=120)
             r.raise_for_status()
-            return r.json()
-        except requests.exceptions.ReadTimeout:
+            data = r.json()
+            if not data.get("message"):
+                raise RuntimeError("Model returned no message")
+            return data
+        except Exception as e:
             if attempt >= retries:
                 raise
-            print("[WARN] Model timeout, retrying...")
+            print("[WARN] retrying model call...")
 
-def get_model_info(model: str, field: str) -> str:
+def get_model_info(model: str, field: str):
     try:
-        r = requests.post(SHOW_URL, json={"name": model}, timeout=120)
-        if r.status_code == 200:
-            return r.json().get(field, "Field not found.")
-        return f"Error: {r.status_code}"
+        r = requests.post(SHOW_URL, json={"name": model}, timeout=60)
+        return r.json().get(field, "N/A") if r.ok else f"Error {r.status_code}"
     except Exception as e:
         return str(e)
