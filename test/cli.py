@@ -17,6 +17,31 @@ def handle_command(cmd, context):
         print(f"Last step: {state.step if state else 'N/A'}")
         return True
 
+    if cmd == "/template":
+        from ollama import get_model_info
+        template = get_model_info(model, "template")
+        print(f"\n--- TEMPLATE for {model} ---")
+        print(template)
+        return True
+
+    if cmd == "/clean":
+        if not state or not state.files_written:
+            print("No files to clean.")
+        else:
+            from tools import run_shell
+            print("\nCleaning sandbox...")
+            for file in state.files_written:
+                # Bypass safety for the cleanup command specifically
+                import os
+                try:
+                    if os.path.exists(file):
+                        os.remove(file)
+                        print(f"  Removed: {file}")
+                except Exception as e:
+                    print(f"  Failed to remove {file}: {e}")
+            state.files_written.clear()
+            print("Cleanup complete.")
+        return True
     if cmd == "/last" and state:
         print(state.last_result or "(none)")
         return True
