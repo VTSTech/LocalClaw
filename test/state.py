@@ -20,9 +20,10 @@ def goal_requires_environment(goal: str) -> bool:
         "platform", "kernel", "pwd"
     ])
 
-def goal_satisfied(state: AgentState) -> bool:
-    if state.step == 0:
+def goal_satisfied(state) -> bool:
+    if state.step == 0 or state.last_result is None:
         return False
-    if goal_requires_environment(state.goal):
-        return state.last_result is not None
-    return state.last_result is not None
+    # If the tool returned an error, the goal is NOT satisfied
+    if "Error:" in state.last_result or "Safety Violation" in state.last_result:
+        return False
+    return True

@@ -68,10 +68,9 @@ def run_agent(model):
                     elif name == "read_file":
                         obs = read_file(args["filename"])
                     elif name == "write_file":
-										        # Use the content the model actually wants to write
-										        obs = write_file(args["filename"], args.get("content", state.last_result))
-										        state.files_written.append(args["filename"])
-
+                        # Use the content the model actually wants to write
+                        obs = write_file(args["filename"], args.get("content", state.last_result))
+                        state.files_written.append(args["filename"])
                     state.last_result = obs
                     trace.append({"tool": name, "args": args, "result": obs})
                     messages.append({"role": "tool", "content": obs})
