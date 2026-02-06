@@ -10,7 +10,19 @@ TOOLS = [
     {"type": "function", "function": {"name": "write_file", "parameters": {"type": "object","properties": {"filename": {"type": "string"}},"required": ["filename"]}}},
 ]
 
-def run_agent(model: str):
+def goal_satisfied(state):
+    # Never complete without doing at least one action
+    if state.step == 0:
+        return False
+
+    # If a tool was required, ensure it was actually used
+    if goal_requires_environment(state.goal):
+        return state.collected["environment"]
+
+    # Otherwise require some observable result
+    return state.last_result is not None
+    
+def run_agent(model):
     print(f"--- Agent Online (Model: {model}) ---")
 
     messages = [{"role": "system", "content": SYSTEM_PROMPT}]
