@@ -1,5 +1,15 @@
 # -*- coding: utf-8 -*-
 
+REFINER_PROMPT = """# Identity
+You are a Prompt Refiner. Translate user requests into precise technical tasks.
+
+# Rules
+1. Remove all conversational filler.
+2. If the user mentions 'environment', use 'printenv'.
+3. If the user mentions 'current dir', use 'pwd'.
+4. Output ONLY the refined technical instruction.
+"""
+
 # COORDINATOR: Turns complex goals into a simple command list
 COORDINATOR_PROMPT = """# Identity
 You are a Linux Planning Agent. 
