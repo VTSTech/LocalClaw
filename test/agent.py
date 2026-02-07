@@ -31,6 +31,12 @@ def run_agent(refiner_model, coord_model, worker_model):
 
     while True:
         user = input("\nUser> ").strip()
+        if not user: continue
+        
+        # 1. Check for Hard Exit
+        if user.lower() in ["/exit", "/quit"]:
+            break
+            
         if not user or handle_command(user.lower(), {"messages": messages, "state": state, "trace": trace, "model": worker_model}):
             continue
 
