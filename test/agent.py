@@ -3,6 +3,7 @@ from state import AgentState, goal_satisfied, goal_requires_environment
 from ollama import chat_api
 from prompts import SYSTEM_PROMPT
 from cli import handle_command
+import json
 
 TOOLS = [
     {"type": "function", "function": {
@@ -55,8 +56,22 @@ def run_agent(model):
             state.step += 1
             res = chat_api(model, messages, TOOLS)
             msg = res["message"]
-            messages.append(msg)
-
+            messages.append(msg)            
+            content = msg.get("content", "")
+            if not msg.get("tool_calls") and "{" in content and "}" in content:
+                try:
+                    # Try to extract JSON if the model wrapped it in markdown
+                    json_str = content.split("```json")[-1].split("```")[0].strip()
+                    tool_data = json.loads(json_str)
+                    # Manually inject it as a tool call so the rest of your logic works
+                    msg["tool_calls"] = [{
+                        "function": {
+                            "name": tool_data.get("name"),
+                            "arguments": tool_data.get("arguments", tool_data)
+                        }
+                    }]
+                except:
+                    pass
             if msg.get("tool_calls"):
                 for call in msg["tool_calls"]:
                     name = call["function"]["name"]
@@ -71,9 +86,9 @@ def run_agent(model):
                         # Check if the model is trying to write literal tags
                         content = args.get("content", "")
                         if "<tool_response>" in content or not content:
-								            # FORCE GROUNDING: Overwrite with the actual last tool result
-								            content = state.last_result
-								            print(f"  [FIX] Grounding write_file with memory: {content[:20]}...")
+                            # FORCE GROUNDING: Overwrite with the actual last tool result
+                            content = state.last_result
+                            print(f"  [FIX] Grounding write_file with memory: {content[:20]}...")
 								            
                         obs = write_file(args["filename"], content)
                         state.files_written.append(args["filename"])
@@ -81,7 +96,9 @@ def run_agent(model):
                     trace.append({"tool": name, "args": args, "result": obs})
                     messages.append({"role": "tool", "content": obs})
                     print(f"\nAgent (tool:{name})>\n{obs}")
-
+            
+            messages.append(msg)
+            
             if goal_satisfied(state):
                 print("\nAgent> Task completed.")
                 break
