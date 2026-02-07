@@ -32,9 +32,16 @@ def run_agent(coord_model, worker_model):
     trace = []
 
     while True:
-        user = input("\nUser> ").strip()
-        if not user or handle_command(user.lower(), {"messages": messages, "state": state, "trace": trace, "model": worker_model}):
-            continue
+		    user = input("\nUser> ").strip()
+		    if not user: continue
+		    
+		    # 1. Check for Hard Exit
+		    if user.lower() in ["/exit", "/quit"]:
+		        break
+		        
+		    # 2. Check for CLI Commands (/trace, /status, etc.)
+		    if handle_command(user.lower(), {"messages": messages, "state": state, "trace": trace, "model": worker_model}):
+		        continue
 
         state = AgentState(goal=user)
         
@@ -54,13 +61,21 @@ def run_agent(coord_model, worker_model):
         worker_msgs = [{"role": "system", "content": WORKER_PROMPT}]
         
         while state.plan:
-            current_task = state.plan.pop(0)
-            worker_msgs.append({"role": "user", "content": f"Task: {current_task}"})
-            
-            state.step += 1
-            res = chat_api(worker_model, worker_msgs, TOOLS)
-            msg = res["message"]
-            worker_msgs.append(msg)
+				    current_task = state.plan.pop(0)
+				    # Add a specific nudge to the worker for the current task
+				    worker_msgs.append({"role": "user", "content": f"Execute this specific task: {current_task}"})
+				    
+				    state.step += 1
+				    res = chat_api(worker_model, worker_msgs, TOOLS)
+				    msg = res["message"]
+				    
+				    # --- PREVENT COMMAND SPLITTING ERRORS ---
+				    if not msg.get("tool_calls") and state.step < 6:
+				        # If the worker just 'talks', force a run_shell call for the task
+				        msg["tool_calls"] = [{"function": {"name": "run_shell", "arguments": {"command": current_task}}}]
+				    
+				    messages.append(msg) # Maintain global history
+				    worker_msgs.append(msg) # Maintain worker-specific history
 
             if msg.get("tool_calls"):
                 for call in msg["tool_calls"]:

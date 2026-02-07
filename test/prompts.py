@@ -9,6 +9,10 @@ Break the User Goal into a sequence of literal bash commands.
 - Output ONLY a JSON list of strings.
 - Example Goal: "Get date and save to t.txt"
 - Example Output: ["date", "echo 'RESULT' > t.txt"]
+
+# Rules
+1. Break goals into FULL valid bash commands.
+2. NEVER split a single command into parts (e.g., use 'ls -l', NOT 'ls' then '-l').
 """
 
 # WORKER: High-speed execution with no yapping
