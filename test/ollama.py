@@ -3,12 +3,21 @@ import requests
 CHAT_URL = "http://127.0.0.1:11434/api/chat"
 SHOW_URL = "http://127.0.0.1:11434/api/show"
 
+params = {
+    "temperature": 0.0,      # Makes the model deterministic
+    "num_predict": 128,      # Keep responses short for speed
+    "top_k": 20,             # Limits the vocabulary for focus
+    "repeat_penalty": 1.1,   # Prevents the model from repeating failed tool calls
+    "stop": ["<|im_end|>", "<|im_start|>", "User>"] # Crucial for 0.5b stability
+}
+
 def chat_api(model: str, messages: list, tools: list, retries=2):
     payload = {
         "model": model,
         "messages": messages,
         "tools": tools,
         "stream": False,
+        "options": params,
     }
 
     for attempt in range(retries + 1):

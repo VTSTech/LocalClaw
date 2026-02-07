@@ -1,5 +1,6 @@
 import json
 import time
+from tools import run_shell
 
 def handle_command(cmd, context):
     messages = context["messages"]
@@ -28,7 +29,6 @@ def handle_command(cmd, context):
         if not state or not state.files_written:
             print("No files to clean.")
         else:
-            from tools import run_shell
             print("\nCleaning sandbox...")
             for file in state.files_written:
                 # Bypass safety for the cleanup command specifically

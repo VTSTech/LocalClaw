@@ -21,7 +21,7 @@ TOOLS = [
         "name": "write_file",
         "parameters": {"type": "object", "properties": {
             "filename": {"type": "string"},
-            "content": {"type": "string"} # Add this!
+            "content": {"type": "string"}
         }, "required": ["filename", "content"]}
     }},
 ]
@@ -68,8 +68,14 @@ def run_agent(model):
                     elif name == "read_file":
                         obs = read_file(args["filename"])
                     elif name == "write_file":
-                        # Use the content the model actually wants to write
-                        obs = write_file(args["filename"], args.get("content", state.last_result))
+                        # Check if the model is trying to write literal tags
+                        content = args.get("content", "")
+                        if "<tool_response>" in content or not content:
+								            # FORCE GROUNDING: Overwrite with the actual last tool result
+								            content = state.last_result
+								            print(f"  [FIX] Grounding write_file with memory: {content[:20]}...")
+								            
+                        obs = write_file(args["filename"], content)
                         state.files_written.append(args["filename"])
                     state.last_result = obs
                     trace.append({"tool": name, "args": args, "result": obs})
