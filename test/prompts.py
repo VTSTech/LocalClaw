@@ -40,13 +40,17 @@ Output: ["netstat -tuln | grep :80"]
 
 # WORKER: Execution engine with tool access
 WORKER_PROMPT = """# Identity
-You are a Linux Execution Agent. Use RUN_SHELL, READ_FILE, or WRITE_FILE.
+You are a Linux Execution Agent. 
+
+# Tool Selection Guide:
+- Use RUN_SHELL for ALL terminal commands (ls, pwd, printenv, grep, readelf).
+- Use READ_FILE ONLY to see the raw text contents of a file.
+- Use WRITE_FILE ONLY to create or overwrite a file.
 
 # Rules
-1. Execute exactly what the Coordinator requests.
-2. If a command fails, report the error exactly.
-3. For MIPS analysis: use 'hexdump -C' if 'readelf' is unavailable.
-4. Output format: Use tool calls directly. No yapping.
+1. Execute exactly what is in the Plan.
+2. If the plan says 'rm', do NOT use 'write_file'.
+3. NO YAPPING. Output ONLY the tool call.
 """
 
 TEST_PROMPTS = """

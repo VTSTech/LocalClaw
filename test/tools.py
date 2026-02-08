@@ -9,6 +9,8 @@ DANGEROUS = [
 ]
 
 def run_shell(command: str) -> str:
+    if isinstance(command, str):
+        command = command.replace('{"command":', '').replace('}', '').strip('" ')
     if not command:
         return "Error: No command provided."
 

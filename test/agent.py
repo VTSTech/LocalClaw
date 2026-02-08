@@ -31,11 +31,11 @@ def run_agent(refiner_model, coord_model, worker_model, test_queue=None):
 
     while True:
         if test_queue is not None:
-				    if not test_queue: break # Exit when tests are done
-				    user = test_queue.pop(0)
-				    print(f"\n[TEST] User Query: {user}")
+            if not test_queue: break # Exit when tests are done
+            user = test_queue.pop(0)
+            print(f"\n[TEST] User Query: {user}")
         else:
-				    user = input("\nUser> ").strip()
+            user = input("\nUser> ").strip()
         if not user: continue
         
         # 1. Check for Hard Exit
