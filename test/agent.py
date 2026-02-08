@@ -1,26 +1,40 @@
 import json
-from tools import run_shell, read_file, write_file
+from tools import run_shell#, read_file, write_file
 from state import AgentState, goal_satisfied
 from ollama import chat_api
 from prompts import REFINER_PROMPT, COORDINATOR_PROMPT, WORKER_PROMPT
 from cli import handle_command
 
+#TOOLS = [
+#    {"type": "function", "function": {
+#        "name": "run_shell",
+#        "parameters": {"type": "object", "properties": {"command": {"type": "string"}}, "required": ["command"]}
+#    }},
+#    {"type": "function", "function": {
+#        "name": "read_file",
+#        "parameters": {"type": "object", "properties": {"filename": {"type": "string"}}, "required": ["filename"]}
+#    }},
+#    {"type": "function", "function": {
+#        "name": "write_file",
+#        "parameters": {"type": "object", "properties": {
+#            "filename": {"type": "string"},
+#            "content": {"type": "string"}
+#        }, "required": ["filename", "content"]}
+#    }},
+#]
+
 TOOLS = [
     {"type": "function", "function": {
         "name": "run_shell",
-        "parameters": {"type": "object", "properties": {"command": {"type": "string"}}, "required": ["command"]}
-    }},
-    {"type": "function", "function": {
-        "name": "read_file",
-        "parameters": {"type": "object", "properties": {"filename": {"type": "string"}}, "required": ["filename"]}
-    }},
-    {"type": "function", "function": {
-        "name": "write_file",
-        "parameters": {"type": "object", "properties": {
-            "filename": {"type": "string"},
-            "content": {"type": "string"}
-        }, "required": ["filename", "content"]}
-    }},
+        "description": "Execute a bash command in the Linux terminal",
+        "parameters": {
+            "type": "object", 
+            "properties": {
+                "command": {"type": "string"}
+            }, 
+            "required": ["command"]
+        }
+    }}
 ]
 
 def run_agent(refiner_model, coord_model, worker_model, test_queue=None):
@@ -30,78 +44,61 @@ def run_agent(refiner_model, coord_model, worker_model, test_queue=None):
     trace = []
 
     while True:
+        # Support for automated testing
         if test_queue is not None:
-            if not test_queue: break # Exit when tests are done
+            if not test_queue: break
             user = test_queue.pop(0)
             print(f"\n[TEST] User Query: {user}")
         else:
             user = input("\nUser> ").strip()
-        if not user: continue
+            if not user: continue
         
-        # 1. Check for Hard Exit
-        if user.lower() in ["/exit", "/quit"]:
-            break
-            
-        if not user or handle_command(user.lower(), {"messages": messages, "state": state, "trace": trace, "model": worker_model}):
+        if handle_command(user, {"messages": messages, "state": state, "trace": trace, "model": worker_model}):
             continue
 
-        # STAGE 1: REFINER (Sanitizer)
-        refine_msg = [{"role": "system", "content": REFINER_PROMPT}, {"role": "user", "content": user}]
-        refined_res = chat_api(refiner_model, refine_msg, [])
-        refined_goal = refined_res["message"]["content"].strip()
-        print(f"  [REFINED] {refined_goal}")
+        # 1. Refiner Stage
+        refined = chat_api(refiner_model, [{"role": "system", "content": REFINER_PROMPT}, {"role": "user", "content": user}], [])
+        refined_query = refined["message"]["content"].strip()
+        print(f"  [REFINED] {refined_query}")
 
-        state = AgentState(goal=refined_goal)
-        trace.clear()
-        
-        # STAGE 2: COORDINATOR (Planner)
-        plan_msg = [{"role": "system", "content": COORDINATOR_PROMPT}, {"role": "user", "content": refined_goal}]
-        plan_res = chat_api(coord_model, plan_msg, [])
+        # 2. Coordinator Stage
+        plan_res = chat_api(coord_model, [{"role": "system", "content": COORDINATOR_PROMPT}, {"role": "user", "content": refined_query}], [])
         try:
-            raw_content = plan_res["message"]["content"].replace("```json", "").replace("```", "").strip()
-            state.plan = json.loads(raw_content)
-            print(f"  [PLAN] {state.plan}")
-        except Exception as e:
-            print(f"  [ERR] Planning failed: {e}")
-            continue
+            plan = json.loads(plan_res["message"]["content"])
+        except:
+            plan = [refined_query]
+        print(f"  [PLAN] {plan}")
 
-        # STAGE 3: WORKER (Executor)
-        worker_msgs = [{"role": "system", "content": WORKER_PROMPT}]
-        for current_task in state.plan:
-            obs = "Error: Tool not called" # Initialize default
-            
-            # Variable Grounding (Memory Bridge)
-            if state.last_result:
-                current_task = current_task.replace("$PREV", state.last_result)
+        state = AgentState(goal=user, plan=plan)
 
-            worker_msgs.append({"role": "user", "content": f"Task: {current_task}"})
-            state.step += 1
+        # 3. Worker Stage (Shell-Only)
+        while state.plan:
+            current_task = state.plan.pop(0)
+            obs = "Error: Tool not called"
             
-            res = chat_api(worker_model, worker_msgs, [
-                {"type": "function", "function": {"name": "run_shell", "parameters": {"type": "object", "properties": {"command": {"type": "string"}}, "required": ["command"]}}},
-                {"type": "function", "function": {"name": "read_file", "parameters": {"type": "object", "properties": {"filename": {"type": "string"}}, "required": ["filename"]}}},
-                {"type": "function", "function": {"name": "write_file", "parameters": {"type": "object", "properties": {"filename": {"type": "string"}, "content": {"type": "string"}}, "required": ["filename", "content"]}}},
-            ])
+            worker_msgs = [
+                {"role": "system", "content": WORKER_PROMPT},
+                {"role": "user", "content": f"Task: {current_task}"}
+            ]
+            
+            res = chat_api(worker_model, worker_msgs, TOOLS)
             msg = res["message"]
-            worker_msgs.append(msg)
 
             if msg.get("tool_calls"):
                 for call in msg["tool_calls"]:
                     name, args = call["function"]["name"], call["function"]["arguments"]
                     
-                    # Handle arg extraction
                     if name == "run_shell":
+                        # Handle potential dict-nesting hallucination
                         cmd_string = args.get("command", current_task)
-                        if isinstance(cmd_string, dict): # Defensive check for 0.5b hallucinations
-                            cmd_string = cmd_string.get("command", str(cmd_string))                        
+                        if isinstance(cmd_string, dict):
+                            cmd_string = cmd_string.get("command", str(cmd_string))
+                        
                         obs = run_shell(cmd_string)
-                    elif name == "write_file":
-                        obs = write_file(args.get("filename", "output.txt"), args.get("content", state.last_result or ""))
+                        print(f"  Worker (tool:run_shell)> {obs[:40]}...")
 
-                    state.last_result = obs
-                    trace.append({"tool": name, "args": args, "result": obs})
-                    worker_msgs.append({"role": "tool", "content": obs})
-                    print(f"  Worker (tool:{name})> {obs[:30]}...")
+            state.last_result = obs
+            trace.append({"tool": "run_shell", "command": current_task, "result": obs})
 
         if goal_satisfied(state):
-            print("\nAgent> VTSBot Task Completed.")
+            print(f"  [GOAL SATISFIED]")
