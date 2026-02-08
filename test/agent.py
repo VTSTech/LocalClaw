@@ -37,8 +37,12 @@ TOOLS = [
     }}
 ]
 
+def banner(worker_model, coord_model):
+    print(f"-- VTSBot AI Online (Models: {worker_model}, {coord_model})")
+    print(f"-- Written by VTSTech https://www.vts-tech.org https://github.com/VTSTech --")
+    
 def run_agent(refiner_model, coord_model, worker_model, test_queue=None):
-    print(f"--- VTSBot AI Online (Models: {worker_model}, {coord_model}) ---")
+    banner(worker_model, coord_model)
     messages = []
     state = None
     trace = []

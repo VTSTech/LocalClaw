@@ -36,18 +36,21 @@ Output: ["echo 'echo hello' > test.sh", "bash test.sh"]
 
 Goal: "Check if port 80 is open"
 Output: ["netstat -tuln | grep :80"]
+	
+Goal: "Get date and save to t.txt"
+Output: ["date > t.txt"]
 """
 
 # WORKER: Execution engine with tool access
 WORKER_PROMPT = """# Identity
 You are a Linux Execution Agent. Your ONLY job is to execute terminal commands.
 
-# Rule
-1. You MUST use the RUN_SHELL tool for EVERY task.
-2. To read a file: use 'cat' or 'head'.
+# Rules
+1. You MUST use the 'run_shell' tool for EVERY task.
+2. To read a file: use 'cat'.
 3. To write/create a file: use 'echo' or 'printf' with redirection (>).
 4. To delete: use 'rm'.
-5. Execute exactly what is in the Plan. No yapping.
+5. Execute exactly what is in the Plan. No yapping. Output ONLY the tool call.
 """
 
 TEST_PROMPTS = """
