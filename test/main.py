@@ -1,5 +1,6 @@
 import argparse
 from agent import run_agent
+from prompts import TEST_PROMPTS
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -9,10 +10,9 @@ if __name__ == "__main__":
     parser.add_argument("--test", action="store_true", help="Run predefined TEST_PROMPTS")
     
     args = parser.parse_args()
-    if args.test:
-        from prompts import TEST_PROMPTS
-		        test_list = [p.strip() for p in TEST_PROMPTS.strip().split('\n') if p.strip()]
-		        # Pass the test list to run_agent
-		        run_agent(args.refiner, args.coordinator, args.worker, test_queue=test_list)
-		    else:
-		        run_agent(args.refiner, args.coordinator, args.worker)
+    if args.test:        
+        test_list = [p.strip() for p in TEST_PROMPTS.strip().split('\n') if p.strip()]
+        # Pass the test list to run_agent
+        run_agent(args.refiner, args.coordinator, args.worker, test_queue=test_list)
+    else:
+        run_agent(args.refiner, args.coordinator, args.worker)
