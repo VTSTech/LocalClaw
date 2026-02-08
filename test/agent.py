@@ -23,14 +23,19 @@ TOOLS = [
     }},
 ]
 
-def run_agent(refiner_model, coord_model, worker_model):
+def run_agent(refiner_model, coord_model, worker_model, test_queue=None):
     print(f"--- VTSBot Online ---")
     messages = []
     state = None
     trace = []
 
     while True:
-        user = input("\nUser> ").strip()
+        if test_queue is not None:
+				    if not test_queue: break # Exit when tests are done
+				    user = test_queue.pop(0)
+				    print(f"\n[TEST] User Query: {user}")
+        else:
+				    user = input("\nUser> ").strip()
         if not user: continue
         
         # 1. Check for Hard Exit
