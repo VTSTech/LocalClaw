@@ -6,7 +6,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--refiner", default="qwen2.5:1.5b-instruct-q4_k_m")
     parser.add_argument("--coordinator", default="qwen2.5:1.5b-instruct-q4_k_m")
-    parser.add_argument("--worker", default="qwen2.5:0.5b-instruct-q4_k_m")
+    parser.add_argument("--worker", default="qwen3-embedding:0.6b")
     parser.add_argument("--test", action="store_true", help="Run predefined TEST_PROMPTS")
     
     args = parser.parse_args()
