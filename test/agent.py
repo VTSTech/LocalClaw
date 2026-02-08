@@ -44,7 +44,7 @@ def run_agent(refiner_model, coord_model, worker_model, test_queue=None):
     trace = []
 
     while True:
-        # Support for automated testing
+        # Support for automated testing    
         if test_queue is not None:
             if not test_queue: break
             user = test_queue.pop(0)
@@ -52,7 +52,8 @@ def run_agent(refiner_model, coord_model, worker_model, test_queue=None):
         else:
             user = input("\nUser> ").strip()
             if not user: continue
-        
+        if user.lower() in ["/exit", "/quit"]:
+            break            
         if handle_command(user, {"messages": messages, "state": state, "trace": trace, "model": worker_model}):
             continue
 
