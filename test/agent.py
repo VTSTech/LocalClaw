@@ -62,17 +62,28 @@ def run_agent(refiner_model, coord_model, worker_model, test_queue=None):
         if handle_command(user, {"messages": messages, "state": state, "trace": trace, "model": worker_model}):
             continue
 
+        # 1. REFINER: Mapping casual language to tech specs
         refined = chat_api(refiner_model, [{"role": "system", "content": REFINER_PROMPT}, {"role": "user", "content": user}], [])
         refined_query = refined["message"]["content"].strip()
+        
+        # CHAT CHECK: If the refiner thinks it's just chat, bypass the pipeline
+        if "CHAT" in refined_query.upper() and len(refined_query) < 10:
+            print(f"  [REFINED] Chat detected.")
+            # Use the worker model to give a quick conversational reply
+            chat_res = chat_api(worker_model, [{"role": "user", "content": user}], [])
+            print(f"  VTSBot: {chat_res['message']['content'].strip()}")
+            continue
+
         print(f"  [REFINED] {refined_query}")
 
+        # 2. COORDINATOR: Planning the command sequence
         plan_res = chat_api(coord_model, [{"role": "system", "content": COORDINATOR_PROMPT}, {"role": "user", "content": refined_query}], [])
         try:
             plan = json.loads(plan_res["message"]["content"])
         except:
             plan = [refined_query]
         
-        # SANITIZE PLAN: If Coordinator outputted ["echo 'rm x'"], strip the echo wrapper
+        # SANITIZE PLAN
         clean_plan = []
         for p in plan:
             m = re.match(r"^echo ['\"](.+)['\"]$", p)

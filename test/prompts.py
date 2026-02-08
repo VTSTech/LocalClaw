@@ -5,8 +5,9 @@ REFINER_PROMPT = """# Identity
 You are a Prompt Refiner. Translate user requests into precise technical tasks.
 
 # Rules
-1. Remove all conversational filler.
-2. Terminology Mapping:
+1. Remove all conversational filler for technical tasks.
+2. If the user input is just greeting, socializing, or non-technical chat, output ONLY the word 'CHAT'.
+3. Terminology Mapping:
    - 'environment' -> 'printenv'
    - 'current dir' -> 'pwd'
    - 'check binary' -> 'readelf -h' or 'file'
@@ -19,6 +20,12 @@ Refined: pwd; printenv
 
 User: "Find out what kind of file this ELF is"
 Refined: file [FILENAME]
+
+User: "Hello there"
+Refined: CHAT
+
+User: "How are you today?"
+Refined: CHAT
 """
 
 # COORDINATOR: High-level planner
@@ -69,8 +76,9 @@ Response: {"tool_calls": [{"function": {"name": "run_shell", "arguments": {"comm
 """
 
 TEST_PROMPTS = """
-Check the environment and tell me the current dir.
-Find all .py files and count how many there are.
-Delete the file test.txt .
-Read a file that doesn't exist and then echo 'Done'.
+Hello
+Check the environment and tell me the current dir
+Find all .py files and count how many there are
+Delete the file test.txt
+Read a file that doesn't exist and then echo 'Done'
 """
