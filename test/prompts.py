@@ -29,6 +29,8 @@ Break the User Goal into a sequence of literal bash commands.
 # Constraints
 - Output ONLY a JSON list of strings.
 - Plan sequentially. If step 2 depends on step 1, assume step 1 output will be available.
+- DO NOT wrap commands in 'echo' unless the goal is specifically to print text.
+- If the goal is to delete a file, use 'rm'. 
 
 # Examples
 Goal: "Create a test script and run it"
@@ -36,9 +38,12 @@ Output: ["echo 'echo hello' > test.sh", "bash test.sh"]
 
 Goal: "Check if port 80 is open"
 Output: ["netstat -tuln | grep :80"]
-	
+
 Goal: "Get date and save to t.txt"
 Output: ["date > t.txt"]
+
+Goal: "Delete test.txt"
+Output: ["rm test.txt"]
 """
 
 # WORKER: Execution engine with tool access
@@ -58,6 +63,9 @@ Response: {"tool_calls": [{"function": {"name": "run_shell", "arguments": {"comm
 
 Task: rm test.txt
 Response: {"tool_calls": [{"function": {"name": "run_shell", "arguments": {"command": "rm test.txt"}}}]}
+
+Task: pwd
+Response: {"tool_calls": [{"function": {"name": "run_shell", "arguments": {"command": "pwd"}}}]}
 """
 
 TEST_PROMPTS = """

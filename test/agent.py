@@ -62,65 +62,65 @@ def run_agent(refiner_model, coord_model, worker_model, test_queue=None):
         if handle_command(user, {"messages": messages, "state": state, "trace": trace, "model": worker_model}):
             continue
 
-        # 1. REFINER: Mapping casual language to tech specs
         refined = chat_api(refiner_model, [{"role": "system", "content": REFINER_PROMPT}, {"role": "user", "content": user}], [])
         refined_query = refined["message"]["content"].strip()
         print(f"  [REFINED] {refined_query}")
 
-        # 2. COORDINATOR: Planning the command sequence
         plan_res = chat_api(coord_model, [{"role": "system", "content": COORDINATOR_PROMPT}, {"role": "user", "content": refined_query}], [])
         try:
-            plan_text = plan_res["message"]["content"]
-            plan = json.loads(plan_text)
+            plan = json.loads(plan_res["message"]["content"])
         except:
             plan = [refined_query]
+        
+        # SANITIZE PLAN: If Coordinator outputted ["echo 'rm x'"], strip the echo wrapper
+        clean_plan = []
+        for p in plan:
+            m = re.match(r"^echo ['\"](.+)['\"]$", p)
+            clean_plan.append(m.group(1) if m else p)
+        plan = clean_plan
         print(f"  [PLAN] {plan}")
 
         state = AgentState(goal=user, plan=plan)
         total_steps = len(plan)
-
-        # 3. WORKER: Verbose execution loop
         step_count = 0
+
         while state.plan:
             step_count += 1
             current_task = state.plan.pop(0)
-            
-            # VERBOSITY: Explicit progress tracking before tool call
             print(f"  [STEP {step_count}/{total_steps}] Executing: {current_task}")
             
-            obs = "Error: Tool not called"
-            worker_msgs = [
-                {"role": "system", "content": WORKER_PROMPT},
-                {"role": "user", "content": f"Task: {current_task}"}
-            ]
-            
+            worker_msgs = [{"role": "system", "content": WORKER_PROMPT}, {"role": "user", "content": f"Task: {current_task}"}]
             res = chat_api(worker_model, worker_msgs, TOOLS)
             msg = res["message"]
-
+            
+            obs = None
             if msg.get("tool_calls"):
                 for call in msg["tool_calls"]:
-                    name, args = call["function"]["name"], call["function"]["arguments"]
+                    args = call["function"]["arguments"]
+                    cmd = args.get("command", current_task)
+                    if isinstance(cmd, dict): cmd = cmd.get("command", str(cmd))
                     
-                    if name == "run_shell":
-                        # ARG FLATTENING: Handles 0.5b hallucinating nested dicts or JSON strings
-                        cmd_string = args.get("command", current_task)
-                        if isinstance(cmd_string, dict):
-                            cmd_string = cmd_string.get("command", str(cmd_string))
-                        
-                        # REDIRECTION TRACKER: Detect if the shell is writing a file
-                        write_match = re.search(r'>>?\s*([a-zA-Z0-9_\-\.]+)', cmd_string)
-                        if write_match:
-                            filename = write_match.group(1)
-                            if filename not in state.files_written:
-                                state.files_written.append(filename)
+                    # Redirection Tracker
+                    write_match = re.search(r'>>?\s*([a-zA-Z0-9_\-\.]+)', cmd)
+                    if write_match:
+                        fname = write_match.group(1)
+                        if fname not in state.files_written: state.files_written.append(fname)
+                    
+                    obs = run_shell(cmd)
+            
+            if not obs:
+                # Force-Exec Fallback
+                obs = run_shell(current_task)
+                # Re-check redirection for fallback
+                write_match = re.search(r'>>?\s*([a-zA-Z0-9_\-\.]+)', current_task)
+                if write_match:
+                    fname = write_match.group(1)
+                    if fname not in state.files_written: state.files_written.append(fname)
+                print(f"  Worker (fallback:force_exec)> Running...")
 
-                        obs = run_shell(cmd_string)
-                        # Print the actual output from the tool
-                        preview = obs.replace('\n', ' ')[:60]
-                        print(f"  Worker (tool:run_shell)> {preview}...")
-            else:
-                # If no tool was called, print the error so the user knows why it skipped
-                print(f"  Worker (error)> {obs}")
+            if obs:
+                preview = obs.replace('\n', ' ')[:60]
+                print(f"  Worker (tool:run_shell)> {preview}...")
 
             state.last_result = obs
             state.step = step_count
