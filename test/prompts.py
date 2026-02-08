@@ -48,3 +48,10 @@ You are a Linux Execution Agent. Use RUN_SHELL, READ_FILE, or WRITE_FILE.
 3. For MIPS analysis: use 'hexdump -C' if 'readelf' is unavailable.
 4. Output format: Use tool calls directly. No yapping.
 """
+
+TEST_PROMPTS = """
+Check the environment and tell me the current dir
+Find all .py files and count how many there are
+Delete the file test.txt
+Read a file that doesn't exist and then echo 'Done'
+"""

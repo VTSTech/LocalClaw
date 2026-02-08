@@ -62,8 +62,8 @@ def run_agent(refiner_model, coord_model, worker_model):
 
         # STAGE 3: WORKER (Executor)
         worker_msgs = [{"role": "system", "content": WORKER_PROMPT}]
-        while state.plan:
-            current_task = state.plan.pop(0)
+        for current_task in state.plan:
+            obs = "Error: Tool not called" # Initialize default
             
             # Variable Grounding (Memory Bridge)
             if state.last_result:
@@ -86,7 +86,10 @@ def run_agent(refiner_model, coord_model, worker_model):
                     
                     # Handle arg extraction
                     if name == "run_shell":
-                        obs = run_shell(args.get("command", current_task))
+                        cmd_string = args.get("command", current_task)
+                        if isinstance(cmd_string, dict): # Defensive check for 0.5b hallucinations
+                            cmd_string = cmd_string.get("command", str(cmd_string))                        
+                        obs = run_shell(cmd_string)
                     elif name == "write_file":
                         obs = write_file(args.get("filename", "output.txt"), args.get("content", state.last_result or ""))
 
