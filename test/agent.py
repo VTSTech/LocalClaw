@@ -3,6 +3,7 @@ import re
 import os
 import platform
 import getpass
+import uuid
 from datetime import datetime
 from tools import run_shell
 from state import AgentState, goal_satisfied
@@ -10,29 +11,15 @@ from ollama import chat_api
 from prompts import REFINER_PROMPT, COORDINATOR_PROMPT, WORKER_PROMPT
 from cli import handle_command
 
-TOOLS = [
-    {"type": "function", "function": {
-        "name": "run_shell",
-        "description": "Execute a bash command in the Linux terminal",
-        "parameters": {
-            "type": "object", 
-            "properties": {
-                "command": {"type": "string"}
-            }, 
-            "required": ["command"]
-        }
-    }}
-]
+# Formal tool definitions are removed to prevent JSON hallucinations in small models.
+# Python now handles the "tooling" logic via strings.
+TOOLS = [] 
 
 def banner(worker_model, coord_model):
     print(f"-- VTSBot AI Online (Models: {worker_model}, {coord_model})")
     print(f"-- Written by VTSTech https://www.vts-tech.org https://github.com/VTSTech --")
 
 def bootstrap_environment(state):
-    """
-    Directly gather system facts using Python instead of AI tools.
-    Returns a string context for the LLM.
-    """
     try:
         username = getpass.getuser()
     except:
@@ -82,7 +69,7 @@ def run_agent(refiner_model, coord_model, worker_model, test_queue=None):
         if user.startswith('/') and handle_command(user, {"messages": messages, "state": state, "trace": trace, "model": worker_model}):
             continue
 
-        # --- INTERNAL INTENT HANDLER (Static/Common) ---
+        # --- INTERNAL LOOKUP (Static Info) ---
         query_lower = user.lower()
         handled_locally = False
         lookup_output = []
@@ -113,52 +100,54 @@ def run_agent(refiner_model, coord_model, worker_model, test_queue=None):
             messages.append({"role": "assistant", "content": "\n".join(lookup_output)})
             continue
 
-        messages.append({"role": "user", "content": user})
-
-        # --- STAGE 1: REFINER ---
-        refiner_system = f"{REFINER_PROMPT}\n\n{sys_context}\nIf the query requires a system action, output ONLY the bash command(s). For multi-step tasks, output each command on a new line."
+        # --- STAGE 1: REFINER (Fast-Path) ---
+        refiner_system = f"{REFINER_PROMPT}\n\n{sys_context}"
         refined = chat_api(refiner_model, [{"role": "system", "content": refiner_system}, {"role": "user", "content": user}], [])
         refined_query = refined["message"]["content"].strip()
         
-        # Check if Refiner gave us code/commands directly
-        # We assume if it's not "CHAT" and contains common shell indicators, it's a direct command
-        shell_indicators = ['ls', 'cat', 'rm', 'mkdir', 'find', 'grep', 'echo', 'cd', 'python']
-        is_direct_cmd = any(refined_query.split()[0] == cmd for cmd in shell_indicators if refined_query.split())
+        # Strip common AI chatter/markdown
+        refined_query = re.sub(r'^Refined:\s*', '', refined_query, flags=re.IGNORECASE)
+        refined_query = refined_query.replace('```bash', '').replace('```', '').strip()
 
-        if is_direct_cmd:
+        # DETECT BASH (is_direct_cmd logic)
+        shell_indicators = ['ls', 'cat', 'rm', 'mkdir', 'find', 'grep', 'echo', 'cd', 'python', 'readelf', 'wc', 'file']
+        first_word = refined_query.split()[0] if refined_query.split() else ""
+        is_direct_cmd = first_word in shell_indicators or "|" in refined_query or ">" in refined_query
+
+        if is_direct_cmd and "CHAT" not in refined_query.upper():
             lines = [l.strip() for l in refined_query.split('\n') if l.strip()]
             
             if len(lines) == 1:
-                # Direct single execution
                 print(f"  [DIRECT EXEC] {lines[0]}")
                 obs = run_shell(lines[0])
             else:
-                # Multi-step: Create a script and run it
+                # Scripting Path
                 script_name = f"vts_task_{uuid.uuid4().hex[:8]}.sh"
                 script_content = "#!/bin/bash\n" + "\n".join(lines)
                 print(f"  [SCRIPT BUNDLE] Executing {len(lines)} steps via {script_name}")
-                
-                # Write script via run_shell redirection
                 run_shell(f"cat << 'EOF' > {script_name}\n{script_content}\nEOF")
                 obs = run_shell(f"bash {script_name} && rm {script_name}")
 
             print(f"  Worker (Direct)> {obs[:100]}...")
-            messages.append({"role": "assistant", "content": f"Executed: {refined_query}\nResult: {obs}"})
+            messages.append({"role": "user", "content": user})
+            messages.append({"role": "assistant", "content": obs})
             state.last_result = obs
+            state.step += 1
             continue
 
-        # --- FALLBACK: COORDINATOR/WORKER (For complex reasoning) ---
-        if "CHAT" in refined_query.upper() and len(refined_query) < 10:
+        # --- STAGE 2: CHAT OR COMPLEX FALLBACK ---
+        if "CHAT" in refined_query.upper():
             worker_system = f"{WORKER_PROMPT}\n\n{sys_context}"
+            # Passing TOOLS=[] ensures the model doesn't try to use function calling for a greeting
             chat_res = chat_api(worker_model, [{"role": "system", "content": worker_system}, {"role": "user", "content": user}], [])
             vts_reply = chat_res['message']['content'].strip()
             print(f"  VTSBot: {vts_reply}")
+            messages.append({"role": "user", "content": user})
             messages.append({"role": "assistant", "content": vts_reply})
             continue
 
+        # --- STAGE 3: COORDINATOR (The Brain) ---
         print(f"  [REFINED] {refined_query}")
-
-        # 2. COORDINATOR
         plan_res = chat_api(coord_model, [{"role": "system", "content": COORDINATOR_PROMPT}, {"role": "user", "content": refined_query}], [])
         try:
             plan_content = plan_res["message"]["content"]

@@ -71,24 +71,12 @@ Output: ["rm test.txt"]
 
 # WORKER: Execution engine with tool access
 WORKER_PROMPT = """# Identity
-You are a Linux Execution Agent. Your ONLY job is to execute terminal commands using 'run_shell'.
+You are a helpful Technical Assistant.
 
 # Rules
-1. ALWAYS use the 'run_shell' tool.
-2. Output ONLY the tool call.
-
-# Examples
-Task: echo $HOME
-Response: {"tool_calls": [{"function": {"name": "run_shell", "arguments": {"command": "echo $HOME"}}}]}
-
-Task: ls -al
-Response: {"tool_calls": [{"function": {"name": "run_shell", "arguments": {"command": "ls -al"}}}]}
-
-Task: rm test.txt
-Response: {"tool_calls": [{"function": {"name": "run_shell", "arguments": {"command": "rm test.txt"}}}]}
-
-Task: pwd
-Response: {"tool_calls": [{"function": {"name": "run_shell", "arguments": {"command": "pwd"}}}]}
+1. If the input is a greeting, reply naturally but concisely.
+2. If the input is a complex technical question, explain it clearly.
+3. You are NOT responsible for calling tools; Python handles execution.
 """
 
 TEST_PROMPTS = """

@@ -1,5 +1,8 @@
 import requests
 
+#Ollama Install
+#curl -fsSL https://ollama.com/install.sh | sh
+
 CHAT_URL = "http://127.0.0.1:11434/api/chat"
 SHOW_URL = "http://127.0.0.1:11434/api/show"
 
