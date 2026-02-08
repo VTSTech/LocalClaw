@@ -57,10 +57,26 @@ def handle_command(cmd, context):
     if cmd == "/trace":
         print("\n--- TOOL TRACE ---")
         for i, t in enumerate(trace):
-            print(f"{i+1}. {t['tool']}({t['args']})")
-            print(f"   -> {t['result']}")
+            # FIXED: Defensive check for 'args' key to prevent KeyError
+            tool_name = t.get('tool', 'unknown')
+            tool_args = t.get('args', t.get('command', 'N/A'))
+            result = t.get('result', 'No output')
+            
+            print(f"{i+1}. {tool_name}({tool_args})")
+            print(f"   -> {result[:100]}...") # Truncate for readability
+            
         if not trace:
             print("(empty)")
+        return True
+
+    if cmd == "/context":
+        print("\n--- MESSAGE CONTEXT ---")
+        for i, m in enumerate(messages):
+            role = m['role']
+            content = m.get('content', '')
+            if m.get('tool_calls'):
+                content = f"[TOOL CALLS: {len(m['tool_calls'])}]"
+            print(f"{i:02d} | {role:9} | {content[:80]}")
         return True
 
     if cmd == "/verify" and state:
@@ -76,11 +92,6 @@ def handle_command(cmd, context):
                 print("  STATUS: MISMATCH ? (Hallucination Detected)")
         else:
             print("No files written yet.")
-        return True
-        
-    if cmd == "/context":
-        for i, m in enumerate(messages):
-            print(f"{i:02d} | {m['role']} | {m.get('content','')[:80]}")
         return True
 
     if cmd == "/clear":
