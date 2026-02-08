@@ -11,8 +11,7 @@ from ollama import chat_api
 from prompts import REFINER_PROMPT, COORDINATOR_PROMPT, WORKER_PROMPT
 from cli import handle_command
 
-# Formal tool definitions are removed to prevent JSON hallucinations in small models.
-# Python now handles the "tooling" logic via strings.
+# In R2, tools are handled as raw strings/scripts; no JSON schema needed for AI.
 TOOLS = [] 
 
 def banner(worker_model, coord_model):
@@ -49,7 +48,6 @@ def bootstrap_environment(state):
 def run_agent(refiner_model, coord_model, worker_model, test_queue=None):
     banner(worker_model, coord_model)
     messages, trace = [], []
-
     state = AgentState(goal="System Initialization")
     sys_context = bootstrap_environment(state)
     print(f"  [SYSTEM] Environment and Date synchronized.\n{sys_context}")
@@ -69,76 +67,46 @@ def run_agent(refiner_model, coord_model, worker_model, test_queue=None):
         if user.startswith('/') and handle_command(user, {"messages": messages, "state": state, "trace": trace, "model": worker_model}):
             continue
 
-        # --- INTERNAL LOOKUP (Static Info) ---
-        query_lower = user.lower()
-        handled_locally = False
-        lookup_output = []
-
-        system_keywords = ["what is your os", "what os", "current time", "who am i", "current dir", "distro", "distribution", "release", "current date"]
-        if any(keyword in query_lower for keyword in system_keywords):
-            for line in sys_context.split('\n'):
-                if not line.strip(): continue
-                if any(x in query_lower for x in ["os", "distro", "distribution", "release"]) and "OS:" in line: 
-                    label = "Distro" if "distro" in query_lower or "distribution" in query_lower else "OS"
-                    clean_line = line.replace("- OS:", f"- {label}:")
-                    lookup_output.append(clean_line)
-                    handled_locally = True
-                if any(x in query_lower for x in ["time", "date"]) and "DATE" in line: 
-                    lookup_output.append(line)
-                    handled_locally = True
-                if any(x in query_lower for x in ["dir", "cwd", "folder"]) and "CWD" in line: 
-                    lookup_output.append(line)
-                    handled_locally = True
-                if any(x in query_lower for x in ["user", "who am i", "username"]) and "USER" in line:
-                    lookup_output.append(line)
-                    handled_locally = True
-
-        if handled_locally:
-            print(f"  VTSBot (Local Lookup):")
-            for out in lookup_output: print(f"    {out}")
-            messages.append({"role": "user", "content": user})
-            messages.append({"role": "assistant", "content": "\n".join(lookup_output)})
-            continue
-
-        # --- STAGE 1: REFINER (Fast-Path) ---
+        # --- STAGE 1: REFINER (The Intent Classifier) ---
         refiner_system = f"{REFINER_PROMPT}\n\n{sys_context}"
         refined = chat_api(refiner_model, [{"role": "system", "content": refiner_system}, {"role": "user", "content": user}], [])
         refined_query = refined["message"]["content"].strip()
         
-        # Strip common AI chatter/markdown
-        refined_query = re.sub(r'^Refined:\s*', '', refined_query, flags=re.IGNORECASE)
-        refined_query = refined_query.replace('```bash', '').replace('```', '').strip()
+        # Extract Tag and Payload
+        # Pattern looks for [TAG] then captures the rest of the string
+        tag_match = re.search(r'\[(CHAT|LOCAL|DIRECT|SCRIPT)\]\s*(.*)', refined_query, re.DOTALL | re.IGNORECASE)
+        
+        if not tag_match:
+            # Fallback if the model misses the tag but gives a command
+            tag = "SCRIPT" if "\n" in refined_query else "DIRECT"
+            payload = refined_query
+        else:
+            tag = tag_match.group(1).upper()
+            payload = tag_match.group(2).strip()
 
-        # DETECT BASH (is_direct_cmd logic)
-        shell_indicators = ['ls', 'cat', 'rm', 'mkdir', 'find', 'grep', 'echo', 'cd', 'python', 'readelf', 'wc', 'file']
-        first_word = refined_query.split()[0] if refined_query.split() else ""
-        is_direct_cmd = first_word in shell_indicators or "|" in refined_query or ">" in refined_query
+        # --- ROUTING LOGIC ---
 
-        if is_direct_cmd and "CHAT" not in refined_query.upper():
-            lines = [l.strip() for l in refined_query.split('\n') if l.strip()]
+        # 1. LOCAL LOOKUP (Fastest)
+        if tag == "LOCAL":
+            found_info = []
+            payload_lower = payload.lower()
+            for line in sys_context.split('\n'):
+                if not line.strip(): continue
+                # Match keywords like 'time', 'cwd', 'user', 'os'
+                if any(kw in payload_lower for kw in ["time", "date", "now"]) and "DATE" in line: found_info.append(line)
+                if any(kw in payload_lower for kw in ["cwd", "dir", "path", "folder"]) and "CWD" in line: found_info.append(line)
+                if any(kw in payload_lower for kw in ["os", "distro", "system", "version"]) and "OS" in line: found_info.append(line)
+                if any(kw in payload_lower for kw in ["user", "whoami", "name"]) and "USER" in line: found_info.append(line)
             
-            if len(lines) == 1:
-                print(f"  [DIRECT EXEC] {lines[0]}")
-                obs = run_shell(lines[0])
-            else:
-                # Scripting Path
-                script_name = f"vts_task_{uuid.uuid4().hex[:8]}.sh"
-                script_content = "#!/bin/bash\n" + "\n".join(lines)
-                print(f"  [SCRIPT BUNDLE] Executing {len(lines)} steps via {script_name}")
-                run_shell(f"cat << 'EOF' > {script_name}\n{script_content}\nEOF")
-                obs = run_shell(f"bash {script_name} && rm {script_name}")
-
-            print(f"  Worker (Direct)> {obs[:100]}...")
+            out = "\n".join(found_info) if found_info else "No local info found for: " + payload
+            print(f"  VTSBot (Local Lookup):\n    {out}")
             messages.append({"role": "user", "content": user})
-            messages.append({"role": "assistant", "content": obs})
-            state.last_result = obs
-            state.step += 1
+            messages.append({"role": "assistant", "content": out})
             continue
 
-        # --- STAGE 2: CHAT OR COMPLEX FALLBACK ---
-        if "CHAT" in refined_query.upper():
+        # 2. CHAT (Social)
+        if tag == "CHAT":
             worker_system = f"{WORKER_PROMPT}\n\n{sys_context}"
-            # Passing TOOLS=[] ensures the model doesn't try to use function calling for a greeting
             chat_res = chat_api(worker_model, [{"role": "system", "content": worker_system}, {"role": "user", "content": user}], [])
             vts_reply = chat_res['message']['content'].strip()
             print(f"  VTSBot: {vts_reply}")
@@ -146,74 +114,38 @@ def run_agent(refiner_model, coord_model, worker_model, test_queue=None):
             messages.append({"role": "assistant", "content": vts_reply})
             continue
 
-        # --- STAGE 3: COORDINATOR (The Brain) ---
-        print(f"  [REFINED] {refined_query}")
-        plan_res = chat_api(coord_model, [{"role": "system", "content": COORDINATOR_PROMPT}, {"role": "user", "content": refined_query}], [])
-        try:
-            plan_content = plan_res["message"]["content"]
-            json_match = re.search(r'\[.*\]', plan_content, re.DOTALL)
-            plan = json.loads(json_match.group(0)) if json_match else json.loads(plan_content)
-        except:
-            plan = [cmd.strip() for cmd in refined_query.split(';') if cmd.strip()]
-        
-        plan = [re.sub(r"^echo ['\"](.+)['\"]$", r"\1", p).strip() for p in plan if p.strip()]
-        if not plan: continue
-            
-        print(f"  [PLAN] {plan}")
-
-        state.goal = user
-        state.plan = plan
-        total_steps = len(plan)
-        step_count = 0
-
-        while state.plan:
-            step_count += 1
-            current_task = state.plan.pop(0)
-            print(f"  [STEP {step_count}/{total_steps}] Executing: {current_task}")
-            
-            worker_system = f"{WORKER_PROMPT}\n\n{sys_context}"
-            worker_msgs = [{"role": "system", "content": worker_system}, {"role": "user", "content": f"Task: {current_task}"}]
-            res = chat_api(worker_model, worker_msgs, TOOLS)
-            msg = res["message"]
-            
-            obs = None
-            cmd_to_run = current_task
-
-            if msg.get("tool_calls"):
-                for call in msg["tool_calls"]:
-                    args = call["function"]["arguments"]
-                    cmd_to_run = args.get("command", current_task)
-                    if isinstance(cmd_to_run, dict):
-                        cmd_to_run = cmd_to_run.get("command", str(cmd_to_run))
-                    
-                    obs = run_shell(cmd_to_run)
-                    messages.append({"role": "assistant", "tool_calls": msg["tool_calls"]})
-            
-            if not obs:
-                obs = run_shell(cmd_to_run)
-                print(f"  Worker (fallback:force_exec)> Running...")
-
-            # --- STATE OBSERVER ---
-            write_match = re.search(r'>>?\s*([a-zA-Z0-9_\-\.\/]+)', cmd_to_run)
-            if write_match:
-                fname = write_match.group(1)
-                if fname not in state.files_written: state.files_written.append(fname)
-            
-            is_env_cmd = any(x in cmd_to_run for x in ["printenv", "echo $PATH", "env"])
-            if is_env_cmd and obs and "Error" not in obs:
-                state.collected["environment"] = True
-            
-            if "date" in cmd_to_run or re.search(r'\d{4}-\d{2}-\d{2}', obs):
-                state.collected["time"] = True
-
-            if obs:
-                preview = obs.replace('\n', ' ')[:60]
-                print(f"  Worker (tool:run_shell)> {preview}...")
-                messages.append({"role": "tool", "content": obs})
-
+        # 3. DIRECT EXEC (Single Command)
+        if tag == "DIRECT":
+            print(f"  [DIRECT EXEC] {payload}")
+            obs = run_shell(payload)
+            print(f"  Worker (Direct)> {obs[:100]}...")
+            messages.append({"role": "user", "content": user})
+            messages.append({"role": "assistant", "content": obs})
             state.last_result = obs
-            state.step = step_count
-            trace.append({"tool": "run_shell", "args": {"command": cmd_to_run}, "result": obs})
+            state.step += 1
+            continue
+
+        # 4. SCRIPT BUNDLE (Multi-Step)
+        if tag == "SCRIPT":
+            lines = [l.strip() for l in payload.split('\n') if l.strip()]
+            if len(lines) == 0:
+                print("  [ERROR] Script tag received but no payload.")
+                continue
+                
+            script_name = f"vts_task_{uuid.uuid4().hex[:8]}.sh"
+            script_content = "#!/bin/bash\n" + "\n".join(lines)
+            print(f"  [SCRIPT BUNDLE] Executing {len(lines)} steps via {script_name}")
+            
+            # Write and execute
+            run_shell(f"cat << 'EOF' > {script_name}\n{script_content}\nEOF")
+            obs = run_shell(f"bash {script_name} && rm {script_name}")
+            
+            print(f"  Worker (Script)> {obs[:100]}...")
+            messages.append({"role": "user", "content": user})
+            messages.append({"role": "assistant", "content": obs})
+            state.last_result = obs
+            state.step += 1
+            continue
 
         if goal_satisfied(state):
             print(f"  [GOAL SATISFIED]")
