@@ -181,3 +181,4 @@ cython_debug/
 .cursorindexingignore
 *.bak
 R0.zip
+*.zip

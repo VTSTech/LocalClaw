@@ -1,4 +1,4 @@
-import json
+import json, re
 from tools import run_shell#, read_file, write_file
 from state import AgentState, goal_satisfied
 from ollama import chat_api
@@ -62,7 +62,7 @@ def run_agent(refiner_model, coord_model, worker_model, test_queue=None):
         if handle_command(user, {"messages": messages, "state": state, "trace": trace, "model": worker_model}):
             continue
 
-        # 1. REFINER: Mapping language to tech specs
+        # 1. REFINER: Mapping casual language to tech specs
         refined = chat_api(refiner_model, [{"role": "system", "content": REFINER_PROMPT}, {"role": "user", "content": user}], [])
         refined_query = refined["message"]["content"].strip()
         print(f"  [REFINED] {refined_query}")
@@ -70,7 +70,8 @@ def run_agent(refiner_model, coord_model, worker_model, test_queue=None):
         # 2. COORDINATOR: Planning the command sequence
         plan_res = chat_api(coord_model, [{"role": "system", "content": COORDINATOR_PROMPT}, {"role": "user", "content": refined_query}], [])
         try:
-            plan = json.loads(plan_res["message"]["content"])
+            plan_text = plan_res["message"]["content"]
+            plan = json.loads(plan_text)
         except:
             plan = [refined_query]
         print(f"  [PLAN] {plan}")
@@ -84,7 +85,7 @@ def run_agent(refiner_model, coord_model, worker_model, test_queue=None):
             step_count += 1
             current_task = state.plan.pop(0)
             
-            # VERBOSITY: Inform user of progress before Worker starts
+            # VERBOSITY: Explicit progress tracking before tool call
             print(f"  [STEP {step_count}/{total_steps}] Executing: {current_task}")
             
             obs = "Error: Tool not called"
@@ -101,15 +102,25 @@ def run_agent(refiner_model, coord_model, worker_model, test_queue=None):
                     name, args = call["function"]["name"], call["function"]["arguments"]
                     
                     if name == "run_shell":
-                        # ARG FLATTENING: Handles 0.5b hallucinating nested dicts
+                        # ARG FLATTENING: Handles 0.5b hallucinating nested dicts or JSON strings
                         cmd_string = args.get("command", current_task)
                         if isinstance(cmd_string, dict):
                             cmd_string = cmd_string.get("command", str(cmd_string))
                         
+                        # REDIRECTION TRACKER: Detect if the shell is writing a file
+                        write_match = re.search(r'>>?\s*([a-zA-Z0-9_\-\.]+)', cmd_string)
+                        if write_match:
+                            filename = write_match.group(1)
+                            if filename not in state.files_written:
+                                state.files_written.append(filename)
+
                         obs = run_shell(cmd_string)
-                        # Truncated preview of results
+                        # Print the actual output from the tool
                         preview = obs.replace('\n', ' ')[:60]
                         print(f"  Worker (tool:run_shell)> {preview}...")
+            else:
+                # If no tool was called, print the error so the user knows why it skipped
+                print(f"  Worker (error)> {obs}")
 
             state.last_result = obs
             state.step = step_count
