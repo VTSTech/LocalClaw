@@ -58,15 +58,16 @@ def run_agent(refiner_model, coord_model, worker_model, test_queue=None):
             if not user: continue
         if user.lower() in ["/exit", "/quit"]:
             break            
+
         if handle_command(user, {"messages": messages, "state": state, "trace": trace, "model": worker_model}):
             continue
 
-        # 1. Refiner Stage
+        # 1. REFINER: Mapping language to tech specs
         refined = chat_api(refiner_model, [{"role": "system", "content": REFINER_PROMPT}, {"role": "user", "content": user}], [])
         refined_query = refined["message"]["content"].strip()
         print(f"  [REFINED] {refined_query}")
 
-        # 2. Coordinator Stage
+        # 2. COORDINATOR: Planning the command sequence
         plan_res = chat_api(coord_model, [{"role": "system", "content": COORDINATOR_PROMPT}, {"role": "user", "content": refined_query}], [])
         try:
             plan = json.loads(plan_res["message"]["content"])
@@ -75,12 +76,18 @@ def run_agent(refiner_model, coord_model, worker_model, test_queue=None):
         print(f"  [PLAN] {plan}")
 
         state = AgentState(goal=user, plan=plan)
+        total_steps = len(plan)
 
-        # 3. Worker Stage (Shell-Only)
+        # 3. WORKER: Verbose execution loop
+        step_count = 0
         while state.plan:
+            step_count += 1
             current_task = state.plan.pop(0)
-            obs = "Error: Tool not called"
             
+            # VERBOSITY: Inform user of progress before Worker starts
+            print(f"  [STEP {step_count}/{total_steps}] Executing: {current_task}")
+            
+            obs = "Error: Tool not called"
             worker_msgs = [
                 {"role": "system", "content": WORKER_PROMPT},
                 {"role": "user", "content": f"Task: {current_task}"}
@@ -94,16 +101,19 @@ def run_agent(refiner_model, coord_model, worker_model, test_queue=None):
                     name, args = call["function"]["name"], call["function"]["arguments"]
                     
                     if name == "run_shell":
-                        # Handle potential dict-nesting hallucination
+                        # ARG FLATTENING: Handles 0.5b hallucinating nested dicts
                         cmd_string = args.get("command", current_task)
                         if isinstance(cmd_string, dict):
                             cmd_string = cmd_string.get("command", str(cmd_string))
                         
                         obs = run_shell(cmd_string)
-                        print(f"  Worker (tool:run_shell)> {obs[:40]}...")
+                        # Truncated preview of results
+                        preview = obs.replace('\n', ' ')[:60]
+                        print(f"  Worker (tool:run_shell)> {preview}...")
 
             state.last_result = obs
-            trace.append({"tool": "run_shell", "command": current_task, "result": obs})
+            state.step = step_count
+            trace.append({"tool": "run_shell", "args": {"command": current_task}, "result": obs})
 
         if goal_satisfied(state):
             print(f"  [GOAL SATISFIED]")
