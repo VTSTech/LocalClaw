@@ -24,7 +24,7 @@ TOOLS = [
 ]
 
 def run_agent(refiner_model, coord_model, worker_model, test_queue=None):
-    print(f"--- VTSBot Online ---")
+    print(f"--- VTSBot AI Online (Models: {worker_model}, {coord_model}) ---")
     messages = []
     state = None
     trace = []

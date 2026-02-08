@@ -32,19 +32,19 @@ def run_shell(command: str) -> str:
     except Exception as e:
         return f"Shell Error: {e}"
 
-def read_file(filename: str) -> str:
-    if not os.path.exists(filename):
-        return f"Error: File '{filename}' does not exist."
-    try:
-        with open(filename, "r") as f:
-            return f.read()
-    except Exception as e:
-        return f"Read Error: {e}"
-
-def write_file(filename: str, content: str) -> str:
-    try:
-        with open(filename, "w") as f:
-            f.write(content or "")
-        return f"SUCCESS: wrote {len(content or '')} bytes to {filename}"
-    except Exception as e:
-        return f"Write Error: {e}"
+#def read_file(filename: str) -> str:
+#    if not os.path.exists(filename):
+#        return f"Error: File '{filename}' does not exist."
+#    try:
+#        with open(filename, "r") as f:
+#            return f.read()
+#    except Exception as e:
+#        return f"Read Error: {e}"
+#
+#def write_file(filename: str, content: str) -> str:
+#    try:
+#        with open(filename, "w") as f:
+#            f.write(content or "")
+#        return f"SUCCESS: wrote {len(content or '')} bytes to {filename}"
+#    except Exception as e:
+#        return f"Write Error: {e}"

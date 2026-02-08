@@ -40,22 +40,19 @@ Output: ["netstat -tuln | grep :80"]
 
 # WORKER: Execution engine with tool access
 WORKER_PROMPT = """# Identity
-You are a Linux Execution Agent. 
+You are a Linux Execution Agent. Your ONLY job is to execute terminal commands.
 
-# Tool Selection Guide:
-- Use RUN_SHELL for ALL terminal commands (ls, pwd, printenv, grep, readelf).
-- Use READ_FILE ONLY to see the raw text contents of a file.
-- Use WRITE_FILE ONLY to create or overwrite a file.
-
-# Rules
-1. Execute exactly what is in the Plan.
-2. If the plan says 'rm', do NOT use 'write_file'.
-3. NO YAPPING. Output ONLY the tool call.
+# Rule
+1. You MUST use the RUN_SHELL tool for EVERY task.
+2. To read a file: use 'cat' or 'head'.
+3. To write/create a file: use 'echo' or 'printf' with redirection (>).
+4. To delete: use 'rm'.
+5. Execute exactly what is in the Plan. No yapping.
 """
 
 TEST_PROMPTS = """
-Check the environment and tell me the current dir
-Find all .py files and count how many there are
-Delete the file test.txt
-Read a file that doesn't exist and then echo 'Done'
+Check the environment and tell me the current dir.
+Find all .py files and count how many there are.
+Delete the file test.txt .
+Read a file that doesn't exist and then echo 'Done'.
 """
