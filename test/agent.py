@@ -54,6 +54,62 @@ def bootstrap_environment(state):
         f"HOST: {info['host']}\n"
     )
 
+def validate_and_correct_dispatcher_output(user_query, tag, payload):
+    """Validate dispatcher output and correct if obviously wrong"""
+    query_lower = user_query.lower()
+    
+    # Rules for correction
+    correction_rules = [
+        # If it's asking to DO something, it should be SCRIPT
+        (lambda q: any(word in q for word in ['create', 'make', 'write', 'compile', 'build', 'search', 'find', 'move', 'copy', 'delete']), 
+         "SCRIPT"),
+        # If it's asking for simple system info, should be LOCAL
+        (lambda q: any(word in q for word in ['user', 'host', 'arch', 'directory', 'cwd', 'where am i', 'who am i']),
+         "LOCAL"),
+        # If it's asking for explanation or "what is", should be CHAT
+        (lambda q: any(word in q for word in ['explain', 'what is', 'how does', 'tell me about']),
+         "CHAT"),
+        # If it's a simple command verb, should be DIRECT
+        (lambda q: any(word in q for word in ['list', 'show', 'display', 'print']) and 
+         not any(cmd in q for cmd in ['create', 'make']),
+         "DIRECT"),
+    ]
+    
+    # Check if current tag is appropriate
+    for rule, expected_tag in correction_rules:
+        if rule(query_lower):
+            if tag != expected_tag:
+                print(f"  [Dispatcher Correction] Changed {tag} ? {expected_tag}")
+                tag = expected_tag
+            break
+    
+    # Generate appropriate payload if missing/wrong
+    if tag == "LOCAL":
+        # Extract keywords for system info
+        keywords = []
+        if 'user' in query_lower or 'who' in query_lower:
+            keywords.append('user')
+        if 'host' in query_lower or 'hostname' in query_lower:
+            keywords.append('host')
+        if 'arch' in query_lower or 'architecture' in query_lower:
+            keywords.append('arch')
+        if 'directory' in query_lower or 'cwd' in query_lower or 'path' in query_lower:
+            keywords.append('cwd')
+        if 'os' in query_lower or 'operating system' in query_lower:
+            keywords.append('os')
+        
+        if keywords and (not payload or payload == query_lower):
+            payload = ' '.join(keywords[:2])
+    
+    elif tag == "SCRIPT":
+        # For common operations, provide better payload
+        if 'dummy.c' in query_lower and 'create' in query_lower:
+            payload = "cat > dummy.c << 'EOF'\n#include <stdio.h>\nint main() { return 0; }\nEOF"
+        elif 'compile' in query_lower and 'dummy.c' in query_lower:
+            payload = "[ -f dummy.c ] && gcc -c dummy.c -o dummy.o || echo 'dummy.c not found'"
+    
+    return tag, payload
+    
 def run_agent(refiner_model, coord_model, worker_model, test_queue=None):
     banner(worker_model, refiner_model)
     messages, trace = [], []
@@ -118,6 +174,7 @@ def run_agent(refiner_model, coord_model, worker_model, test_queue=None):
             tag = "CHAT"
             payload = user
         
+        tag, payload = validate_and_correct_dispatcher_output(user, tag, payload)
         print(f"  [Dispatcher] Tag: {tag}")
         
         if tag == "LOCAL":

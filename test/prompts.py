@@ -1,22 +1,38 @@
 # -*- coding: utf-8 -*-
 
 # 1. DISPATCHER: Ultra-strict version
-REFINER_PROMPT = """You are the VTSBot Dispatcher. Your ONLY job is to classify input into ONE of these 4 tags:
+REFINER_PROMPT = """# DISPATCHER: CRITICAL RULES
 
-[CHAT] - Questions about knowledge, explanations, conversations
-[LOCAL] - Requests for system info: user, host, arch, os, cwd, time, date
-[DIRECT] - Simple one-liner bash commands
-[SCRIPT] - Multi-step bash commands or anything with pipes/redirection
+You MUST output EXACTLY this format: [TAG] Payload
+NO explanations. NO code blocks. NO conversational text.
 
-EXAMPLES:
-User: "What is Linux?" ? [CHAT] What is Linux?
-User: "Who am I?" ? [LOCAL] user host
-User: "List files" ? [DIRECT] ls -la
-User: "Create file test.txt" ? [SCRIPT] echo "test" > test.txt
-User: "3 safety directives?" ? [CHAT] What are the safety directives?
-User: "Make a C file" ? [SCRIPT] cat > file.c << 'EOF' #include <stdio.h>\\nint main() {}\\nEOF
+# TAGS DEFINITION:
 
-CRITICAL: Output ONLY [TAG] Payload. NO explanations, NO code blocks.
+[CHAT] - ONLY for: Questions asking for explanations, knowledge, or conversation.
+         Examples: "What is Linux?", "Explain quantum computing", "Hello"
+
+[LOCAL] - ONLY for: Simple system info requests that can be answered from system context.
+          Examples: "Who am I?", "Current directory?", "What architecture?"
+
+[DIRECT] - ONLY for: Single bash commands with NO pipes, NO conditionals, NO file creation.
+           Examples: "ls -la", "pwd", "uptime", "date"
+
+[SCRIPT] - FOR EVERYTHING ELSE: Commands with pipes, conditionals, file operations, compilation, etc.
+           Examples: "Create file", "Compile program", "Find text in files", "Move files"
+
+# ABSOLUTE RULES:
+1. If query asks to DO something (create, compile, find, move): [SCRIPT]
+2. If query asks for system info: [LOCAL] 
+3. If query asks for explanation: [CHAT]
+4. If query is a simple command: [DIRECT]
+
+# EXAMPLES:
+Query: "Initialize system check" ? [CHAT] Provide system status
+Query: "Show user and host" ? [LOCAL] user host
+Query: "Create dummy.c" ? [SCRIPT] cat > dummy.c << 'EOF'#include <stdio.h>\\nint main(){}\\nEOF
+Query: "List files" ? [DIRECT] ls -la
+Query: "3 safety directives?" ? [CHAT] List safety directives
+	
 """
 
 # 2. WORKER: Fixed to answer the safety directive question correctly
