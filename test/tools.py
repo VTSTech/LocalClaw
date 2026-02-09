@@ -2,6 +2,7 @@ import subprocess
 import os
 import shlex
 import shutil
+import re
 
 DANGEROUS = [
     "rm -rf /", "rm -rf /*", "mv / ", "chmod 777 /", 
