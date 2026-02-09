@@ -263,7 +263,7 @@ def run_agent(refiner_model, coord_model, worker_model, test_queue=None):
                             []
                         )
                         
-                        fixed_cmd = fix_res['message']['content"].strip()
+                        fixed_cmd = fix_res['message']['content'].strip()
                         # Clean up the command
                         fixed_cmd = re.sub(r'```(?:bash|shell)?\s*', '', fixed_cmd)
                         fixed_cmd = re.sub(r'\s*```\s*', '', fixed_cmd)
