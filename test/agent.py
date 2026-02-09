@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 import json
 import re
 import os
@@ -104,20 +105,41 @@ def validate_tag(tag, payload):
 
 def create_secure_script(content):
     """Create temporary script with security checks"""
+    import tempfile
+    import re
+    
     try:
-        # Create secure temporary file
+        # Clean the content
+        clean_content = str(content)
+        
+        # Remove markdown code blocks
+        if '```' in clean_content:
+            # Extract content between first and last backticks
+            parts = clean_content.split('```')
+            if len(parts) >= 3:
+                # Take the middle part (inside code block)
+                clean_content = parts[1].strip()
+                # Remove language specifier if present
+                if clean_content.startswith('bash') or clean_content.startswith('shell'):
+                    clean_content = clean_content[4:].strip()
+        
+        # Remove any remaining backticks
+        clean_content = clean_content.replace('```', '').strip()
+        
+        # Create temporary file
         with tempfile.NamedTemporaryFile(mode='w', suffix='.sh', delete=False) as f:
             f.write("#!/bin/bash\n")
-            f.write("# VTSBot Secure Script - DO NOT MODIFY\n")
-            f.write("set -euo pipefail  # Exit on error, undefined variables, pipefail\n")
-            f.write(f"{content}\n")
+            f.write("# VTSBot Temporary Script\n")
+            f.write("set -e\n")  # Exit on error
+            f.write(f"{clean_content}\n")
             script_path = f.name
         
         # Make executable
-        os.chmod(script_path, 0o700)
+        os.chmod(script_path, 700)
         return script_path
+        
     except Exception as e:
-        return None, f"Script creation failed: {e}"
+        return None
 
 def run_agent(refiner_model, coord_model, worker_model, test_queue=None):
     banner(worker_model, refiner_model)
