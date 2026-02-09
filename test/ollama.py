@@ -8,13 +8,13 @@ CHAT_URL = "http://127.0.0.1:11434/api/chat"
 # temperature 0.0 is non-negotiable for tool/tag accuracy
 params = {
     "temperature": 0.0,      
-    "num_predict": 512,      # Increased slightly to allow for [SCRIPT] blocks
-    "top_k": 20,             
+    "num_predict": 256,      # Increased slightly to allow for [SCRIPT] blocks
+    "top_k": 10,             
     "repeat_penalty": 1.1,   
     "stop": ["```", "<|im_end|>", "<|im_start|>", "User>", "\nUser>"]
 }
 
-def chat_api(model: str, messages: list, tools: list, retries=5):
+def chat_api(model: str, messages: list, tools: list, retries=3):
     """
     Communicates with local Ollama instance with exponential backoff.
     """
