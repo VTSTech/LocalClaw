@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 import argparse
 from agent import run_agent
 from prompts import TEST_PROMPTS
