@@ -11,7 +11,7 @@ params = {
     "num_predict": 512,      # Increased slightly to allow for [SCRIPT] blocks
     "top_k": 20,             
     "repeat_penalty": 1.1,   
-    "stop": ["<|im_end|>", "<|im_start|>", "User>", "\nUser>"] 
+    "stop": ["```", "<|im_end|>", "<|im_start|>", "User>", "\nUser>"]
 }
 
 def chat_api(model: str, messages: list, tools: list, retries=5):

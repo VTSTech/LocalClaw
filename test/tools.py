@@ -46,6 +46,15 @@ def run_shell(command: str) -> str:
     if not command:
         return "Error: No command provided."
 
+    # Clean the command
+    command = str(command).strip()
+    
+    # Remove markdown and JSON artifacts
+    command = re.sub(r'```[a-z]*\s*', '', command)
+    command = re.sub(r'\s*```\s*', '', command)
+    command = re.sub(r'^\s*{\s*".*', '', command)  # Remove JSON start
+    command = command.strip(' "\'\n\t')
+
     # Clean hallucinated JSON/formatting
     if isinstance(command, str):
         hallucination_cleanup = [
