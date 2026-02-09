@@ -8,16 +8,21 @@ from datetime import datetime
 from tools import run_shell
 from state import AgentState, goal_satisfied
 from ollama import chat_api
-from prompts import REFINER_PROMPT, COORDINATOR_PROMPT, WORKER_PROMPT
+from prompts import (
+    REFINER_PROMPT, 
+    WORKER_PROMPT, 
+    DEVOPS_EXPERT_PROMPT,
+    TEST_PROMPTS
+)
 from cli import handle_command
 
-# R3: No tools required; routing via tags.
+# R3: Tools are handled via shell-only architecture
 TOOLS = [] 
 
-def banner(worker_model, coord_model):
-    print(f"-- VTSBot LocalClaw R3 AI (Models: {worker_model}, {coord_model})")
+def banner(worker_model, refiner_model):
+    print(f"-- VTSBot LocalClaw R3 AI (Models: {refiner_model} / {worker_model})")
     print(f"-- Written by VTSTech https://www.vts-tech.org https://github.com/VTSTech --")
-    print(f"-- Optimized for Ultra-Fast Inference --")
+    print(f"-- Multi-Agent Orchestration: Enabled --")
 
 def read_os_release():
     os_data = {}
@@ -35,7 +40,7 @@ def read_os_release():
     return os_data
 
 def bootstrap_environment(state):
-    """Gathers system facts using Python for the local context."""
+    """Gathers system facts for the local context."""
     try:
         username = getpass.getuser()
         uname = os.uname()
@@ -68,7 +73,7 @@ def bootstrap_environment(state):
     )
 
 def run_agent(refiner_model, coord_model, worker_model, test_queue=None):
-    banner(worker_model, coord_model)
+    banner(worker_model, refiner_model)
     messages, trace = [], []
     state = AgentState(goal="Session Start")
     sys_context = bootstrap_environment(state)
@@ -87,7 +92,7 @@ def run_agent(refiner_model, coord_model, worker_model, test_queue=None):
         if user.startswith('/') and handle_command(user, {"messages": messages, "state": state, "trace": trace, "model": worker_model}):
             continue
 
-        # --- REFINER: Intent Classification ---
+        # --- DISPATCHER: Intent Classification ---
         refiner_system = f"{REFINER_PROMPT}\n\n{sys_context}"
         refined = chat_api(refiner_model, [{"role": "system", "content": refiner_system}, {"role": "user", "content": user}], [])
         refined_query = refined["message"]["content"].strip()
@@ -98,21 +103,21 @@ def run_agent(refiner_model, coord_model, worker_model, test_queue=None):
 
         # --- ROUTING LOGIC ---
         
-        # 1. LOCAL LOOKUP
+        # 1. LOCAL CONTEXT LOOKUP
         if tag == "LOCAL":
             found_info = []
             p_low = payload.lower()
-            mapping = {"date": "DATE", "cwd": "CWD", "arch": "ARCH", "os": "OS", "user": "USER", "host": "HOST"}
+            mapping = {"date": "DATE", "time": "DATE", "cwd": "CWD", "arch": "ARCH", "os": "OS", "user": "USER", "host": "HOST"}
             for line in sys_context.split('\n'):
                 for key, marker in mapping.items():
                     if key in p_low and marker in line:
                         found_info.append(line)
             
-            res = "\n".join(found_info) if found_info else "No local data matched."
+            res = "\n".join(list(set(found_info))) if found_info else "No local data matched."
             print(f"  VTSBot (Local): {res}")
             continue
 
-        # 2. CHAT
+        # 2. CHAT / EXPLANATION
         if tag == "CHAT":
             worker_system = f"{WORKER_PROMPT}\n\n{sys_context}"
             chat_res = chat_api(worker_model, [{"role": "system", "content": worker_system}, {"role": "user", "content": user}], [])
@@ -120,39 +125,51 @@ def run_agent(refiner_model, coord_model, worker_model, test_queue=None):
             print(f"  VTSBot: {vts_reply}")
             continue
 
-        # 3. DIRECT/SCRIPT EXECUTION WITH SELF-CORRECTION
+        # 3. DIRECT / SCRIPT EXECUTION
         if tag in ["DIRECT", "SCRIPT"]:
+            state.active_agent = "DevOps Expert" if tag == "SCRIPT" else "Dispatcher"
             attempts = 0
             max_attempts = 2
             current_payload = payload
             
             while attempts < max_attempts:
+                # Use DEVOPS_EXPERT for SCRIPT refinement if it fails
                 if tag == "DIRECT":
                     print(f"  [EXEC] {current_payload}")
                     obs = run_shell(current_payload)
                 else:
                     s_name = f"vts_r3_{uuid.uuid4().hex[:6]}.sh"
                     print(f"  [SCRIPT] {s_name}")
+                    # Write script without backticks
                     run_shell(f"cat << 'EOF' > {s_name}\n#!/bin/bash\n{current_payload}\nEOF")
                     obs = run_shell(f"bash {s_name} && rm {s_name}")
                 
-                # Check for success
                 state.last_result = obs
+                state.step += 1
+                trace.append({"tool": tag, "command": current_payload, "result": obs, "agent": state.active_agent})
+                
                 if goal_satisfied(state):
-                    print(f"  Worker> SUCCESS: {obs[:60]}...")
+                    # Use Worker to confirm success briefly
+                    confirm_sys = f"{WORKER_PROMPT}\n\n{sys_context}"
+                    confirm_prompt = f"The user command '{current_payload}' resulted in: {obs}. Confirm status."
+                    confirm_res = chat_api(worker_model, [{"role": "system", "content": confirm_sys}, {"role": "user", "content": confirm_prompt}], [])
+                    print(f"  Worker> {confirm_res['message']['content'].strip()}")
                     break
                 else:
                     attempts += 1
+                    state.retries += 1
                     if attempts < max_attempts:
-                        print(f"  [RETRY] Error detected: {obs[:50]}. Asking Refiner for fix...")
-                        fix_prompt = f"The previous command failed with: {obs}. Provide a corrected version of: {current_payload}"
-                        fix_res = chat_api(refiner_model, [{"role": "system", "content": refiner_system}, {"role": "user", "content": fix_prompt}], [])
-                        # Extract new payload from fix_res
-                        new_tag_match = re.search(r'\[(DIRECT|SCRIPT)\]\s*(.*)', fix_res["message"]["content"], re.DOTALL | re.IGNORECASE)
-                        if new_tag_match:
-                            current_payload = new_tag_match.group(2).strip()
-                        else:
-                            break # Could not get a new payload
+                        print(f"  [RETRY] Error detected: {obs[:50]}. Consulting Systems Engineer...")
+                        # Consult DevOps Expert for the fix
+                        state.active_agent = "DevOps Expert"
+                        fix_sys = f"{DEVOPS_EXPERT_PROMPT}\n\n{sys_context}"
+                        fix_prompt = f"Command failed: {obs}. Original: {current_payload}. Provide a corrected bash command."
+                        fix_res = chat_api(refiner_model, [{"role": "system", "content": fix_sys}, {"role": "user", "content": fix_prompt}], [])
+                        
+                        # Extract raw bash (expert prompt enforces no backticks)
+                        new_payload = fix_res["message"]["content"].strip()
+                        # Clean any leftover backticks
+                        current_payload = new_payload.replace("```bash", "").replace("```", "").strip()
                     else:
                         print(f"  Worker> FAILED: {obs[:100]}")
             continue

@@ -13,9 +13,12 @@ def handle_command(cmd, context):
         return True
 
     if cmd == "/status":
-        print(f"\nModel: {model}")
-        print(f"Messages: {len(messages)}")
-        print(f"Last step: {state.step if state else 'N/A'}")
+        print(f"\n--- VTSBOT R3 STATUS ---")
+        print(f"Worker Model: {model}")
+        print(f"Active Agent: {state.active_agent if state else 'None'}")
+        print(f"Steps Taken:  {state.step if state else 0}")
+        print(f"Retries:      {state.retries if state else 0}")
+        print(f"Memory:       {len(messages)} messages")
         return True
 
     if cmd == "/template":
@@ -55,15 +58,15 @@ def handle_command(cmd, context):
         return True
 
     if cmd == "/trace":
-        print("\n--- TOOL TRACE ---")
+        print("\n--- AGENTIC TOOL TRACE ---")
         for i, t in enumerate(trace):
-            # FIXED: Defensive check for 'args' key to prevent KeyError
+            agent = t.get('agent', 'Unknown')
             tool_name = t.get('tool', 'unknown')
-            tool_args = t.get('args', t.get('command', 'N/A'))
+            command = t.get('command', 'N/A')
             result = t.get('result', 'No output')
             
-            print(f"{i+1}. {tool_name}({tool_args})")
-            print(f"   -> {result[:100]}...") # Truncate for readability
+            print(f"{i+1}. [{agent}] {tool_name}: {command}")
+            print(f"   -> {result[:100]}...")
             
         if not trace:
             print("(empty)")
@@ -74,8 +77,6 @@ def handle_command(cmd, context):
         for i, m in enumerate(messages):
             role = m['role']
             content = m.get('content', '')
-            if m.get('tool_calls'):
-                content = f"[TOOL CALLS: {len(m['tool_calls'])}]"
             print(f"{i:02d} | {role:9} | {content[:80]}")
         return True
 
@@ -100,9 +101,13 @@ def handle_command(cmd, context):
         return True
 
     if cmd == "/reset":
-        messages[:] = messages[:1]
+        messages.clear()
         trace.clear()
-        print("Agent reset.")
+        if state:
+            state.step = 0
+            state.retries = 0
+            state.last_result = None
+        print("Session reset.")
         return True
 
     return False
