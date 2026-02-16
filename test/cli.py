@@ -88,9 +88,9 @@ def handle_command(cmd, context):
             print(f"  Expected (Memory): {state.last_result}")
             print(f"  Actual (Disk):     {actual}")
             if state.last_result.strip() == actual.strip():
-                print("  STATUS: MATCH ?")
+                print("  STATUS: MATCH")
             else:
-                print("  STATUS: MISMATCH ? (Hallucination Detected)")
+                print("  STATUS: MISMATCH (Hallucination Detected)")
         else:
             print("No files written yet.")
         return True
