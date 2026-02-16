@@ -1,8 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-VTSBot R7 - Function Calling Agent
-
-Uses text-based JSON tool calling (proven 82% success with 0.5B models)
+VTSBot R7 - Function Calling Agent with verbose output
 """
 
 import json
@@ -31,34 +29,41 @@ class FunctionCallingAgent:
     Agent using text-based JSON tool calling.
     
     Flow:
-    1. User input ? LLM generates JSON tool call
-    2. Parse JSON and execute tool
-    3. Send result back ? LLM generates natural language response
+    1. User input ? LLM generates JSON tool call OR direct response
+    2. If JSON: Parse, execute tool, send result back
+    3. LLM generates natural language response from tool result
     """
     
     def __init__(
         self,
         model: str = "qwen2.5:3b",
         skills_dirs: List[str] = None,
+        verbose: bool = True,
     ):
         self.model = model
+        self.verbose = verbose
         self.registry = SkillRegistry()
         
         # Load built-in skills
         builtin_dir = Path(__file__).parent / "agent_skills" / "builtin"
         if builtin_dir.exists():
             loaded = self.registry.load_directory(builtin_dir)
-            print(f"  [Skills] Loaded {len(loaded)} skills: {', '.join(loaded)}")
+            self._log(f"  [Skills] Loaded {len(loaded)} skills: {', '.join(loaded)}")
         
         # Load additional skill directories
         if skills_dirs:
             for dir_path in skills_dirs:
                 loaded = self.registry.load_directory(Path(dir_path))
-                print(f"  [Skills] Loaded {len(loaded)} skills from {dir_path}")
+                self._log(f"  [Skills] Loaded {len(loaded)} skills from {dir_path}")
         
         self.state = AgentState(goal="Session Start")
         self.messages: List[Dict] = []
         self.trace: List[Dict] = []
+    
+    def _log(self, msg: str):
+        """Print if verbose mode enabled."""
+        if self.verbose:
+            print(msg)
     
     def _parse_tool_call(self, text: str) -> Optional[Dict]:
         """Parse a tool call from JSON text."""
@@ -86,7 +91,7 @@ class FunctionCallingAgent:
     def _execute_tool(self, name: str, args: Dict) -> Dict:
         """Execute a tool and return result."""
         
-        print(f"  [Tool] {name}({args})")
+        self._log(f"  [Tool Call] {name}({args})")
         
         self.trace.append({
             "tool": name,
@@ -99,6 +104,7 @@ class FunctionCallingAgent:
         # Built-in tools
         if name == "run_shell_command":
             command = args.get("command", "")
+            self._log(f"  [Executing] shell: {command}")
             result = run_shell(command)
             self.state.last_result = result
             return {"output": result, "command": command}
@@ -129,6 +135,7 @@ class FunctionCallingAgent:
         
         elif name == "read_file":
             path = args.get("path", "")
+            self._log(f"  [Reading] file: {path}")
             try:
                 if not os.path.exists(path):
                     return {"error": f"File not found: {path}"}
@@ -141,6 +148,7 @@ class FunctionCallingAgent:
         elif name == "write_file":
             path = args.get("path", "")
             content = args.get("content", "")
+            self._log(f"  [Writing] file: {path} ({len(content)} bytes)")
             try:
                 with open(path, 'w', encoding='utf-8') as f:
                     f.write(content)
@@ -151,6 +159,7 @@ class FunctionCallingAgent:
         
         elif name == "list_directory":
             path = args.get("path", ".")
+            self._log(f"  [Listing] directory: {path}")
             try:
                 files = os.listdir(path)
                 return {"files": files, "path": path, "count": len(files)}
@@ -160,6 +169,7 @@ class FunctionCallingAgent:
         # Skills
         skill = self.registry.get(name)
         if skill:
+            self._log(f"  [Skill] Activating: {skill.name}")
             return self._execute_skill(skill, args)
         
         return {"error": f"Unknown tool: {name}"}
@@ -167,7 +177,6 @@ class FunctionCallingAgent:
     def _execute_skill(self, skill: Skill, args: Dict) -> Dict:
         """Execute a skill."""
         query = args.get("query", "")
-        print(f"  [Skill] {skill.name}")
         
         instructions = skill.get_full_context()
         
@@ -185,14 +194,19 @@ class FunctionCallingAgent:
     def run(self, user_input: str) -> str:
         """Main execution with two-step tool calling."""
         
+        self._log(f"  [Input] {user_input}")
+        
         # Build messages with few-shot examples
         messages = [{"role": "system", "content": TOOL_SYSTEM_PROMPT}]
         messages.extend(TOOL_FEW_SHOT)
         messages.append({"role": "user", "content": user_input})
         
         # Step 1: Get tool call from model
+        self._log("  [LLM] Generating response...")
         response = chat_api(self.model, messages, [])
         content = response.get("message", {}).get("content", "")
+        
+        self._log(f"  [LLM Output] {content[:100]}{'...' if len(content) > 100 else ''}")
         
         # Try to parse as tool call
         tool_call = self._parse_tool_call(content)
@@ -203,14 +217,24 @@ class FunctionCallingAgent:
             args = tool_call["arguments"]
             result = self._execute_tool(name, args)
             
-            # Step 2: Get natural language response
-            messages.append({"role": "assistant", "content": content})
-            messages.append({"role": "user", "content": f"[Tool returns: {json.dumps(result)}]"})
+            self._log(f"  [Tool Result] {json.dumps(result)[:100]}...")
             
-            final_response = chat_api(self.model, messages, [])
-            return final_response.get("message", {}).get("content", str(result))
+            # Step 2: Get natural language response
+            # Use a dedicated summarization prompt
+            summary_messages = [
+                {"role": "system", "content": RESULT_SUMMARY_PROMPT},
+                {"role": "user", "content": f"Tool: {name}\nResult: {json.dumps(result)}\nUser's question: {user_input}\n\nProvide a concise natural language response."}
+            ]
+            
+            self._log("  [LLM] Generating natural response...")
+            final_response = chat_api(self.model, summary_messages, [])
+            final_content = final_response.get("message", {}).get("content", str(result))
+            
+            self._log(f"  [Response] {final_content}")
+            return final_content
         
         # No tool call - return direct response
+        self._log("  [Direct Response] (no tool used)")
         return content
     
     def get_status(self) -> Dict:
@@ -240,8 +264,13 @@ def run_agent(
     model: str = "qwen2.5:3b",
     skills_dirs: List[str] = None,
     test_queue: List[str] = None,
+    verbose: bool = True,
 ):
-    agent = FunctionCallingAgent(model=model, skills_dirs=skills_dirs)
+    agent = FunctionCallingAgent(
+        model=model, 
+        skills_dirs=skills_dirs,
+        verbose=verbose
+    )
     banner(model, len(agent.registry))
     
     if test_queue:
@@ -253,7 +282,9 @@ def run_agent(
                 print(f"\n  [TEST COMPLETE]")
                 break
             user = test_queue.pop(0)
-            print(f"\n[TEST] >>> {user}")
+            print(f"\n{'='*50}")
+            print(f"[TEST] >>> {user}")
+            print(f"{'='*50}")
         else:
             try:
                 user = input("\nVTS> ").strip()
@@ -279,13 +310,13 @@ def run_agent(
                 print("\nCommands: /skills /status /trace /help /exit")
                 continue
             elif user == "/trace":
-                print("\n--- Tool Calls ---")
+                print("\n--- Tool Call Trace ---")
                 for t in agent.trace[-10:]:
                     print(f"  {t}")
                 continue
         
         response = agent.run(user)
-        print(f"\n{response}")
+        print(f"\n>>> {response}")
 
 
 if __name__ == "__main__":
@@ -295,6 +326,7 @@ if __name__ == "__main__":
     parser.add_argument("--model", default="qwen2.5:3b", help="LLM model")
     parser.add_argument("--skills", nargs="*", default=[], help="Skill directories")
     parser.add_argument("--test", action="store_true", help="Run test prompts")
+    parser.add_argument("--quiet", action="store_true", help="Reduce output verbosity")
     
     args = parser.parse_args()
     
@@ -306,4 +338,5 @@ if __name__ == "__main__":
         model=args.model,
         skills_dirs=args.skills if args.skills else None,
         test_queue=test_queue,
+        verbose=not args.quiet,
     )
