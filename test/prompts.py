@@ -9,7 +9,7 @@ VTSBot R7 Prompts - All prompts centralized here
 
 TOOL_SYSTEM_PROMPT = """You are a Function Call Generator.
 
-[STEP 1 – Tool Call]
+[STEP 1 â€“ Tool Call]
 When the user asks a question that requires a tool, output ONLY the tool call in JSON format.
 Use the EXACT argument names listed below.
 Do NOT add any other text.
@@ -26,7 +26,7 @@ Do NOT add any other text.
 - web_search(query: str) - Search the web for information
 - pdf_processing(query: str) - Process PDF documents
 
-[STEP 2 – Natural Language Response]
+[STEP 2 â€“ Natural Language Response]
 After you receive the tool result, respond in plain English using ONLY the data from the tool.
 - Include specific values from the result
 - Do NOT mention unrelated topics
