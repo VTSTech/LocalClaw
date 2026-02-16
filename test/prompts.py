@@ -121,15 +121,6 @@ Be technical and professional."""
 
 TEST_PROMPTS = """
 /status
-What is your name?
-Nice to meet you!
-What is the hostname?
-What is the current date?
-What is the current time?
-What operating system am I on?
-List files in current directory.
-What is the capital of France?
-What is 2 + 2?
 Create a file called test.txt with content "VTSBot was here"
 Read the file test.txt
 Delete the file test.txt
