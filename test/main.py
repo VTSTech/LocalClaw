@@ -2,13 +2,10 @@
 """
 VTSBot - Unified Entry Point
 
-VTSBot R6: Multi-Agent System with Agent Skills Integration
-
-Usage:
-    python main.py                           # Run integrated agent (default)
-    python main.py --legacy                  # Run original R4 agent
-    python main.py --skills ./my_skills      # Load custom skills
-    python main.py --test                    # Run test prompts
+VTSBot R7: Function Calling + Agent Skills
+- Native function calling (no text parsing)
+- SKILL.md skills (agentskills.io spec)
+- JSON mode for structured output
 """
 
 import argparse
@@ -18,44 +15,32 @@ from pathlib import Path
 
 def main():
     parser = argparse.ArgumentParser(
-        description="VTSBot - Multi-Agent Orchestration System with Skills",
+        description="VTSBot - Multi-Agent Orchestration System",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  python main.py                           Run integrated agent (R6)
-  python main.py --legacy                  Run original multi-agent (R4)
+  python main.py                           Run R7 (function calling, recommended)
+  python main.py --model qwen2.5:7b        Use larger model
   python main.py --skills ./my_skills      Load custom skill directories
   python main.py --test                    Run test prompts
-  python main.py --validate ./skill-dir    Validate a skill
+  python main.py --validate ./skill-dir    Validate a skill directory
 
-Architecture (R6):
-  User Input ? Dispatcher ? [SKILL:xxx] ? DevOps ? Auditor ? Worker
-                       ? [CHAT/LOCAL/DIRECT/SCRIPT]
+Architecture (R7 - Function Calling):
+  User Input ? LLM with Tools ? Function Call ? Execute ? Result
+  
+  No text parsing! Uses native function calling for:
+  - Skill selection
+  - Command execution
+  - File operations
+  - Chat responses
         """,
     )
     
     # Model selection
     parser.add_argument(
-        "--refiner",
-        default="qwen2.5:1.5b-instruct-q4_k_m",
-        help="Refiner/Dispatcher model"
-    )
-    parser.add_argument(
-        "--coordinator",
-        default="qwen2.5:1.5b-instruct-q4_k_m",
-        help="Coordinator model (legacy)"
-    )
-    parser.add_argument(
-        "--worker",
-        default="qwen2.5-coder:0.5b-instruct-q4_k_m",
-        help="Worker model"
-    )
-    
-    # Mode selection
-    parser.add_argument(
-        "--legacy",
-        action="store_true",
-        help="Use legacy R4 multi-agent system"
+        "--model",
+        default="qwen2.5:3b",
+        help="LLM model (default: qwen2.5:3b - larger models work better)"
     )
     
     # Skill configuration
@@ -101,22 +86,14 @@ Architecture (R6):
         from prompts import TEST_PROMPTS
         test_queue = [p.strip() for p in TEST_PROMPTS.strip().split('\n') if p.strip()]
     
-    # Run appropriate agent
-    if args.legacy:
-        # Legacy R4 agent
-        print("[VTSBot R4] Running legacy multi-agent system...")
-        from agent import run_agent
-        run_agent(args.refiner, args.coordinator, args.worker, test_queue=test_queue)
-    else:
-        # Integrated R6 agent with skills
-        print("[VTSBot R6] Running integrated multi-agent with skills...")
-        from agent_integrated import run_integrated_agent
-        run_integrated_agent(
-            refiner_model=args.refiner,
-            worker_model=args.worker,
-            skills_dirs=args.skills if args.skills else None,
-            test_queue=test_queue,
-        )
+    # Run R7 function-calling agent
+    print("[VTSBot R7] Running function-calling agent with skills...")
+    from agent_fc import run_agent as run_fc_agent
+    run_fc_agent(
+        model=args.model,
+        skills_dirs=args.skills if args.skills else None,
+        test_queue=test_queue,
+    )
 
 
 if __name__ == "__main__":

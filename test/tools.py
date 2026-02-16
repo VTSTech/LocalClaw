@@ -1,7 +1,5 @@
 import subprocess
 import os
-import shlex
-import shutil
 import re
 
 DANGEROUS = [
@@ -10,7 +8,6 @@ DANGEROUS = [
     "mkfs", "dd if=", "mkfs.", "fdisk",
     "> /dev/sd", "> /dev/hd", "> /dev/nvme",
     ":(){ :|:& };:",  # Fork bomb
-    "wget", "curl",  # Network operations - potentially dangerous
 ]
 
 # Directories to protect
@@ -55,21 +52,6 @@ def run_shell(command: str) -> str:
     command = re.sub(r'^\s*{\s*".*', '', command)  # Remove JSON start
     command = command.strip(' "\'\n\t')
 
-    # Clean hallucinated JSON/formatting
-    if isinstance(command, str):
-        hallucination_cleanup = [
-            ('{"command":', ''),
-            ('{"type":', ''),
-            ('{"name":', ''),
-            ('```bash', ''),
-            ('```', ''),
-            ('"', ''),
-            ("'", '')
-        ]
-        for find, replace in hallucination_cleanup:
-            command = command.replace(find, replace)
-        command = command.strip()
-    
     # Safety check
     if is_dangerous_command(command):
         return "Safety Violation: Command blocked by security policy."
@@ -84,7 +66,7 @@ def run_shell(command: str) -> str:
             capture_output=True,
             text=True,
             timeout=timeout,
-            env={**os.environ, 'LANG': 'C.UTF-8'}  # Consistent locale
+            env={**os.environ, 'LANG': 'C.UTF-8'}
         )
         
         # Combine output, stderr first if present
@@ -98,7 +80,7 @@ def run_shell(command: str) -> str:
         return output if output else "SUCCESS (no output)"
         
     except subprocess.TimeoutExpired:
-        return "Error: Command timed out (possible infinite loop)."
+        return "Error: Command timed out."
     except subprocess.CalledProcessError as e:
         return f"Command failed with exit code {e.returncode}: {e.stderr or e.stdout}"
     except Exception as e:
