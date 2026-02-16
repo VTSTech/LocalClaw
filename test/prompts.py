@@ -121,11 +121,6 @@ Be technical and professional."""
 
 TEST_PROMPTS = """
 /status
-Create a file called test.txt with content "VTSBot was here"
-Read the file test.txt
-Delete the file test.txt
-What is the current date? Write it to timestamp.txt
-Get all system info and write it to sysinfo.txt
 Review the code in agent_fc.py and summarize it
 Search the web for the latest Python version
 List all Python files in the current directory

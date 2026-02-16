@@ -26,10 +26,6 @@ This skill provides web search and content retrieval capabilities.
 
 Search using various methods:
 
-```bash
-# Using curl with search API (if configured)
-curl -s "https://api.search.service/query?q=SEARCH_TERM" | jq .
-
 # Using duckduckgo HTML results
 curl -s "https://html.duckduckgo.com/html/?q=SEARCH_TERM" | grep -oP 'class="result__a"[^>]*>[^<]*'
 ```

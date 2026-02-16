@@ -210,65 +210,45 @@ class FunctionCallingAgent:
 		    """
 		    Execute a skill following the Agent Skills Standard.
 		    
-		    allowed-tools format: "Bash(git:*) Bash(jq:*) Read Write"
-		    - Read ? read_file
-		    - Write ? write_file  
-		    - Bash(cmd:*) ? run_shell_command with that command
+		    Skills are ONBOARDING GUIDES that provide specialized knowledge and workflows.
+		    The skill instructions tell the agent how to approach the task.
+		    The agent uses its normal tools to complete the task.
 		    """
 		    query = args.get("query", "")
 		    
-		    # Load skill instructions (SKILL.md body)
-		    instructions = skill.load_instructions()
+		    # Load full skill instructions
+		    instructions = skill.get_full_context()
 		    
-		    # Parse allowed-tools (space-delimited)
-		    allowed_tools = skill.metadata.allowed_tools
-		    allowed_map = {
-		        "read_file": "Read" in allowed_tools,
-		        "write_file": "Write" in allowed_tools,
-		        "run_shell_command": False,  # Check specific Bash permissions
-		    }
+		    # List available scripts if any
+		    scripts = skill.list_scripts()
+		    scripts_info = ""
+		    if scripts:
+		        scripts_info = f"\n\nAvailable scripts in this skill:\n" + "\n".join(f"- scripts/{s}" for s in scripts)
 		    
-		    # Parse Bash(cmd:*) permissions
-		    allowed_bash_commands = []
-		    for tool in allowed_tools:
-		        if tool.startswith("Bash(") and tool.endswith(":*)"):
-		            # Extract command name: Bash(grep:*) ? grep
-		            cmd = tool[5:-3]  # Remove "Bash(" and ":*)"
-		            allowed_bash_commands.append(cmd)
-		            allowed_map["run_shell_command"] = True
-		    
-		    # Build available tools description
-		    available = []
-		    if allowed_map["read_file"]:
-		        available.append("read_file(path)")
-		    if allowed_map["write_file"]:
-		        available.append("write_file(path, content)")
-		    if allowed_map["run_shell_command"]:
-		        if allowed_bash_commands:
-		            available.append(f"run_shell_command(command) - allowed: {', '.join(allowed_bash_commands)}")
-		        else:
-		            available.append("run_shell_command(command)")
-		    
-		    tools_desc = "\n".join(f"- {t}" for t in available) if available else "No tools available"
-		    
-		    # Build prompt with skill instructions
+		    # Build the skill prompt - agent uses its normal tools
 		    skill_prompt = f"""# Skill: {skill.name}
 
-		{instructions}
+		{instructions}{scripts_info}
 
 		---
 
-		# Your Available Tools:
-		{tools_desc}
+		# Your Task
 
-		# To use a tool, output JSON:
+		User request: {query}
+
+		Follow the skill instructions above. Use your available tools as needed:
+		- read_file(path) - Read file contents
+		- write_file(path, content) - Write to a file
+		- list_directory(path) - List files
+		- run_shell_command(command) - Run shell commands
+		- delete_file(path) - Delete a file
+
+		If you need to use a tool, output JSON:
 		{{"name": "tool_name", "arguments": {{"arg": "value"}}}}
 
-		# User Request:
-		{query}
+		Otherwise, answer directly based on the skill instructions."""
 
-		Follow the skill instructions above. Use tools if needed."""
-
+		    # First LLM call with skill context
 		    response = chat_api(
 		        self.model,
 		        [{"role": "user", "content": skill_prompt}],
@@ -277,45 +257,41 @@ class FunctionCallingAgent:
 		    
 		    content = response.get("message", {}).get("content", "")
 		    
-		    # Check for tool call
+		    # Check if skill wants to call a tool
 		    tool_call = self._parse_tool_call(content)
-		    if tool_call:
+		    
+		    # Tool call loop (may need multiple tools)
+		    max_loops = 3
+		    for _ in range(max_loops):
+		        if not tool_call:
+		            # No tool call - we're done
+		            return {"skill": skill.name, "response": content}
+		        
+		        # Execute the tool
 		        tool_name = tool_call["name"]
 		        tool_args = tool_call["arguments"]
 		        
-		        # Validate tool is allowed
-		        if tool_name == "read_file" and not allowed_map["read_file"]:
-		            return {"skill": skill.name, "response": "Read not allowed for this skill."}
-		        if tool_name == "write_file" and not allowed_map["write_file"]:
-		            return {"skill": skill.name, "response": "Write not allowed for this skill."}
-		        if tool_name == "run_shell_command":
-		            if not allowed_map["run_shell_command"]:
-		                return {"skill": skill.name, "response": "Shell commands not allowed for this skill."}
-		            
-		            # Check if specific command is allowed
-		            command = tool_args.get("command", "").split()[0] if tool_args.get("command") else ""
-		            if allowed_bash_commands and command not in allowed_bash_commands:
-		                return {"skill": skill.name, "response": f"Command '{command}' not in allowed tools."}
-		        
-		        # Execute the tool
 		        self._log(f"    [Skill ? Tool] {tool_name}")
 		        tool_result = self._execute_single_tool(tool_name, tool_args)
 		        
-		        # Get final response
-		        final_prompt = f"""Tool result:
+		        # Get next action
+		        next_prompt = f"""Tool result:
 		{json.dumps(tool_result, indent=2)}
 
-		Based on this result and the skill instructions, answer the user: {query}"""
+		Based on this result and the skill instructions, continue with: {query}
 
-		        final_response = chat_api(
+		Use another tool if needed (output JSON), or provide your final answer."""
+
+		        next_response = chat_api(
 		            self.model,
-		            [{"role": "user", "content": final_prompt}],
+		            [{"role": "user", "content": next_prompt}],
 		            []
 		        )
 		        
-		        return {"skill": skill.name, "response": final_response.get("message", {}).get("content", "")}
+		        content = next_response.get("message", {}).get("content", "")
+		        tool_call = self._parse_tool_call(content)
 		    
-		    # No tool call - return direct response
+		    # Max loops reached
 		    return {"skill": skill.name, "response": content}
     
     def _execute_tool(self, name: str, args: Dict) -> Dict:
