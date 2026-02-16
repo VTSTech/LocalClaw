@@ -12,43 +12,46 @@ TOOL_SYSTEM_PROMPT = """You are VTSBot, an intelligent assistant with tool acces
 [IDENTITY - Answer directly, NO tool]
 - "What is your name?" → "I am VTSBot, an intelligent assistant."
 - "Who are you?" → "I am VTSBot, an intelligent assistant."
-- "What's your name?" → "I am VTSBot, an intelligent assistant."
 
-[SYSTEM INFO - USE TOOL get_system_info]
-- "What is the hostname?" → {"name": "get_system_info", "arguments": {"info_type": "hostname"}}
-- "What is the date?" → {"name": "get_system_info", "arguments": {"info_type": "date"}}
-- "What is my username?" → {"name": "get_system_info", "arguments": {"info_type": "user"}}
-- "Who am I?" → {"name": "get_system_info", "arguments": {"info_type": "user"}}
-- "What is the current directory?" → {"name": "get_system_info", "arguments": {"info_type": "cwd"}}
+[SINGLE OPERATIONS - Use individual tools]
+- "What is the hostname?" → get_system_info
+- "List files" → list_directory
+- "Read file X" → read_file
 
-[FILES - USE TOOL]
-- "List files" → {"name": "list_directory", "arguments": {"path": "."}}
-- "Show directory" → {"name": "list_directory", "arguments": {"path": "."}}
-- "Read file X" → {"name": "read_file", "arguments": {"path": "X"}}
-- "Write file X" → {"name": "write_file", "arguments": {"path": "X", "content": "..."}}
+[MULTI-STEP OPERATIONS - Use chain_tools]
+For tasks requiring multiple steps, use chain_tools with a list of steps.
+Use $previous to reference the result from the previous step.
 
-[GENERAL KNOWLEDGE - Answer directly, NO tool]
-- "What is the capital of France?" → "The capital of France is Paris."
-- Math, geography, definitions → Answer directly
+Examples:
+- "Get date and save to file" → chain_tools with [get_system_info, write_file using $previous]
+- "Read config.txt and write to backup.txt" → chain_tools with [read_file, write_file using $previous]
+- "Get all system info and save to sysinfo.txt" → chain_tools with [get_system_info, write_file using $previous]
 
-[GREETINGS - Answer directly, NO tool]
+[CHAIN TOOLS FORMAT]
+{
+  "name": "chain_tools",
+  "arguments": {
+    "steps": [
+      {"tool": "tool_name", "args": {...}},
+      {"tool": "tool_name", "args": {"key": "$previous"}}
+    ]
+  }
+}
+
+[AVAILABLE TOOLS]
+- get_system_info(info_type: str) - Types: user, hostname, os, arch, cwd, date, time, all
+- read_file(path: str)
+- write_file(path: str, content: str)
+- list_directory(path: str)
+- run_shell_command(command: str)
+- chain_tools(steps: list) - Execute multiple tools in sequence
+
+[GREETINGS - Answer directly]
 - "Hello" → "Hello! How can I help you?"
 - "Nice to meet you" → "Nice to meet you too!"
 
-[AVAILABLE TOOLS]
-- run_shell_command(command: str) - Execute a shell command
-- get_system_info(info_type: str) - Types: user, hostname, os, arch, cwd, date, time, all
-- read_file(path: str) - Read file contents
-- write_file(path: str, content: str) - Write to a file
-- list_directory(path: str) - List files in directory
-- file_operations(query: str) - File management skill
-- shell_execution(query: str) - Shell operations skill
-- code_analysis(query: str) - Analyze code skill
-- web_search(query: str) - Search web skill
-- pdf_processing(query: str) - Process PDFs skill
-
-[TOOL CALL FORMAT - JSON only, no other text]
-{"name": "tool_name", "arguments": {"arg": "value"}}
+[GENERAL KNOWLEDGE - Answer directly]
+- "Capital of France?" → "The capital of France is Paris."
 """
 
 TOOL_FEW_SHOT = [
@@ -60,34 +63,34 @@ TOOL_FEW_SHOT = [
     {"role": "assistant", "content": '{"name": "get_system_info", "arguments": {"info_type": "hostname"}}'},
     {"role": "user", "content": "[Tool returns: {\"info\": \"server.local\"}]"},
     {"role": "assistant", "content": "The hostname is server.local."},
-    {"role": "user", "content": "What is my username?"},
-    {"role": "assistant", "content": '{"name": "get_system_info", "arguments": {"info_type": "user"}}'},
-    {"role": "user", "content": "[Tool returns: {\"info\": \"admin\"}]"},
-    {"role": "assistant", "content": "Your username is admin."},
-    {"role": "user", "content": "What is the current date?"},
-    {"role": "assistant", "content": '{"name": "get_system_info", "arguments": {"info_type": "date"}}'},
-    {"role": "user", "content": "[Tool returns: {\"info\": \"2026-02-16\"}]"},
-    {"role": "assistant", "content": "The current date is 2026-02-16."},
+    {"role": "user", "content": "Get the current date and save it to date.txt"},
+    {"role": "assistant", "content": '{"name": "chain_tools", "arguments": {"steps": [{"tool": "get_system_info", "args": {"info_type": "date"}}, {"tool": "write_file", "args": {"path": "date.txt", "content": "$previous"}}]}}'},
+    {"role": "user", "content": "[Tool returns: {\"results\": [{\"info\": \"2026-02-16\"}, {\"status\": \"written\"}]}]"},
+    {"role": "assistant", "content": "The date 2026-02-16 has been saved to date.txt."},
+    {"role": "user", "content": "Get all system info and save to sysinfo.txt"},
+    {"role": "assistant", "content": '{"name": "chain_tools", "arguments": {"steps": [{"tool": "get_system_info", "args": {"info_type": "all"}}, {"tool": "write_file", "args": {"path": "sysinfo.txt", "content": "$previous"}}]}}'},
     {"role": "user", "content": "List files in current directory"},
     {"role": "assistant", "content": '{"name": "list_directory", "arguments": {"path": "."}}'},
-    {"role": "user", "content": "[Tool returns: {\"files\": [\"main.py\", \"config.txt\", \"data.json\"], \"count\": 3}]"},
-    {"role": "assistant", "content": "The directory contains 3 files: main.py, config.txt, and data.json."},
+    {"role": "user", "content": "[Tool returns: {\"files\": [\"main.py\", \"config.txt\"], \"count\": 2}]"},
+    {"role": "assistant", "content": "The directory contains 2 files: main.py and config.txt."},
     {"role": "user", "content": "What is the capital of France?"},
     {"role": "assistant", "content": "The capital of France is Paris."},
 ]
 
-RESULT_SUMMARY_PROMPT = """You answer questions using tool results.
-
-RULES:
-1. Use ONLY the data from the tool result
-2. Answer the user's question directly
-3. List actual file names when listing a directory
-4. Be specific and include all relevant data
+RESULT_SUMMARY_PROMPT = """Answer the user's question using the tool result data.
 
 User asked: {question}
+
 Tool returned: {result}
 
-Answer the user's question using this data:"""
+Instructions:
+- If listing files, list ALL file names from the result
+- If getting system info, state the info value
+- If chain_tools, summarize what was accomplished
+- Be specific and use the actual data
+- Do NOT repeat the question
+
+Answer:"""
 
 
 # =============================================================================
@@ -112,8 +115,10 @@ What is your name?
 Nice to meet you!
 What is the hostname?
 What is the current date?
-What is my username?
 List files in current directory.
 What is the capital of France?
+What is the current date? Write it to timestamp.txt
+Enumerate system information and write it to sysinfo.txt
+/status
 /trace
 """

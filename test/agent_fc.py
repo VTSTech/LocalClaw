@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-VTSBot R7 - Function Calling Agent with verbose output
+VTSBot R7 - Function Calling Agent with chain_tools support
 """
 
 import json
@@ -25,14 +25,7 @@ from agent_skills.core.skill import SkillRegistry, Skill
 
 
 class FunctionCallingAgent:
-    """
-    Agent using text-based JSON tool calling.
-    
-    Flow:
-    1. User input ? LLM generates JSON tool call OR direct response
-    2. If JSON: Parse, execute tool, send result back
-    3. LLM generates natural language response from tool result
-    """
+    """Agent using text-based JSON tool calling with chain_tools support."""
     
     def __init__(
         self,
@@ -44,13 +37,11 @@ class FunctionCallingAgent:
         self.verbose = verbose
         self.registry = SkillRegistry()
         
-        # Load built-in skills
         builtin_dir = Path(__file__).parent / "agent_skills" / "builtin"
         if builtin_dir.exists():
             loaded = self.registry.load_directory(builtin_dir)
             self._log(f"  [Skills] Loaded {len(loaded)} skills: {', '.join(loaded)}")
         
-        # Load additional skill directories
         if skills_dirs:
             for dir_path in skills_dirs:
                 loaded = self.registry.load_directory(Path(dir_path))
@@ -59,15 +50,14 @@ class FunctionCallingAgent:
         self.state = AgentState(goal="Session Start")
         self.messages: List[Dict] = []
         self.trace: List[Dict] = []
+        self._last_result = None
     
     def _log(self, msg: str):
-        """Print if verbose mode enabled."""
         if self.verbose:
             print(msg)
     
     def _parse_tool_call(self, text: str) -> Optional[Dict]:
         """Parse a tool call from JSON text."""
-        # Try to find JSON in the response
         json_match = re.search(r'\{[^{}]*"name"[^{}]*"arguments"[^{}]*\}', text, re.DOTALL)
         
         if json_match:
@@ -78,7 +68,6 @@ class FunctionCallingAgent:
             except json.JSONDecodeError:
                 pass
         
-        # Try parsing entire text as JSON
         try:
             parsed = json.loads(text)
             if "name" in parsed and "arguments" in parsed:
@@ -88,10 +77,18 @@ class FunctionCallingAgent:
         
         return None
     
-    def _execute_tool(self, name: str, args: Dict) -> Dict:
-        """Execute a tool and return result."""
+    def _execute_single_tool(self, name: str, args: Dict) -> Dict:
+        """Execute a single tool and return result."""
         
-        self._log(f"  [Tool Call] {name}({args})")
+        # Handle $previous reference
+        if self._last_result is not None:
+            for key, value in args.items():
+                if isinstance(value, str) and "$previous" in value:
+                    # Replace $previous with actual result
+                    if value == "$previous":
+                        args[key] = json.dumps(self._last_result, indent=2)
+                    else:
+                        args[key] = value.replace("$previous", json.dumps(self._last_result))
         
         self.trace.append({
             "tool": name,
@@ -101,10 +98,9 @@ class FunctionCallingAgent:
         
         self.state.step += 1
         
-        # Built-in tools
         if name == "run_shell_command":
             command = args.get("command", "")
-            self._log(f"  [Executing] shell: {command}")
+            self._log(f"    [Shell] {command}")
             result = run_shell(command)
             self.state.last_result = result
             return {"output": result, "command": command}
@@ -135,7 +131,6 @@ class FunctionCallingAgent:
         
         elif name == "read_file":
             path = args.get("path", "")
-            self._log(f"  [Reading] file: {path}")
             try:
                 if not os.path.exists(path):
                     return {"error": f"File not found: {path}"}
@@ -148,7 +143,7 @@ class FunctionCallingAgent:
         elif name == "write_file":
             path = args.get("path", "")
             content = args.get("content", "")
-            self._log(f"  [Writing] file: {path} ({len(content)} bytes)")
+            self._log(f"    [Write] {path} ({len(content)} bytes)")
             try:
                 with open(path, 'w', encoding='utf-8') as f:
                     f.write(content)
@@ -159,7 +154,6 @@ class FunctionCallingAgent:
         
         elif name == "list_directory":
             path = args.get("path", ".")
-            self._log(f"  [Listing] directory: {path}")
             try:
                 files = os.listdir(path)
                 return {"files": files, "path": path, "count": len(files)}
@@ -169,15 +163,50 @@ class FunctionCallingAgent:
         # Skills
         skill = self.registry.get(name)
         if skill:
-            self._log(f"  [Skill] Activating: {skill.name}")
             return self._execute_skill(skill, args)
         
         return {"error": f"Unknown tool: {name}"}
     
+    def _execute_chain_tools(self, steps: List[Dict]) -> Dict:
+        """Execute multiple tools in sequence."""
+        
+        self._log(f"  [Chain] Executing {len(steps)} steps...")
+        
+        results = []
+        self._last_result = None
+        
+        for i, step in enumerate(steps):
+            tool_name = step.get("tool")
+            tool_args = step.get("args", {})
+            
+            self._log(f"    [Step {i+1}/{len(steps)}] {tool_name}")
+            
+            result = self._execute_single_tool(tool_name, tool_args)
+            results.append(result)
+            self._last_result = result
+            
+            self._log(f"    [Result] {json.dumps(result)[:100]}...")
+            
+            # Stop on error
+            if "error" in result:
+                return {"results": results, "error": f"Step {i+1} failed: {result['error']}"}
+        
+        return {"results": results, "success": True}
+    
+    def _execute_tool(self, name: str, args: Dict) -> Dict:
+        """Execute a tool (handles chain_tools specially)."""
+        
+        self._log(f"  [Tool] {name}({json.dumps(args)[:100]}...)")
+        
+        if name == "chain_tools":
+            steps = args.get("steps", [])
+            return self._execute_chain_tools(steps)
+        
+        return self._execute_single_tool(name, args)
+    
     def _execute_skill(self, skill: Skill, args: Dict) -> Dict:
         """Execute a skill."""
         query = args.get("query", "")
-        
         instructions = skill.get_full_context()
         
         response = chat_api(
@@ -192,48 +221,50 @@ class FunctionCallingAgent:
         return {"skill": skill.name, "response": response.get("message", {}).get("content", "")}
     
     def run(self, user_input: str) -> str:
-        """Main execution with two-step tool calling."""
+        """Main execution with tool calling."""
         
         self._log(f"  [Input] {user_input}")
         
-        # Build messages with few-shot examples
+        # Build messages
         messages = [{"role": "system", "content": TOOL_SYSTEM_PROMPT}]
         messages.extend(TOOL_FEW_SHOT)
         messages.append({"role": "user", "content": user_input})
         
-        # Step 1: Get tool call from model
+        # Get response
         self._log("  [LLM] Generating response...")
         response = chat_api(self.model, messages, [])
         content = response.get("message", {}).get("content", "")
         
-        self._log(f"  [LLM Output] {content[:100]}{'...' if len(content) > 100 else ''}")
+        self._log(f"  [LLM Output] {content[:200]}{'...' if len(content) > 200 else ''}")
         
-        # Try to parse as tool call
+        # Parse tool call
         tool_call = self._parse_tool_call(content)
         
         if tool_call:
-            # Execute tool
             name = tool_call["name"]
             args = tool_call["arguments"]
             result = self._execute_tool(name, args)
             
-            self._log(f"  [Tool Result] {json.dumps(result)[:100]}...")
+            self._log(f"  [Tool Result] {json.dumps(result)[:200]}")
             
-            # Step 2: Get natural language response
-            # Use a dedicated summarization prompt
-            summary_messages = [
-                {"role": "system", "content": RESULT_SUMMARY_PROMPT},
-                {"role": "user", "content": f"Tool: {name}\nResult: {json.dumps(result)}\nUser's question: {user_input}\n\nProvide a concise natural language response."}
-            ]
+            # Generate natural response
+            summary_prompt = RESULT_SUMMARY_PROMPT.format(
+                question=user_input,
+                result=json.dumps(result)
+            )
             
             self._log("  [LLM] Generating natural response...")
-            final_response = chat_api(self.model, summary_messages, [])
+            final_response = chat_api(
+                self.model,
+                [{"role": "user", "content": summary_prompt}],
+                []
+            )
             final_content = final_response.get("message", {}).get("content", str(result))
             
             self._log(f"  [Response] {final_content}")
             return final_content
         
-        # No tool call - return direct response
+        # No tool call
         self._log("  [Direct Response] (no tool used)")
         return content
     
