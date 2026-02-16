@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-VTSBot R7 - Function Calling Agent with chain_tools support
+VTSBot R7 - Function Calling Agent with chain_tools and delete_file support
 """
 
 import json
@@ -58,19 +58,21 @@ class FunctionCallingAgent:
     
     def _parse_tool_call(self, text: str) -> Optional[Dict]:
         """Parse a tool call from JSON text."""
+        # Try to find JSON in the response
         json_match = re.search(r'\{[^{}]*"name"[^{}]*"arguments"[^{}]*\}', text, re.DOTALL)
         
         if json_match:
             try:
                 parsed = json.loads(json_match.group())
-                if "name" in parsed and "arguments" in parsed:
+                if isinstance(parsed, dict) and "name" in parsed and "arguments" in parsed:
                     return parsed
             except json.JSONDecodeError:
                 pass
         
+        # Try parsing entire text as JSON
         try:
             parsed = json.loads(text)
-            if "name" in parsed and "arguments" in parsed:
+            if isinstance(parsed, dict) and "name" in parsed and "arguments" in parsed:
                 return parsed
         except json.JSONDecodeError:
             pass
@@ -84,7 +86,6 @@ class FunctionCallingAgent:
         if self._last_result is not None:
             for key, value in args.items():
                 if isinstance(value, str) and "$previous" in value:
-                    # Replace $previous with actual result
                     if value == "$previous":
                         args[key] = json.dumps(self._last_result, indent=2)
                     else:
@@ -131,12 +132,13 @@ class FunctionCallingAgent:
         
         elif name == "read_file":
             path = args.get("path", "")
+            self._log(f"    [Read] {path}")
             try:
                 if not os.path.exists(path):
                     return {"error": f"File not found: {path}"}
                 with open(path, 'r', encoding='utf-8') as f:
                     content = f.read()
-                return {"content": content[:5000], "path": path}
+                return {"content": content[:5000], "path": path, "size": len(content)}
             except Exception as e:
                 return {"error": str(e)}
         
@@ -152,17 +154,37 @@ class FunctionCallingAgent:
             except Exception as e:
                 return {"error": str(e)}
         
+        elif name == "delete_file":
+            path = args.get("path", "")
+            self._log(f"    [Delete] {path}")
+            try:
+                if not os.path.exists(path):
+                    return {"status": "not_found", "path": path}
+                os.remove(path)
+                return {"status": "deleted", "path": path}
+            except Exception as e:
+                return {"error": str(e)}
+        
         elif name == "list_directory":
             path = args.get("path", ".")
+            self._log(f"    [List] {path}")
             try:
                 files = os.listdir(path)
-                return {"files": files, "path": path, "count": len(files)}
+                file_list = []
+                for f in files:
+                    full_path = os.path.join(path, f)
+                    file_list.append({
+                        "name": f,
+                        "type": "directory" if os.path.isdir(full_path) else "file"
+                    })
+                return {"files": file_list, "path": path, "count": len(file_list)}
             except Exception as e:
                 return {"error": str(e)}
         
         # Skills
         skill = self.registry.get(name)
         if skill:
+            self._log(f"    [Skill] {skill.name}")
             return self._execute_skill(skill, args)
         
         return {"error": f"Unknown tool: {name}"}
@@ -187,7 +209,6 @@ class FunctionCallingAgent:
             
             self._log(f"    [Result] {json.dumps(result)[:100]}...")
             
-            # Stop on error
             if "error" in result:
                 return {"results": results, "error": f"Step {i+1} failed: {result['error']}"}
         
