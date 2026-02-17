@@ -37,15 +37,36 @@ class FunctionCallingAgent:
         self.verbose = verbose
         self.registry = SkillRegistry()
         
+        self._log(f"  [Skills] Initializing skill registry...")
+        
         builtin_dir = Path(__file__).parent / "agent_skills" / "builtin"
         if builtin_dir.exists():
+            self._log(f"  [Skills] Loading builtin skills from: {builtin_dir}")
             loaded = self.registry.load_directory(builtin_dir)
-            self._log(f"  [Skills] Loaded {len(loaded)} skills: {', '.join(loaded)}")
+            self._log(f"  [Skills] Loaded {len(loaded)} builtin skills: {', '.join(loaded)}")
+            # Show details for each loaded skill
+            for skill_name in loaded:
+                skill = self.registry.get(skill_name)
+                if skill:
+                    desc_preview = skill.description[:80] + "..." if len(skill.description) > 80 else skill.description
+                    allowed = skill.metadata.allowed_tools if hasattr(skill, 'metadata') else []
+                    self._log(f"    - {skill_name}: {desc_preview}")
+                    if allowed:
+                        self._log(f"      allowed-tools: {allowed}")
         
         if skills_dirs:
             for dir_path in skills_dirs:
+                self._log(f"  [Skills] Loading custom skills from: {dir_path}")
                 loaded = self.registry.load_directory(Path(dir_path))
-                self._log(f"  [Skills] Loaded {len(loaded)} skills from {dir_path}")
+                self._log(f"  [Skills] Loaded {len(loaded)} custom skills: {', '.join(loaded)}")
+        
+        # Check for load errors
+        if hasattr(self.registry, '_load_errors') and self.registry._load_errors:
+            self._log(f"  [Skills] {len(self.registry._load_errors)} errors during loading:")
+            for err in self.registry._load_errors:
+                self._log(f"    - {err['path']}: {err['error']}")
+        
+        self._log(f"  [Skills] Total skills available: {len(self.registry)}")
         
         self.state = AgentState(goal="Session Start")
         self.messages: List[Dict] = []
@@ -206,108 +227,202 @@ class FunctionCallingAgent:
         
         return {"results": results, "success": True}
     
+    def _map_allowed_tools(self, allowed_tools: List[str]) -> Dict[str, str]:
+        """
+        Map Agent Skills Standard tools to internal tool names.
+        
+        Agent Skills Standard format:
+        - Read ? read_file
+        - Write ? write_file
+        - Bash(cmd:*) ? run_shell_command
+        """
+        tool_map = {
+            "Read": "read_file",
+            "Write": "write_file",
+            "Bash": "run_shell_command",
+        }
+        
+        mapped = {}
+        for tool in allowed_tools:
+            # Handle Bash(cmd:*) format
+            if tool.startswith("Bash("):
+                # Extract the command pattern, but we map to run_shell_command
+                mapped[tool] = "run_shell_command"
+            elif tool in tool_map:
+                mapped[tool] = tool_map[tool]
+            else:
+                # Unknown tool, keep as-is
+                mapped[tool] = tool.lower().replace("-", "_")
+        
+        return mapped
+    
     def _execute_skill(self, skill: Skill, args: Dict) -> Dict:
-		    """
-		    Execute a skill following the Agent Skills Standard.
-		    
-		    Skills are ONBOARDING GUIDES that provide specialized knowledge and workflows.
-		    The skill instructions tell the agent how to approach the task.
-		    The agent uses its normal tools to complete the task.
-		    """
-		    query = args.get("query", "")
-		    
-		    # Load full skill instructions
-		    instructions = skill.get_full_context()
-		    
-		    # List available scripts if any
-		    scripts = skill.list_scripts()
-		    scripts_info = ""
-		    if scripts:
-		        scripts_info = f"\n\nAvailable scripts in this skill:\n" + "\n".join(f"- scripts/{s}" for s in scripts)
-		    
-		    # Build the skill prompt - agent uses its normal tools
-		    skill_prompt = f"""# Skill: {skill.name}
+        """
+        Execute a skill following the Agent Skills Standard.
+        
+        Skills are ONBOARDING GUIDES that provide specialized knowledge and workflows.
+        The skill instructions tell the agent how to approach the task.
+        The agent uses its normal tools to complete the task.
+        """
+        query = args.get("query", "")
+        
+        self._log(f"    [Skill] ========== EXECUTING SKILL: {skill.name} ==========")
+        self._log(f"    [Skill] Query: {query[:100]}{'...' if len(query) > 100 else ''}")
+        
+        # Load skill instructions
+        self._log(f"    [Skill] Loading instructions...")
+        instructions = skill.load_instructions() if hasattr(skill, 'load_instructions') else ""
+        if not instructions:
+            instructions = skill.get_full_context() if hasattr(skill, 'get_full_context') else str(skill.instructions)
+        self._log(f"    [Skill] Instructions loaded: {len(instructions)} chars")
+        
+        # Get allowed tools from skill metadata
+        allowed_tools = []
+        if hasattr(skill, 'metadata') and hasattr(skill.metadata, 'allowed_tools'):
+            allowed_tools = skill.metadata.allowed_tools
+        self._log(f"    [Skill] Allowed tools from metadata: {allowed_tools}")
+        
+        # Map to internal tools
+        tool_mapping = self._map_allowed_tools(allowed_tools)
+        self._log(f"    [Skill] Tool mapping: {tool_mapping}")
+        
+        # Build available tools description
+        if tool_mapping:
+            tools_desc = "Allowed tools for this skill:\n"
+            for external, internal in tool_mapping.items():
+                if internal == "read_file":
+                    tools_desc += f'- {external}: Use {{"name": "read_file", "arguments": {{"path": "file_path"}}}}\n'
+                elif internal == "write_file":
+                    tools_desc += f'- {external}: Use {{"name": "write_file", "arguments": {{"path": "file_path", "content": "content"}}}}\n'
+                elif internal == "run_shell_command":
+                    tools_desc += f'- {external}: Use {{"name": "run_shell_command", "arguments": {{"command": "shell_command"}}}}\n'
+        else:
+            tools_desc = """Available tools:
+- read_file: {"name": "read_file", "arguments": {"path": "file_path"}}
+- write_file: {"name": "write_file", "arguments": {"path": "file_path", "content": "content"}}
+- run_shell_command: {"name": "run_shell_command", "arguments": {"command": "shell_command"}}
+- list_directory: {"name": "list_directory", "arguments": {"path": "directory"}}
+- delete_file: {"name": "delete_file", "arguments": {"path": "file_path"}}"""
+        
+        # Check for scripts (with safety check)
+        scripts = []
+        scripts_info = ""
+        if hasattr(skill, 'list_scripts'):
+            try:
+                scripts = skill.list_scripts()
+                if scripts:
+                    scripts_info = f"\n\nAvailable scripts:\n" + "\n".join(f"- scripts/{s}" for s in scripts)
+                    self._log(f"    [Skill] Scripts available: {scripts}")
+            except Exception as e:
+                self._log(f"    [Skill] Error listing scripts: {e}")
+        
+        # Build the skill prompt - clear and simple for small models
+        skill_prompt = f"""# Skill: {skill.name}
 
-		{instructions}{scripts_info}
+{instructions}{scripts_info}
 
-		---
+---
 
-		# Your Task
+# Task
+{query}
 
-		User request: {query}
+# How to Respond
 
-		Follow the skill instructions above. Use your available tools as needed:
-		- read_file(path) - Read file contents
-		- write_file(path, content) - Write to a file
-		- list_directory(path) - List files
-		- run_shell_command(command) - Run shell commands
-		- delete_file(path) - Delete a file
+1. If you can answer directly from the skill instructions, just answer.
 
-		If you need to use a tool, output JSON:
-		{{"name": "tool_name", "arguments": {{"arg": "value"}}}}
+2. If you need to use a tool, output ONLY JSON (no markdown, no explanation):
+{{"name": "tool_name", "arguments": {{"arg": "value"}}}}
 
-		Otherwise, answer directly based on the skill instructions."""
+{tools_desc}
 
-		    # First LLM call with skill context
-		    response = chat_api(
-		        self.model,
-		        [{"role": "user", "content": skill_prompt}],
-		        []
-		    )
-		    
-		    content = response.get("message", {}).get("content", "")
-		    
-		    # Check if skill wants to call a tool
-		    tool_call = self._parse_tool_call(content)
-		    
-		    # Tool call loop (may need multiple tools)
-		    max_loops = 3
-		    for _ in range(max_loops):
-		        if not tool_call:
-		            # No tool call - we're done
-		            return {"skill": skill.name, "response": content}
-		        
-		        # Execute the tool
-		        tool_name = tool_call["name"]
-		        tool_args = tool_call["arguments"]
-		        
-		        self._log(f"    [Skill ? Tool] {tool_name}")
-		        tool_result = self._execute_single_tool(tool_name, tool_args)
-		        
-		        # Get next action
-		        next_prompt = f"""Tool result:
-		{json.dumps(tool_result, indent=2)}
+Remember: JSON only, no code blocks, no explanation before or after."""
 
-		Based on this result and the skill instructions, continue with: {query}
+        # First LLM call with skill context
+        self._log(f"    [Skill] Sending prompt to LLM (prompt size: {len(skill_prompt)} chars)...")
+        response = chat_api(
+            self.model,
+            [{"role": "user", "content": skill_prompt}],
+            []
+        )
+        
+        content = response.get("message", {}).get("content", "")
+        self._log(f"    [Skill] LLM response ({len(content)} chars): {content[:300]}{'...' if len(content) > 300 else ''}")
+        
+        # Check if skill wants to call a tool
+        tool_call = self._parse_tool_call(content)
+        
+        if tool_call:
+            self._log(f"    [Skill] Parsed tool call: {tool_call}")
+        else:
+            self._log(f"    [Skill] No tool call found in response, returning direct answer")
+        
+        # Tool call loop (may need multiple tools)
+        max_loops = 3
+        for loop_idx in range(max_loops):
+            if not tool_call:
+                # No tool call - we're done, return the response
+                self._log(f"    [Skill] ========== SKILL COMPLETE (no more tool calls) ==========")
+                return {"skill": skill.name, "response": content}
+            
+            # Execute the tool
+            tool_name = tool_call["name"]
+            tool_args = tool_call["arguments"]
+            
+            self._log(f"    [Skill] Loop {loop_idx + 1}/{max_loops}: Executing tool '{tool_name}' with args: {tool_args}")
+            tool_result = self._execute_single_tool(tool_name, tool_args)
+            self._log(f"    [Skill] Tool result: {json.dumps(tool_result)[:200]}...")
+            
+            # Get next action
+            next_prompt = f"""Tool result:
+{json.dumps(tool_result, indent=2)[:1000]}
 
-		Use another tool if needed (output JSON), or provide your final answer."""
+Task: {query}
 
-		        next_response = chat_api(
-		            self.model,
-		            [{"role": "user", "content": next_prompt}],
-		            []
-		        )
-		        
-		        content = next_response.get("message", {}).get("content", "")
-		        tool_call = self._parse_tool_call(content)
-		    
-		    # Max loops reached
-		    return {"skill": skill.name, "response": content}
+Continue with the skill instructions. If you need another tool, output JSON.
+If done, provide your final answer."""
+
+            self._log(f"    [Skill] Sending tool result back to LLM...")
+            next_response = chat_api(
+                self.model,
+                [{"role": "user", "content": next_prompt}],
+                []
+            )
+            
+            content = next_response.get("message", {}).get("content", "")
+            self._log(f"    [Skill] LLM follow-up response: {content[:200]}...")
+            tool_call = self._parse_tool_call(content)
+            
+            if tool_call:
+                self._log(f"    [Skill] Parsed next tool call: {tool_call}")
+        
+        # Max loops reached
+        self._log(f"    [Skill] ========== SKILL COMPLETE (max loops reached) ==========")
+        return {"skill": skill.name, "response": content}
     
     def _execute_tool(self, name: str, args: Dict) -> Dict:
         """Execute a tool (handles chain_tools specially)."""
         
-        self._log(f"  [Tool] {name}({json.dumps(args)[:512]}...)")
+        self._log(f"  [Tool] Executing: {name}")
+        self._log(f"  [Tool] Arguments: {json.dumps(args)[:512]}{'...' if len(json.dumps(args)) > 512 else ''}")
         
         if name == "chain_tools":
             steps = args.get("steps", [])
+            self._log(f"  [Tool] Chain tools detected with {len(steps)} steps")
             return self._execute_chain_tools(steps)
         
         # Check if it's a skill
         skill = self.registry.get(name)
         if skill:
-            self._log(f"    [Skill] {skill.name}")
+            self._log(f"  [Tool] '{name}' is a SKILL, delegating to _execute_skill()")
             return self._execute_skill(skill, args)
+        
+        # Check if it's a known single tool
+        known_tools = ["run_shell_command", "get_system_info", "read_file", "write_file", 
+                       "delete_file", "list_directory"]
+        if name in known_tools:
+            self._log(f"  [Tool] '{name}' is a built-in tool, executing...")
+        else:
+            self._log(f"  [Tool] '{name}' is unknown, attempting to execute anyway...")
         
         return self._execute_single_tool(name, args)
     
