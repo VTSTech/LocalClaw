@@ -6,6 +6,7 @@ VTSBot R7 - Function Calling Agent with skills that can use tools
 import json
 import re
 import os
+import sys
 import platform
 import getpass
 from pathlib import Path
@@ -44,27 +45,17 @@ class FunctionCallingAgent:
             self._log(f"  [Skills] Loading builtin skills from: {builtin_dir}")
             loaded = self.registry.load_directory(builtin_dir)
             self._log(f"  [Skills] Loaded {len(loaded)} builtin skills: {', '.join(loaded)}")
-            # Show details for each loaded skill
             for skill_name in loaded:
                 skill = self.registry.get(skill_name)
                 if skill:
                     desc_preview = skill.description[:80] + "..." if len(skill.description) > 80 else skill.description
-                    allowed = skill.metadata.allowed_tools if hasattr(skill, 'metadata') else []
                     self._log(f"    - {skill_name}: {desc_preview}")
-                    if allowed:
-                        self._log(f"      allowed-tools: {allowed}")
         
         if skills_dirs:
             for dir_path in skills_dirs:
                 self._log(f"  [Skills] Loading custom skills from: {dir_path}")
                 loaded = self.registry.load_directory(Path(dir_path))
                 self._log(f"  [Skills] Loaded {len(loaded)} custom skills: {', '.join(loaded)}")
-        
-        # Check for load errors
-        if hasattr(self.registry, '_load_errors') and self.registry._load_errors:
-            self._log(f"  [Skills] {len(self.registry._load_errors)} errors during loading:")
-            for err in self.registry._load_errors:
-                self._log(f"    - {err['path']}: {err['error']}")
         
         self._log(f"  [Skills] Total skills available: {len(self.registry)}")
         
@@ -78,44 +69,63 @@ class FunctionCallingAgent:
             print(msg)
     
     def _parse_tool_call(self, text: str) -> Optional[Dict]:
-        """Parse a tool call from JSON text."""
-        json_match = re.search(r'\{[^{}]*"name"[^{}]*"arguments"[^{}]*\}', text, re.DOTALL)
+        """Parse a tool call from JSON text, handling various formats."""
         
-        if json_match:
-            try:
-                parsed = json.loads(json_match.group())
-                if isinstance(parsed, dict) and "name" in parsed and "arguments" in parsed:
-                    return parsed
-            except json.JSONDecodeError:
-                pass
+        cleaned = text.strip()
         
-        try:
-            parsed = json.loads(text)
-            if isinstance(parsed, dict) and "name" in parsed and "arguments" in parsed:
-                return parsed
-        except json.JSONDecodeError:
-            pass
+        # Remove markdown code blocks
+        if cleaned.startswith('```'):
+            lines = cleaned.split('\n')
+            if lines[0].startswith('```'):
+                lines = lines[1:]
+            if lines and lines[-1].strip() == '```':
+                lines = lines[:-1]
+            cleaned = '\n'.join(lines).strip()
+        
+        # Extract JSON with balanced braces
+        start_idx = cleaned.find('{')
+        if start_idx != -1:
+            brace_count = 0
+            end_idx = None
+            for i, char in enumerate(cleaned[start_idx:]):
+                if char == '{':
+                    brace_count += 1
+                elif char == '}':
+                    brace_count -= 1
+                    if brace_count == 0:
+                        end_idx = start_idx + i + 1
+                        break
+            
+            if end_idx:
+                json_str = cleaned[start_idx:end_idx]
+                try:
+                    parsed = json.loads(json_str)
+                    if isinstance(parsed, dict):
+                        # Normalize "tool" -> "name"
+                        if "tool" in parsed and "name" not in parsed:
+                            parsed["name"] = parsed.pop("tool")
+                        
+                        # Normalize arguments
+                        if "arguments" in parsed and isinstance(parsed["arguments"], list):
+                            parsed["arguments"] = {"args": parsed["arguments"]}
+                        
+                        if "name" in parsed:
+                            if "arguments" not in parsed:
+                                parsed["arguments"] = {}
+                            return parsed
+                except json.JSONDecodeError:
+                    pass
         
         return None
     
     def _execute_single_tool(self, name: str, args: Dict) -> Dict:
         """Execute a single tool and return result."""
         
-        # Handle $previous reference
-        if self._last_result is not None:
-            for key, value in args.items():
-                if isinstance(value, str) and "$previous" in value:
-                    if value == "$previous":
-                        args[key] = json.dumps(self._last_result, indent=2)
-                    else:
-                        args[key] = value.replace("$previous", json.dumps(self._last_result))
-        
         self.trace.append({
             "tool": name,
             "args": args,
             "timestamp": datetime.now().isoformat()
         })
-        
         self.state.step += 1
         
         if name == "run_shell_command":
@@ -126,8 +136,6 @@ class FunctionCallingAgent:
             return {"output": result, "command": command}
         
         elif name == "get_system_info":
-            info_type = args.get("info_type", "all")
-            
             try:
                 username = getpass.getuser()
                 uname = os.uname()
@@ -144,10 +152,7 @@ class FunctionCallingAgent:
                 "date": datetime.now().strftime("%Y-%m-%d"),
                 "time": datetime.now().strftime("%H:%M:%S"),
             }
-            
-            if info_type == "all":
-                return {"info": info}
-            return {"info": info.get(info_type, f"Unknown: {info_type}")}
+            return {"info": info}
         
         elif name == "read_file":
             path = args.get("path", "")
@@ -157,19 +162,19 @@ class FunctionCallingAgent:
                     return {"error": f"File not found: {path}"}
                 with open(path, 'r', encoding='utf-8') as f:
                     content = f.read()
-                return {"content": content[:5000], "path": path, "size": len(content)}
+                return {"content": content[:8000], "path": path, "size": len(content)}
             except Exception as e:
                 return {"error": str(e)}
         
         elif name == "write_file":
             path = args.get("path", "")
             content = args.get("content", "")
-            self._log(f"    [Write] {path} ({len(content)} bytes)")
+            self._log(f"    [Write] {path}")
             try:
                 with open(path, 'w', encoding='utf-8') as f:
                     f.write(content)
                 self.state.files_written.append(path)
-                return {"status": "written", "path": path, "bytes": len(content)}
+                return {"status": "written", "path": path}
             except Exception as e:
                 return {"error": str(e)}
         
@@ -177,9 +182,8 @@ class FunctionCallingAgent:
             path = args.get("path", "")
             self._log(f"    [Delete] {path}")
             try:
-                if not os.path.exists(path):
-                    return {"status": "not_found", "path": path}
-                os.remove(path)
+                if os.path.exists(path):
+                    os.remove(path)
                 return {"status": "deleted", "path": path}
             except Exception as e:
                 return {"error": str(e)}
@@ -188,15 +192,9 @@ class FunctionCallingAgent:
             path = args.get("path", ".")
             self._log(f"    [List] {path}")
             try:
-                files = os.listdir(path)
-                file_list = []
-                for f in files:
-                    full_path = os.path.join(path, f)
-                    file_list.append({
-                        "name": f,
-                        "type": "directory" if os.path.isdir(full_path) else "file"
-                    })
-                return {"files": file_list, "path": path, "count": len(file_list)}
+                files = [{"name": f, "type": "dir" if os.path.isdir(os.path.join(path, f)) else "file"} 
+                        for f in os.listdir(path)]
+                return {"files": files, "path": path}
             except Exception as e:
                 return {"error": str(e)}
         
@@ -204,274 +202,194 @@ class FunctionCallingAgent:
     
     def _execute_chain_tools(self, steps: List[Dict]) -> Dict:
         """Execute multiple tools in sequence."""
-        
-        self._log(f"  [Chain] Executing {len(steps)} steps...")
-        
         results = []
-        self._last_result = None
-        
         for i, step in enumerate(steps):
             tool_name = step.get("tool")
             tool_args = step.get("args", {})
-            
-            self._log(f"    [Step {i+1}/{len(steps)}] {tool_name}")
-            
             result = self._execute_single_tool(tool_name, tool_args)
             results.append(result)
-            self._last_result = result
-            
-            self._log(f"    [Result] {json.dumps(result)[:100]}...")
-            
             if "error" in result:
-                return {"results": results, "error": f"Step {i+1} failed: {result['error']}"}
-        
+                return {"results": results, "error": f"Step {i+1} failed"}
         return {"results": results, "success": True}
     
-    def _map_allowed_tools(self, allowed_tools: List[str]) -> Dict[str, str]:
-        """
-        Map Agent Skills Standard tools to internal tool names.
+    def _detect_initial_action(self, skill_name: str, query: str) -> Optional[Dict]:
+        """Detect the first action needed based on query patterns."""
+        query_lower = query.lower()
         
-        Agent Skills Standard format:
-        - Read ? read_file
-        - Write ? write_file
-        - Bash(cmd:*) ? run_shell_command
-        """
-        tool_map = {
-            "Read": "read_file",
-            "Write": "write_file",
-            "Bash": "run_shell_command",
-        }
+        # Code analysis patterns
+        if skill_name == "code-analysis":
+            # Extract filename from query
+            file_match = re.search(r'[\w_-]+\.(py|js|ts|java|go|rs|c|cpp|h)', query_lower)
+            if file_match:
+                filename = file_match.group(0)
+                # Check if file exists with various paths
+                for path in [filename, f"./{filename}", f"/content/LocalClaw/test/{filename}"]:
+                    if os.path.exists(path):
+                        return {"name": "read_file", "arguments": {"path": path}}
+                # Try to find in current directory
+                if os.path.exists(filename):
+                    return {"name": "read_file", "arguments": {"path": filename}}
         
-        mapped = {}
-        for tool in allowed_tools:
-            # Handle Bash(cmd:*) format
-            if tool.startswith("Bash("):
-                # Extract the command pattern, but we map to run_shell_command
-                mapped[tool] = "run_shell_command"
-            elif tool in tool_map:
-                mapped[tool] = tool_map[tool]
-            else:
-                # Unknown tool, keep as-is
-                mapped[tool] = tool.lower().replace("-", "_")
+        # Web search patterns
+        elif skill_name == "web-search":
+            if "python version" in query_lower or "latest python" in query_lower:
+                return {"name": "run_shell_command", "arguments": {
+                    "command": "curl -s https://www.python.org/downloads/ | grep -oP 'Python [0-9]+\\.[0-9]+' | head -1"
+                }}
+            elif "search" in query_lower:
+                # Extract search term
+                return {"name": "run_shell_command", "arguments": {
+                    "command": f"curl -s 'https://api.duckduckgo.com/?q={query}&format=json' 2>/dev/null | head -c 2000"
+                }}
         
-        return mapped
+        # File operations patterns
+        elif skill_name == "file-operations":
+            if "list" in query_lower:
+                return {"name": "list_directory", "arguments": {"path": "."}}
+            file_match = re.search(r'[\w_-]+\.\w+', query)
+            if file_match and "read" in query_lower:
+                return {"name": "read_file", "arguments": {"path": file_match.group(0)}}
+        
+        return None
     
     def _execute_skill(self, skill: Skill, args: Dict) -> Dict:
-        """
-        Execute a skill following the Agent Skills Standard.
-        
-        Skills are ONBOARDING GUIDES that provide specialized knowledge and workflows.
-        The skill instructions tell the agent how to approach the task.
-        The agent uses its normal tools to complete the task.
-        """
+        """Execute a skill with deterministic first action when possible."""
         query = args.get("query", "")
         
-        self._log(f"    [Skill] ========== EXECUTING SKILL: {skill.name} ==========")
-        self._log(f"    [Skill] Query: {query[:100]}{'...' if len(query) > 100 else ''}")
+        self._log(f"    [Skill] ========== SKILL: {skill.name} ==========")
+        self._log(f"    [Skill] Query: {query}")
         
-        # Load skill instructions
-        self._log(f"    [Skill] Loading instructions...")
+        # Load instructions
         instructions = skill.load_instructions() if hasattr(skill, 'load_instructions') else ""
         if not instructions:
-            instructions = skill.get_full_context() if hasattr(skill, 'get_full_context') else str(skill.instructions)
-        self._log(f"    [Skill] Instructions loaded: {len(instructions)} chars")
+            instructions = skill.get_full_context() if hasattr(skill, 'get_full_context') else ""
         
-        # Get allowed tools from skill metadata
-        allowed_tools = []
-        if hasattr(skill, 'metadata') and hasattr(skill.metadata, 'allowed_tools'):
-            allowed_tools = skill.metadata.allowed_tools
-        self._log(f"    [Skill] Allowed tools from metadata: {allowed_tools}")
+        # Try to detect first action automatically
+        initial_action = self._detect_initial_action(skill.name, query)
         
-        # Map to internal tools
-        tool_mapping = self._map_allowed_tools(allowed_tools)
-        self._log(f"    [Skill] Tool mapping: {tool_mapping}")
+        if initial_action:
+            self._log(f"    [Skill] Auto-detected action: {initial_action}")
+            tool_result = self._execute_single_tool(initial_action["name"], initial_action["arguments"])
+            self._log(f"    [Skill] Auto-executed, result: {str(tool_result)[:100]}...")
+            
+            # Now ask LLM to analyze the result
+            result_text = tool_result.get("content", tool_result.get("output", str(tool_result)))
+            
+            analysis_prompt = f"""# Task: {query}
+
+# Data Retrieved:
+{str(result_text)[:3000]}
+
+# Instructions:
+Based on the data above, provide a clear and helpful answer to the task.
+Be concise but informative.
+
+Answer:"""
+
+            response = chat_api(self.model, [{"role": "user", "content": analysis_prompt}], [])
+            content = response.get("message", {}).get("content", "")
+            
+            self._log(f"    [Skill] Analysis: {content[:200]}...")
+            self._log(f"    [Skill] ========== SKILL COMPLETE ==========")
+            
+            return {"skill": skill.name, "response": content, "auto_action": initial_action}
         
-        # Build available tools description
-        if tool_mapping:
-            tools_desc = "Allowed tools for this skill:\n"
-            for external, internal in tool_mapping.items():
-                if internal == "read_file":
-                    tools_desc += f'- {external}: Use {{"name": "read_file", "arguments": {{"path": "file_path"}}}}\n'
-                elif internal == "write_file":
-                    tools_desc += f'- {external}: Use {{"name": "write_file", "arguments": {{"path": "file_path", "content": "content"}}}}\n'
-                elif internal == "run_shell_command":
-                    tools_desc += f'- {external}: Use {{"name": "run_shell_command", "arguments": {{"command": "shell_command"}}}}\n'
-        else:
-            tools_desc = """Available tools:
-- read_file: {"name": "read_file", "arguments": {"path": "file_path"}}
-- write_file: {"name": "write_file", "arguments": {"path": "file_path", "content": "content"}}
-- run_shell_command: {"name": "run_shell_command", "arguments": {"command": "shell_command"}}
-- list_directory: {"name": "list_directory", "arguments": {"path": "directory"}}
-- delete_file: {"name": "delete_file", "arguments": {"path": "file_path"}}"""
+        # No auto-detection - use LLM to decide
+        self._log(f"    [Skill] No auto-detection, using LLM...")
         
-        # Check for scripts (with safety check)
-        scripts = []
-        scripts_info = ""
-        if hasattr(skill, 'list_scripts'):
-            try:
-                scripts = skill.list_scripts()
-                if scripts:
-                    scripts_info = f"\n\nAvailable scripts:\n" + "\n".join(f"- scripts/{s}" for s in scripts)
-                    self._log(f"    [Skill] Scripts available: {scripts}")
-            except Exception as e:
-                self._log(f"    [Skill] Error listing scripts: {e}")
-        
-        # Build the skill prompt - clear and simple for small models
         skill_prompt = f"""# Skill: {skill.name}
 
-{instructions}{scripts_info}
+{instructions[:2000]}
 
----
+# Task: {query}
 
-# Task
-{query}
+# Available Tools (output as JSON):
+- read_file: {{"name": "read_file", "arguments": {{"path": "filename"}}}}
+- run_shell_command: {{"name": "run_shell_command", "arguments": {{"command": "cmd"}}}}
+- write_file: {{"name": "write_file", "arguments": {{"path": "filename", "content": "text"}}}}
 
-# How to Respond
+Output JSON only. No markdown."""
 
-1. If you can answer directly from the skill instructions, just answer.
-
-2. If you need to use a tool, output ONLY JSON (no markdown, no explanation):
-{{"name": "tool_name", "arguments": {{"arg": "value"}}}}
-
-{tools_desc}
-
-Remember: JSON only, no code blocks, no explanation before or after."""
-
-        # First LLM call with skill context
-        self._log(f"    [Skill] Sending prompt to LLM (prompt size: {len(skill_prompt)} chars)...")
-        response = chat_api(
-            self.model,
-            [{"role": "user", "content": skill_prompt}],
-            []
+        response = chat_api(self.model, [{"role": "user", "content": skill_prompt}], [])
+        content = response.get("message", {}).get("content", ""
         )
-        
-        content = response.get("message", {}).get("content", "")
-        self._log(f"    [Skill] LLM response ({len(content)} chars): {content[:300]}{'...' if len(content) > 300 else ''}")
-        
-        # Check if skill wants to call a tool
         tool_call = self._parse_tool_call(content)
         
-        if tool_call:
-            self._log(f"    [Skill] Parsed tool call: {tool_call}")
-        else:
-            self._log(f"    [Skill] No tool call found in response, returning direct answer")
-        
-        # Tool call loop (may need multiple tools)
+        # Execute tools in loop
         max_loops = 3
         for loop_idx in range(max_loops):
             if not tool_call:
-                # No tool call - we're done, return the response
-                self._log(f"    [Skill] ========== SKILL COMPLETE (no more tool calls) ==========")
+                self._log(f"    [Skill] ========== SKILL COMPLETE ==========")
                 return {"skill": skill.name, "response": content}
             
-            # Execute the tool
             tool_name = tool_call["name"]
             tool_args = tool_call["arguments"]
             
-            self._log(f"    [Skill] Loop {loop_idx + 1}/{max_loops}: Executing tool '{tool_name}' with args: {tool_args}")
+            self._log(f"    [Skill] Tool: {tool_name}({tool_args})")
             tool_result = self._execute_single_tool(tool_name, tool_args)
-            self._log(f"    [Skill] Tool result: {json.dumps(tool_result)[:200]}...")
             
-            # Get next action
-            next_prompt = f"""Tool result:
-{json.dumps(tool_result, indent=2)[:1000]}
-
-Task: {query}
-
-Continue with the skill instructions. If you need another tool, output JSON.
-If done, provide your final answer."""
-
-            self._log(f"    [Skill] Sending tool result back to LLM...")
-            next_response = chat_api(
-                self.model,
-                [{"role": "user", "content": next_prompt}],
-                []
-            )
+            result_text = tool_result.get("content", tool_result.get("output", str(tool_result)))
             
-            content = next_response.get("message", {}).get("content", "")
-            self._log(f"    [Skill] LLM follow-up response: {content[:200]}...")
+            next_prompt = f"""# Result:
+{str(result_text)[:2000]}
+
+# Task: {query}
+
+If done, answer in text. If need another tool, output JSON.
+Valid tools: read_file, run_shell_command, write_file"""
+
+            response = chat_api(self.model, [{"role": "user", "content": next_prompt}], [])
+            content = response.get("message", {}).get("content", "")
             tool_call = self._parse_tool_call(content)
-            
-            if tool_call:
-                self._log(f"    [Skill] Parsed next tool call: {tool_call}")
         
-        # Max loops reached
-        self._log(f"    [Skill] ========== SKILL COMPLETE (max loops reached) ==========")
+        self._log(f"    [Skill] ========== SKILL COMPLETE ==========")
         return {"skill": skill.name, "response": content}
     
     def _execute_tool(self, name: str, args: Dict) -> Dict:
-        """Execute a tool (handles chain_tools specially)."""
+        """Execute a tool or skill."""
         
-        self._log(f"  [Tool] Executing: {name}")
-        self._log(f"  [Tool] Arguments: {json.dumps(args)[:512]}{'...' if len(json.dumps(args)) > 512 else ''}")
+        self._log(f"  [Tool] {name}({json.dumps(args)[:200]})")
         
         if name == "chain_tools":
-            steps = args.get("steps", [])
-            self._log(f"  [Tool] Chain tools detected with {len(steps)} steps")
-            return self._execute_chain_tools(steps)
+            return self._execute_chain_tools(args.get("steps", []))
         
-        # Check if it's a skill
         skill = self.registry.get(name)
         if skill:
-            self._log(f"  [Tool] '{name}' is a SKILL, delegating to _execute_skill()")
             return self._execute_skill(skill, args)
-        
-        # Check if it's a known single tool
-        known_tools = ["run_shell_command", "get_system_info", "read_file", "write_file", 
-                       "delete_file", "list_directory"]
-        if name in known_tools:
-            self._log(f"  [Tool] '{name}' is a built-in tool, executing...")
-        else:
-            self._log(f"  [Tool] '{name}' is unknown, attempting to execute anyway...")
         
         return self._execute_single_tool(name, args)
     
     def run(self, user_input: str) -> str:
-        """Main execution with tool calling."""
+        """Main execution."""
         
         self._log(f"  [Input] {user_input}")
         
-        # Build messages
         messages = [{"role": "system", "content": TOOL_SYSTEM_PROMPT}]
         messages.extend(TOOL_FEW_SHOT)
         messages.append({"role": "user", "content": user_input})
         
-        # Get response
         self._log("  [LLM] Generating response...")
         response = chat_api(self.model, messages, [])
         content = response.get("message", {}).get("content", "")
         
-        self._log(f"  [LLM Output] {content[:1024]}{'...' if len(content) > 1024 else ''}")
+        self._log(f"  [LLM Output] {content[:500]}...")
         
-        # Parse tool call
         tool_call = self._parse_tool_call(content)
         
         if tool_call:
-            name = tool_call["name"]
-            args = tool_call["arguments"]
-            result = self._execute_tool(name, args)
+            result = self._execute_tool(tool_call["name"], tool_call["arguments"])
             
-            self._log(f"  [Tool Result] {json.dumps(result)[:1024]}")
+            self._log(f"  [Tool Result] {json.dumps(result)[:500]}...")
             
-            # Generate natural response
+            # Generate summary
             summary_prompt = RESULT_SUMMARY_PROMPT.format(
                 question=user_input,
                 result=json.dumps(result)
             )
             
-            self._log("  [LLM] Generating natural response...")
-            final_response = chat_api(
-                self.model,
-                [{"role": "user", "content": summary_prompt}],
-                []
-            )
-            final_content = final_response.get("message", {}).get("content", str(result))
-            
-            self._log(f"  [Response] {final_content}")
-            return final_content
+            final_response = chat_api(self.model, [{"role": "user", "content": summary_prompt}], [])
+            return final_response.get("message", {}).get("content", str(result))
         
-        # No tool call
-        self._log("  [Direct Response] (no tool used)")
         return content
     
     def get_status(self) -> Dict:
@@ -482,6 +400,124 @@ If done, provide your final answer."""
             "files_written": self.state.files_written,
             "trace_count": len(self.trace),
         }
+    
+    def test_skills(self) -> Dict[str, Dict]:
+        """
+        Test all loaded skills with predefined test cases.
+        Returns dict of skill_name -> test_result.
+        """
+        # Predefined test cases for each skill
+        test_cases = {
+            "code-analysis": {
+                "query": "Analyze the file agent_fc.py",
+                "expected_tools": ["read_file"],
+                "expected_content": "class",  # Should find class definitions
+            },
+            "file-operations": {
+                "query": "List files in current directory",
+                "expected_tools": ["list_directory", "run_shell_command"],
+                "expected_content": "files",
+            },
+            "shell-execution": {
+                "query": "Run echo hello",
+                "expected_tools": ["run_shell_command"],
+                "expected_content": "hello",
+            },
+            "web-search": {
+                "query": "Search for Python latest version",
+                "expected_tools": ["run_shell_command"],
+                "expected_content": None,  # May vary
+            },
+            "pdf-processing": {
+                "query": "List PDF tools available",
+                "expected_tools": ["run_shell_command"],
+                "expected_content": None,
+            },
+        }
+        
+        results = {}
+        
+        self._log(f"\n{'='*60}")
+        self._log(f"  [SKILL TEST] Testing {len(self.registry)} skills...")
+        self._log(f"{'='*60}\n")
+        
+        for skill_name in self.registry.list_skills():
+            skill = self.registry.get(skill_name)
+            if not skill:
+                results[skill_name] = {"status": "ERROR", "message": "Skill not found in registry"}
+                continue
+            
+            test_case = test_cases.get(skill_name, {
+                "query": f"Test skill {skill_name}",
+                "expected_tools": None,
+                "expected_content": None,
+            })
+            
+            self._log(f"\n  [TEST] Skill: {skill_name}")
+            self._log(f"  [TEST] Query: {test_case['query']}")
+            
+            try:
+                # Execute the skill
+                result = self._execute_skill(skill, {"query": test_case["query"]})
+                
+                # Check result
+                status = "PASS"
+                messages = []
+                
+                # Check if auto-action was used
+                if result.get("auto_action"):
+                    messages.append(f"Auto-action: {result['auto_action']}")
+                
+                # Check if expected tools were used
+                if test_case.get("expected_tools"):
+                    used_tools = [t["tool"] for t in self.trace]
+                    for expected in test_case["expected_tools"]:
+                        if expected not in used_tools:
+                            status = "WARN"
+                            messages.append(f"Expected tool '{expected}' not used")
+                
+                # Check if expected content is in response
+                response = result.get("response", "")
+                if test_case.get("expected_content"):
+                    if test_case["expected_content"].lower() not in response.lower():
+                        status = "WARN"
+                        messages.append(f"Expected content '{test_case['expected_content']}' not found")
+                
+                # Check for errors
+                if "error" in result:
+                    status = "FAIL"
+                    messages.append(f"Error: {result['error']}")
+                
+                if not messages:
+                    messages.append("Skill executed successfully")
+                
+                results[skill_name] = {
+                    "status": status,
+                    "response_preview": response[:200] + "..." if len(response) > 200 else response,
+                    "messages": messages,
+                }
+                
+                self._log(f"  [TEST] Status: {status}")
+                for msg in messages:
+                    self._log(f"  [TEST]   - {msg}")
+                
+            except Exception as e:
+                results[skill_name] = {
+                    "status": "ERROR",
+                    "message": str(e),
+                }
+                self._log(f"  [TEST] Status: ERROR - {e}")
+        
+        # Summary
+        passed = sum(1 for r in results.values() if r["status"] == "PASS")
+        warned = sum(1 for r in results.values() if r["status"] == "WARN")
+        failed = sum(1 for r in results.values() if r["status"] in ["FAIL", "ERROR"])
+        
+        self._log(f"\n{'='*60}")
+        self._log(f"  [SKILL TEST] Results: {passed} PASS, {warned} WARN, {failed} FAIL")
+        self._log(f"{'='*60}\n")
+        
+        return results
 
 
 # =============================================================================
@@ -563,10 +599,26 @@ if __name__ == "__main__":
     parser.add_argument("--model", default="qwen2.5:3b", help="LLM model")
     parser.add_argument("--skills", nargs="*", default=[], help="Skill directories")
     parser.add_argument("--test", action="store_true", help="Run test prompts")
+    parser.add_argument("--test-skills", action="store_true", help="Test all skills directly")
     parser.add_argument("--quiet", action="store_true", help="Reduce output verbosity")
     
     args = parser.parse_args()
     
+    # Create agent
+    agent = FunctionCallingAgent(
+        model=args.model,
+        skills_dirs=args.skills if args.skills else None,
+        verbose=not args.quiet
+    )
+    
+    # Test skills mode
+    if args.test_skills:
+        results = agent.test_skills()
+        print("\n" + json.dumps({k: {"status": v["status"], "messages": v.get("messages", [])} 
+                                for k, v in results.items()}, indent=2))
+        sys.exit(0)
+    
+    # Test prompts mode
     test_queue = None
     if args.test:
         test_queue = [p.strip() for p in TEST_PROMPTS.strip().split('\n') if p.strip()]

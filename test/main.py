@@ -23,6 +23,7 @@ Examples:
   python main.py --model qwen2.5:7b        Use larger model
   python main.py --skills ./my_skills      Load custom skill directories
   python main.py --test                    Run test prompts
+  python main.py --test-skills             Test all skills directly
   python main.py --validate ./skill-dir    Validate a skill directory
 
 Architecture (R7 - Function Calling):
@@ -51,11 +52,16 @@ Architecture (R7 - Function Calling):
         help="Directories to load Agent Skills from"
     )
     
-    # Test mode
+    # Test modes
     parser.add_argument(
         "--test",
         action="store_true",
         help="Run test prompts"
+    )
+    parser.add_argument(
+        "--test-skills",
+        action="store_true",
+        help="Test all skills directly without prompting"
     )
     
     # Validation
@@ -88,7 +94,25 @@ Architecture (R7 - Function Calling):
     
     # Run R7 function-calling agent
     print("[VTSBot R7] Running function-calling agent with skills...")
-    from agent_fc import run_agent as run_fc_agent
+    from agent_fc import FunctionCallingAgent
+    agent = FunctionCallingAgent(
+        model=args.model,
+        skills_dirs=args.skills if args.skills else None,
+        verbose=True
+    )
+    
+    if args.test_skills:
+        # Test skills directly
+        results = agent.test_skills()
+        sys.exit(0)
+    
+    # Run normal agent loop
+    from agent_fc import run_agent as run_fc_agent, banner
+    banner(args.model, len(agent.registry))
+    
+    if test_queue:
+        print(f"  [TEST MODE] {len(test_queue)} tests queued\n")
+    
     run_fc_agent(
         model=args.model,
         skills_dirs=args.skills if args.skills else None,
