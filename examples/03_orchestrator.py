@@ -3,36 +3,31 @@ examples/03_orchestrator.py
 ----------------------------
 A three-agent team with a router that dispatches tasks.
 
-Agents:
-  - coder   → writes and explains code
-  - analyst → data reasoning and math
-  - writer  → prose, emails, summaries
+Run from the project root:   python examples/03_orchestrator.py
+Or from the examples folder: python 03_orchestrator.py
 """
 
-import sys, os
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+import sys
+import os
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from localclaw import Agent, Orchestrator, AgentCard, ToolRegistry
+from localclaw import Agent, Orchestrator, AgentCard
 from localclaw.tools.builtins import BUILTIN_REGISTRY
 
 # ── Build specialist agents ────────────────────────────────────────
 
-coder_tools = BUILTIN_REGISTRY.subset(["python_repl", "shell", "read_file", "write_file"])
-
 coder = Agent(
     model="llama3.1:8b",
-    tools=coder_tools,
+    tools=BUILTIN_REGISTRY.subset(["python_repl", "shell", "read_file", "write_file"]),
     system_prompt=(
         "You are an expert software engineer. Write clean, well-commented code. "
         "Use the python_repl tool to verify your solutions when helpful."
     ),
 )
 
-analyst_tools = BUILTIN_REGISTRY.subset(["calculator", "python_repl"])
-
 analyst = Agent(
     model="llama3.1:8b",
-    tools=analyst_tools,
+    tools=BUILTIN_REGISTRY.subset(["calculator", "python_repl"]),
     system_prompt=(
         "You are a data analyst and mathematician. Break down problems step-by-step. "
         "Show your work. Use the calculator or python_repl for computations."

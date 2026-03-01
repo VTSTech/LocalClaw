@@ -2,11 +2,16 @@
 examples/01_basic_agent.py
 --------------------------
 The simplest possible LocalClaw agent — no tools, just conversation.
+
+Run from the project root:   python examples/01_basic_agent.py
+Or from the examples folder: python 01_basic_agent.py
 """
 
 import sys
 import os
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+
+# Ensure the project root (which contains the localclaw/ package) is on the path
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from localclaw import Agent, OllamaClient
 
@@ -21,7 +26,7 @@ print(f"   Available models: {client.list_models()}\n")
 
 # ── 2. Create an agent ─────────────────────────────────────────────
 agent = Agent(
-    model="llama3.2:3b",          # change to any model you have pulled
+    model="llama3.2:1b",          # change to any model you have pulled
     system_prompt="You are a concise and helpful assistant. Keep answers brief.",
     model_options={"temperature": 0.7},
 )

@@ -3,10 +3,14 @@ examples/02_tool_agent.py
 --------------------------
 An agent with custom + built-in tools.
 Demonstrates the decorator-based tool registry.
+
+Run from the project root:   python examples/02_tool_agent.py
+Or from the examples folder: python 02_tool_agent.py
 """
 
-import sys, os
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+import sys
+import os
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from localclaw import Agent, ToolRegistry, StepResult
 from localclaw.tools.builtins import BUILTIN_REGISTRY
@@ -55,8 +59,7 @@ def convert_currency(amount: float, from_currency: str, to_currency: str) -> str
 
 
 # ── 2. Also include the built-in calculator ─────────────────────────
-calc_registry = BUILTIN_REGISTRY.subset(["calculator", "python_repl"])
-for t in calc_registry.all():
+for t in BUILTIN_REGISTRY.subset(["calculator", "python_repl"]).all():
     registry.register(t)
 
 # ── 3. Live step hook for a nice trace ─────────────────────────────
@@ -73,7 +76,7 @@ def print_step(step: StepResult):
 
 # ── 4. Build the agent ─────────────────────────────────────────────
 agent = Agent(
-    model="llama3.1:8b",       # or qwen2.5:7b, mistral:7b, etc.
+    model="qwen2.5-coder:0.5b",       # or qwen2.5:7b, mistral:7b, etc.
     tools=registry,
     system_prompt="You are a helpful assistant with access to tools. Use them when needed.",
     on_step=print_step,
