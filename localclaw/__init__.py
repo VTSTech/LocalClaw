@@ -1,4 +1,4 @@
-"""LocalClaw — Local agentic framework for Ollama"""
+"""LocalClaw Local agentic framework for Ollama"""
 
 from .core.agent import Agent, AgentRun, StepResult
 from .core.memory import Memory
