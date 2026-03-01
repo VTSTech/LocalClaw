@@ -23,6 +23,88 @@ from .tools import ToolRegistry
 
 
 # ------------------------------------------------------------------ #
+#  Argument key normalizer                                             #
+# ------------------------------------------------------------------ #
+
+def _normalize_args(args: dict, tool) -> dict:
+    """
+    Small models sometimes hallucinate argument keys, e.g. merging
+    the param name with its description: 'amount from_currency' instead
+    of 'amount'. This attempts to match each incoming key to a real
+    parameter name via exact → prefix → substring matching.
+
+    Also coerces string values to the correct type when the schema
+    declares integer or number (e.g. '500' → 500.0).
+    """
+    if tool is None:
+        return args
+
+    real_params = [p for p in tool.params]
+    if not real_params:
+        return args
+
+    param_map = {p.name: p for p in real_params}
+
+    normalized = {}
+    for key, val in args.items():
+        # Resolve key → real param name
+        if key in param_map:
+            target_param = param_map[key]
+        else:
+            target_param = None
+            for p in real_params:
+                if p.name in key or key.startswith(p.name):
+                    target_param = p
+                    break
+
+        pname = target_param.name if target_param else key
+
+        # Coerce string numbers to the declared type
+        if target_param and isinstance(val, str):
+            if target_param.type in ("number", "float"):
+                try:
+                    val = float(val)
+                except ValueError:
+                    pass
+            elif target_param.type == "integer":
+                try:
+                    val = int(val)
+                except ValueError:
+                    pass
+
+        if pname not in normalized:
+            normalized[pname] = val
+        else:
+            normalized[key] = val  # collision — pass through
+
+    return normalized
+
+
+def _looks_like_tool_schema(text: str) -> bool:
+    """
+    Returns True if the text looks like the model outputting a JSON
+    function-call schema rather than a real answer. Catches patterns like:
+      {"name": "...", "parameters": {...}}
+      {"name": "...", "arguments": {...}}
+    even when no tools were defined.
+    """
+    stripped = re.sub(r"```(?:json)?", "", text).strip().rstrip("`").strip()
+    start = stripped.find("{")
+    end = stripped.rfind("}")
+    if start == -1 or end == -1:
+        return False
+    try:
+        obj = json.loads(stripped[start:end + 1])
+        return (
+            isinstance(obj, dict)
+            and "name" in obj
+            and any(k in obj for k in ("parameters", "arguments", "args"))
+        )
+    except json.JSONDecodeError:
+        return False
+
+
+# ------------------------------------------------------------------ #
 #  Agent result                                                         #
 # ------------------------------------------------------------------ #
 
@@ -79,6 +161,41 @@ Final Answer: <your final response to the user>
 
 IMPORTANT: Action Input must be valid JSON. Only use tools listed below.
 """
+
+
+def _parse_json_tool_call(text: str) -> tuple[str | None, dict | None]:
+    """
+    Fallback for models that output tool calls as JSON text instead of
+    using the native tool_calls API field. Handles patterns like:
+
+        ```json
+        {"name": "calculator", "arguments": {"expression": "2+2"}}
+        ```
+
+    Returns (tool_name, tool_args) or (None, None) if not found.
+    """
+    # Strip markdown fences
+    cleaned = re.sub(r"```(?:json)?", "", text).strip().rstrip("`").strip()
+
+    # Find the outermost JSON object
+    start = cleaned.find("{")
+    end = cleaned.rfind("}")
+    if start == -1 or end == -1:
+        return None, None
+
+    try:
+        obj = json.loads(cleaned[start:end + 1])
+    except json.JSONDecodeError:
+        return None, None
+
+    # Support {"name": ..., "arguments": ...} and {"name": ..., "parameters": ...}
+    name = obj.get("name") or obj.get("function")
+    args = obj.get("arguments") or obj.get("parameters") or obj.get("args") or {}
+
+    if not name or not isinstance(args, dict):
+        return None, None
+
+    return name, args
 
 
 def _parse_react(text: str) -> tuple[str | None, str | None, dict | None, str | None]:
@@ -187,8 +304,13 @@ class Agent:
         """
         run = AgentRun()
         t0 = time.perf_counter()
-
         self.memory.add_user(user_input)
+
+        # Loop guards
+        _tool_call_counts: dict[str, int] = {}  # per-tool call counter
+        _successful_results: list[str] = []      # accumulate good results for synthesis
+        _max_calls_per_tool = 3
+        _max_total_tool_calls = 6               # hard ceiling across all tools
 
         for _ in range(self.max_steps):
             step_t0 = time.perf_counter()
@@ -219,6 +341,9 @@ class Agent:
                         except json.JSONDecodeError:
                             t_args = {}
 
+                    t_args = _normalize_args(t_args, self.tools.get(t_name))
+                    _tool_call_counts[t_name] = _tool_call_counts.get(t_name, 0) + 1
+
                     call_step = StepResult(
                         type="tool_call",
                         content=f"{t_name}({t_args})",
@@ -232,17 +357,95 @@ class Agent:
                     result = self.tools.invoke(t_name, t_args)
                     result_str = str(result)
 
-                    result_step = StepResult(
-                        type="tool_result",
-                        content=result_str,
+                    result_step = StepResult(type="tool_result", content=result_str, tool_name=t_name)
+                    run.steps.append(result_step)
+                    self._emit(result_step)
+                    self.memory.add_tool_result(t_name, result_str)
+
+                    if not result_str.startswith("[Tool error]"):
+                        _successful_results.append(f"{t_name} → {result_str}")
+
+                continue
+
+            # ---- JSON-in-text fallback (small models that ignore tool API) -- #
+            # Some models (e.g. llama3.2:1b) output JSON in the message body
+            # instead of using the tool_calls field.
+            if self._native_tools and not tool_calls_raw and self.tools.all() and content:
+                t_name, t_args = _parse_json_tool_call(content)
+                if t_name and t_args is not None and self.tools.get(t_name):
+                    t_args = _normalize_args(t_args, self.tools.get(t_name))
+                    _tool_call_counts[t_name] = _tool_call_counts.get(t_name, 0) + 1
+
+                    # Model is stuck — synthesize from what we already have
+                    total_calls = sum(_tool_call_counts.values())
+                    if _tool_call_counts[t_name] > _max_calls_per_tool or total_calls > _max_total_tool_calls:
+                        final_answer = self._synthesize(user_input, _successful_results)
+                        final_step = StepResult(type="final", content=final_answer, elapsed_ms=elapsed)
+                        run.steps.append(final_step)
+                        self._emit(final_step)
+                        run.final_answer = final_answer
+                        break
+
+                    self.memory.add_assistant(content)
+
+                    call_step = StepResult(
+                        type="tool_call",
+                        content=f"{t_name}({t_args})",
                         tool_name=t_name,
+                        tool_args=t_args,
+                        elapsed_ms=elapsed,
                     )
+                    run.steps.append(call_step)
+                    self._emit(call_step)
+
+                    result = self.tools.invoke(t_name, t_args)
+                    result_str = str(result)
+
+                    result_step = StepResult(type="tool_result", content=result_str, tool_name=t_name)
                     run.steps.append(result_step)
                     self._emit(result_step)
 
-                    self.memory.add_tool_result(t_name, result_str)
+                    if result_str.startswith("[Tool error]"):
+                        # Feed rich error back so the model can self-correct
+                        tool_obj = self.tools.get(t_name)
+                        param_hint = ", ".join(
+                            f"{p.name}: {p.type}" for p in tool_obj.params
+                        )
+                        self.memory.add_tool_result(
+                            t_name,
+                            f"Error: {result_str}\nExpected arguments: {param_hint}",
+                        )
+                    else:
+                        _successful_results.append(f"{t_name} → {result_str}")
+                        self.memory.add_tool_result(t_name, result_str)
 
-                continue  # loop back to get the next assistant message
+                    # After a successful result, nudge the model to answer if it has enough
+                    total_calls = sum(_tool_call_counts.values())
+                    if not result_str.startswith("[Tool error]") and total_calls >= 4:
+                        self.memory.add_user(
+                            "You have gathered enough information. "
+                            "Please now give your final answer in plain text. "
+                            "Do NOT call any more tools."
+                        )
+                        nudge_response = self.client.chat(
+                            model=self.model,
+                            messages=self.memory.to_messages(),
+                            options=self.model_options,
+                        )
+                        nudge_content = nudge_response.get("message", {}).get("content", "").strip()
+                        # Only accept it if it doesn't look like another tool call
+                        _, check_args = _parse_json_tool_call(nudge_content)
+                        if nudge_content and check_args is None:
+                            final_step = StepResult(type="final", content=nudge_content, elapsed_ms=elapsed)
+                            run.steps.append(final_step)
+                            self._emit(final_step)
+                            run.final_answer = nudge_content
+                            self.memory.add_assistant(nudge_content)
+                            break
+                        else:
+                            # Model still wants to use tools — remove nudge from memory and let it
+                            self.memory._history.pop()
+                    continue
 
             # ---- ReAct text parsing ---------------------------------- #
             if not self._native_tools and self.tools.all():
@@ -254,6 +457,9 @@ class Agent:
                     self._emit(step)
 
                 if t_name and t_args is not None:
+                    t_args = _normalize_args(t_args, self.tools.get(t_name))
+                    _tool_call_counts[t_name] = _tool_call_counts.get(t_name, 0) + 1
+
                     call_step = StepResult(
                         type="tool_call",
                         content=content,
@@ -271,7 +477,9 @@ class Agent:
                     run.steps.append(result_step)
                     self._emit(result_step)
 
-                    # Feed observation back
+                    if not result_str.startswith("[Tool error]"):
+                        _successful_results.append(f"{t_name} → {result_str}")
+
                     observation = content + f"\nObservation: {result_str}\n"
                     self.memory.add_assistant(observation)
                     continue
@@ -285,6 +493,23 @@ class Agent:
                     break
 
             # ---- Plain response (no tools or tool loop ended) -------- #
+            # Detect: model output looks like a JSON tool schema even though
+            # no tools are defined. Re-prompt once asking for plain text.
+            if _looks_like_tool_schema(content) and not self.tools.all():
+                self.memory.add_assistant(content)
+                self.memory.add_user(
+                    "Please answer in plain text only. "
+                    "Do not output JSON or function call syntax."
+                )
+                retry = self.client.chat(
+                    model=self.model,
+                    messages=self.memory.to_messages(),
+                    options=self.model_options,
+                )
+                content = retry.get("message", {}).get("content", "").strip() or content
+                self.memory._history.pop()   # remove the nudge from memory
+                self.memory._history.pop()   # remove the bad assistant turn
+
             final_step = StepResult(type="final", content=content, elapsed_ms=elapsed)
             run.steps.append(final_step)
             self._emit(final_step)
@@ -293,11 +518,46 @@ class Agent:
             break
 
         else:
+            # max_steps hit — try to salvage with synthesis
             run.success = False
             run.error = f"Exceeded max_steps ({self.max_steps})"
+            if _successful_results:
+                run.final_answer = self._synthesize(user_input, _successful_results)
 
         run.total_ms = (time.perf_counter() - t0) * 1000
         return run
+
+    def _synthesize(self, user_input: str, results: list[str]) -> str:
+        """
+        Called when the model is stuck in a tool loop but we have good results.
+        Makes one clean LLM call asking it to summarize what was found.
+        """
+        if not results:
+            return "I was unable to complete this task with the available tools."
+
+        results_text = "\n".join(f"- {r}" for r in results)
+        synthesis_messages = self.memory.to_messages() + [{
+            "role": "user",
+            "content": (
+                f"You have already gathered the following information using your tools:\n"
+                f"{results_text}\n\n"
+                f"Please now answer the original question directly using these results. "
+                f"Do not call any more tools. Original question: {user_input}"
+            ),
+        }]
+        try:
+            response = self.client.chat(
+                model=self.model,
+                messages=synthesis_messages,
+                options=self.model_options,
+            )
+            return response.get("message", {}).get("content", "").strip() or results_text
+        except Exception:
+            return results_text
+
+
+        """Convenience wrapper — returns just the final answer string."""
+        return self.run(user_input).final_answer
 
     def chat(self, user_input: str) -> str:
         """Convenience wrapper — returns just the final answer string."""

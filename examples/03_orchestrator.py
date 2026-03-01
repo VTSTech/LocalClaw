@@ -11,34 +11,57 @@ import sys
 import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from localclaw import Agent, Orchestrator, AgentCard
+from localclaw import Agent, Orchestrator, AgentCard, OllamaClient
 from localclaw.tools.builtins import BUILTIN_REGISTRY
 
+# ── Detect which model to use ──────────────────────────────────────
+_client = OllamaClient()
+_models = _client.list_models()
+
+def _pick(preferences):
+    """Pick the best available model from a preference list."""
+    for p in preferences:
+        for m in _models:
+            if p in m.lower():
+                return m
+    return _models[0] if _models else "llama3.2:1b"
+
+MAIN_MODEL   = _pick(["llama3.1:8b", "llama3.2:3b", "qwen2.5:7b", "mistral", "llama3.2:1b"])
+ROUTER_MODEL = _pick(["llama3.2:3b", "llama3.2:1b", "qwen2.5", MAIN_MODEL])
+
+print(f"Using model: {MAIN_MODEL}  |  router: {ROUTER_MODEL}\n")
+
 # ── Build specialist agents ────────────────────────────────────────
+# NOTE: Small models (1b/3b) work best WITHOUT tools for generative tasks.
+# They tend to output JSON schemas instead of code when tool schemas are present.
+# Only give tools to agents that genuinely need to compute something.
 
 coder = Agent(
-    model="llama3.1:8b",
-    tools=BUILTIN_REGISTRY.subset(["python_repl", "shell", "read_file", "write_file"]),
+    model=MAIN_MODEL,
     system_prompt=(
-        "You are an expert software engineer. Write clean, well-commented code. "
-        "Use the python_repl tool to verify your solutions when helpful."
+        "You are an expert software engineer. "
+        "When asked to write code, respond with clean, working Python code in a code block. "
+        "Include type hints and a brief docstring. Do not output JSON or schemas."
     ),
 )
 
 analyst = Agent(
-    model="llama3.1:8b",
-    tools=BUILTIN_REGISTRY.subset(["calculator", "python_repl"]),
+    model=MAIN_MODEL,
+    tools=BUILTIN_REGISTRY.subset(["calculator"]),
     system_prompt=(
-        "You are a data analyst and mathematician. Break down problems step-by-step. "
-        "Show your work. Use the calculator or python_repl for computations."
+        "You are a data analyst and mathematician. "
+        "Break down problems step-by-step and show your reasoning. "
+        "Use the calculator tool for arithmetic. "
+        "After getting a result, state your final answer in plain text."
     ),
 )
 
 writer = Agent(
-    model="llama3.1:8b",
+    model=MAIN_MODEL,
     system_prompt=(
         "You are a skilled writer. Produce clear, well-structured prose. "
-        "Adapt tone to context: professional for business, friendly for casual."
+        "Adapt tone to context: professional for business, friendly for casual. "
+        "Respond in plain text only."
     ),
 )
 
@@ -47,10 +70,10 @@ writer = Agent(
 orch = Orchestrator(
     agents=[
         AgentCard("coder",   coder,   "Writing, debugging, and explaining code"),
-        AgentCard("analyst", analyst, "Math problems, data analysis, statistics"),
+        AgentCard("analyst", analyst, "Math problems, data analysis, statistics, finance"),
         AgentCard("writer",  writer,  "Writing emails, summaries, creative content"),
     ],
-    router_model="llama3.2:3b",  # fast small model for routing
+    router_model=ROUTER_MODEL,
     mode="router",
 )
 
@@ -66,6 +89,6 @@ for task in tasks:
     print(f"Task: {task}")
     result = orch.run(task)
     print(f"Routed to: [{result.chosen_agent}]")
-    print(f"Answer: {result.final_answer[:400]}...")
-    print(f"Time: {result.total_ms:.0f}ms\n")
+    print(f"Answer:\n{result.final_answer}")
+    print(f"\nTime: {result.total_ms:.0f}ms")
     print("=" * 70 + "\n")

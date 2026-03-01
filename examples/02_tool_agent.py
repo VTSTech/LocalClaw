@@ -59,7 +59,7 @@ def convert_currency(amount: float, from_currency: str, to_currency: str) -> str
 
 
 # ── 2. Also include the built-in calculator ─────────────────────────
-for t in BUILTIN_REGISTRY.subset(["calculator", "python_repl"]).all():
+for t in BUILTIN_REGISTRY.subset(["calculator"]).all():
     registry.register(t)
 
 # ── 3. Live step hook for a nice trace ─────────────────────────────
@@ -76,9 +76,14 @@ def print_step(step: StepResult):
 
 # ── 4. Build the agent ─────────────────────────────────────────────
 agent = Agent(
-    model="qwen2.5-coder:0.5b",       # or qwen2.5:7b, mistral:7b, etc.
+    model="llama3.2:1b",       # or qwen2.5:7b, mistral:7b, etc.
     tools=registry,
-    system_prompt="You are a helpful assistant with access to tools. Use them when needed.",
+    system_prompt=(
+        "You are a helpful assistant with access to tools. "
+        "Use the appropriate tool ONCE to answer each part of the question, "
+        "then give your final answer in plain text. "
+        "Do not repeat tool calls or verify results with additional tools."
+    ),
     on_step=print_step,
     model_options={"temperature": 0.2},
 )

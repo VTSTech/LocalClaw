@@ -36,8 +36,8 @@ tool = BUILTIN_REGISTRY.tool
 # ================================================================== #
 
 @tool(
-    description="Evaluate a mathematical expression. Supports standard math functions.",
-    param_descriptions={"expression": "A Python-compatible math expression, e.g. '2 ** 10' or 'math.sqrt(144)'"},
+    description="Evaluate a mathematical expression. Supports +, -, *, /, **, sqrt(), log(), sin(), cos(), and all Python math functions.",
+    param_descriptions={"expression": "A Python math expression, e.g. '2 ** 10', 'sqrt(144)', 'math.log(100)'"},
 )
 def calculator(expression: str) -> str:
     """Safe math evaluator using Python's math module."""
