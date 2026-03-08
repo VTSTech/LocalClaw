@@ -102,6 +102,9 @@ def _fix_calculator_args(t_name: str, t_args: dict, user_input: str, prior_resul
         t_args = dict(t_args)
         t_args["expression"] = f"sqrt({expr})"
     return t_args
+
+
+def _looks_like_tool_schema(text: str) -> bool:
     """
     Returns True if the text looks like the model outputting a JSON
     function-call schema rather than a real answer. Catches patterns like:
