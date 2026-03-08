@@ -24,10 +24,10 @@ def _pick(preferences):
         for m in _models:
             if p in m.lower():
                 return m
-    return _models[0] if _models else "qwen2.5-coder:0.5b-instruct-q4_k_m"
+    return _models[0] if _models else "qwen3.5:0.8b"
 
-MAIN_MODEL   = _pick(["llama3.1:8b", "llama3.2:3b", "qwen2.5:7b", "mistral", "qwen2.5-coder:0.5b-instruct-q4_k_m"])
-ROUTER_MODEL = _pick(["llama3.2:3b", "qwen2.5-coder:0.5b-instruct-q4_k_m", "qwen2.5", MAIN_MODEL])
+MAIN_MODEL   = _pick(["llama3.1:8b", "llama3.2:3b", "qwen2.5:7b", "mistral", "qwen3.5:0.8b"])
+ROUTER_MODEL = _pick(["llama3.2:3b", "qwen3.5:0.8b", "qwen2.5", MAIN_MODEL])
 
 print(f"Using model: {MAIN_MODEL}  |  router: {ROUTER_MODEL}\n")
 
@@ -69,9 +69,9 @@ writer = Agent(
 
 orch = Orchestrator(
     agents=[
-        AgentCard("coder",   coder,   "Writing, debugging, and explaining code"),
-        AgentCard("analyst", analyst, "Math problems, data analysis, statistics, finance"),
-        AgentCard("writer",  writer,  "Writing emails, summaries, creative content"),
+        AgentCard("coder",   coder,   "Writing, debugging, and explaining code and programming tasks"),
+        AgentCard("analyst", analyst, "Math, arithmetic, financial calculations, statistics, numbers"),
+        AgentCard("writer",  writer,  "Writing emails, essays, summaries, and creative or professional prose"),
     ],
     router_model=ROUTER_MODEL,
     mode="router",

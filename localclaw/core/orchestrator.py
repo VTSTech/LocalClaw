@@ -116,11 +116,11 @@ class Orchestrator:
         names_list = list(self.agents.keys())
 
         prompt = (
-            f"You are a routing assistant. Given the user message below, "
-            f"respond with ONLY the name of the best agent from this list: {names_list}.\n\n"
+            f"You are a routing assistant. Your only job is to output one agent name.\n\n"
             f"Agents:\n{descriptions}\n\n"
             f"User message: {user_input}\n\n"
-            f"Respond with exactly one agent name and nothing else."
+            f"Which agent should handle this? Choose exactly one from: {names_list}\n"
+            f"Output only the agent name, nothing else."
         )
         response = self.client.chat(
             model=self.router_model,

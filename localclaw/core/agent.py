@@ -526,6 +526,28 @@ class Agent:
                     break
 
             # ---- Plain response (no tools or tool loop ended) -------- #
+            # Native tool model answered in plain text after only 1 tool call.
+            # If the original question likely needs more steps, nudge it to
+            # call the next tool rather than guessing from memory.
+            total_calls = sum(_tool_call_counts.values())
+            if (
+                self._native_tools
+                and self.tools.all()
+                and _successful_results
+                and total_calls == 1
+                and not tool_calls_raw
+            ):
+                results_so_far = "\n".join(f"- {r}" for r in _successful_results)
+                self.memory.add_assistant(content)
+                self.memory.add_user(
+                    f"You have gathered so far:\n{results_so_far}\n\n"
+                    f"The original question was: {user_input}\n\n"
+                    "If answering the question fully requires another tool call "
+                    "(e.g. a further calculation using the result above), call it now. "
+                    "Otherwise give your final answer in plain text."
+                )
+                continue
+
             # Detect: model output looks like a JSON tool schema even though
             # no tools are defined. Re-prompt once asking for plain text.
             if _looks_like_tool_schema(content) and not self.tools.all():
