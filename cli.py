@@ -16,6 +16,8 @@ Examples:
   localclaw chat --model llama3.1:8b --tools calculator,shell
   localclaw models
   localclaw tools
+
+Written by VTSTech — https://www.vts-tech.org — https://github.com/VTSTech/LocalClaw
 """
 
 import argparse

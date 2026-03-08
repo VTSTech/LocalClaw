@@ -4,6 +4,8 @@ A minimal, hackable agentic framework engineered to run **entirely locally** wit
 
 Inspired by the architecture of OpenClaw, rebuilt from scratch for local-first operation.
 
+**Written by [VTSTech](https://www.vts-tech.org)** · [GitHub](https://github.com/VTSTech/LocalClaw)
+
 ---
 
 ## Architecture
@@ -233,3 +235,13 @@ python examples/01_basic_agent.py
 python examples/02_tool_agent.py
 python examples/03_orchestrator.py
 ```
+
+---
+
+## About
+
+**LocalClaw** is written and maintained by **VTSTech**.
+
+- 🌐 Website: [https://www.vts-tech.org](https://www.vts-tech.org)
+- 📦 GitHub: [https://github.com/VTSTech/LocalClaw](https://github.com/VTSTech/LocalClaw)
+- 💻 More projects: [https://github.com/VTSTech](https://github.com/VTSTech)

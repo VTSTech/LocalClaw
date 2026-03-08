@@ -182,3 +182,5 @@ cython_debug/
 *.bak
 R0.zip
 *.zip
+examples/websocket/server.ts
+examples/websocket/frontend.tsx

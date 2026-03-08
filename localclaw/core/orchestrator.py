@@ -6,6 +6,8 @@ Two modes:
   1. Router mode  — a lightweight LLM decides which agent to call.
   2. Pipeline mode — agents run sequentially, each receiving the previous output.
   3. Parallel mode — agents run concurrently, results are merged.
+
+Written by VTSTech — https://www.vts-tech.org — https://github.com/VTSTech/LocalClaw
 """
 
 from __future__ import annotations

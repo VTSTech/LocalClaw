@@ -2,6 +2,8 @@
 LocalClaw — Memory
 Manages conversation history with a configurable sliding window and
 optional LLM-based summarization to compress older turns.
+
+Written by VTSTech — https://www.vts-tech.org — https://github.com/VTSTech/LocalClaw
 """
 
 from __future__ import annotations

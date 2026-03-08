@@ -2,6 +2,8 @@
 LocalClaw — Tool System
 Decorator-based tool registry that auto-generates Ollama-compatible JSON schemas
 from Python type hints and docstrings.
+
+Written by VTSTech — https://www.vts-tech.org — https://github.com/VTSTech/LocalClaw
 """
 
 import inspect

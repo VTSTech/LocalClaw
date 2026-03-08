@@ -11,6 +11,8 @@ use make_builtin_registry() instead:
 
     from localclaw.tools.builtins import make_builtin_registry
     agent = Agent(model="llama3.1:8b", tools=make_builtin_registry())
+
+Written by VTSTech — https://www.vts-tech.org — https://github.com/VTSTech/LocalClaw
 """
 
 from __future__ import annotations

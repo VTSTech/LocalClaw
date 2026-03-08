@@ -76,13 +76,15 @@ def print_step(step: StepResult):
 
 # ── 4. Build the agent ─────────────────────────────────────────────
 agent = Agent(
-    model="qwen2.5-coder:0.5b-instruct-q4_k_m",       # or qwen2.5:7b, mistral:7b, etc.
+    model="qwen2.5-coder:0.5b-instruct-q4_k_m",
     tools=registry,
     system_prompt=(
         "You are a helpful assistant with access to tools. "
-        "Use the appropriate tool ONCE to answer each part of the question, "
-        "then give your final answer in plain text. "
-        "Do not repeat tool calls or verify results with additional tools."
+        "For each part of a question, call the appropriate tool with the correct arguments. "
+        "When chaining calculations (e.g. 'what is X, and the sqrt of that'), "
+        "call the tool twice: first to get X, then call it again with sqrt(X) as the expression. "
+        "Never pass a plain number as a calculator expression — always write a math expression like sqrt(83521). "
+        "After all tools have been called, give your final answer in plain text."
     ),
     on_step=print_step,
     model_options={"temperature": 0.2},

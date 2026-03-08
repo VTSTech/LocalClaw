@@ -7,6 +7,8 @@ Supports:
   • Text-based ReAct fallback (for models without native tool support)
   • Streaming output
   • Hooks for custom logging / UI
+
+Written by VTSTech — https://www.vts-tech.org — https://github.com/VTSTech/LocalClaw
 """
 
 from __future__ import annotations
@@ -80,7 +82,26 @@ def _normalize_args(args: dict, tool) -> dict:
     return normalized
 
 
-def _looks_like_tool_schema(text: str) -> bool:
+def _fix_calculator_args(t_name: str, t_args: dict, user_input: str, prior_results: list[str]) -> dict:
+    """
+    Detect when a model passes a plain number as a calculator expression
+    (e.g. expression='83521') when the question implies a further operation
+    like sqrt. Rewrites the expression to the correct form.
+    """
+    if t_name != "calculator":
+        return t_args
+    expr = t_args.get("expression", "")
+    # Check if expression is just a plain number matching a prior result
+    try:
+        float(expr)
+    except (ValueError, TypeError):
+        return t_args  # already a real expression, leave it alone
+
+    q = user_input.lower()
+    if "sqrt" in q or "square root" in q:
+        t_args = dict(t_args)
+        t_args["expression"] = f"sqrt({expr})"
+    return t_args
     """
     Returns True if the text looks like the model outputting a JSON
     function-call schema rather than a real answer. Catches patterns like:
@@ -343,6 +364,7 @@ class Agent:
                             t_args = {}
 
                     t_args = _normalize_args(t_args, self.tools.get(t_name))
+                    t_args = _fix_calculator_args(t_name, t_args, user_input, _successful_results)
                     _tool_call_counts[t_name] = _tool_call_counts.get(t_name, 0) + 1
 
                     call_step = StepResult(
@@ -404,6 +426,7 @@ class Agent:
 
                     run._last_tool_args[t_name] = t_args
 
+                    t_args = _fix_calculator_args(t_name, t_args, user_input, _successful_results)
                     _tool_call_counts[t_name] = _tool_call_counts.get(t_name, 0) + 1
 
                     # Hard ceiling — synthesize from what we already have

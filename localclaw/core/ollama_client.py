@@ -2,6 +2,8 @@
 LocalClaw — Ollama Client
 Zero-dependency wrapper around the local Ollama HTTP API.
 Uses only Python stdlib (urllib + json) — no pip install required.
+
+Written by VTSTech — https://www.vts-tech.org — https://github.com/VTSTech/LocalClaw
 """
 
 from __future__ import annotations
