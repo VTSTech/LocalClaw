@@ -12,28 +12,60 @@ Written by VTSTech — https://www.vts-tech.org — https://github.com/VTSTech/L
 import sys
 import os
 import time
+import unicodedata
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from localclaw import Agent, OllamaClient
 from localclaw.tools.builtins import make_builtin_registry
 
 
+def normalize_text(text: str) -> str:
+    """Normalize text for comparison: lowercase, remove accents, strip whitespace."""
+    # Normalize unicode (NFD splits accents from base chars)
+    normalized = unicodedata.normalize('NFD', text.lower())
+    # Remove combining characters (accents)
+    without_accents = ''.join(c for c in normalized if unicodedata.category(c) != 'Mn')
+    return without_accents.strip()
+
+
 # Models to test (1B parameters or less)
 MODELS = [
-    "smollm:135m",
-    "qwen2.5:0.5b", 
+    "gemma3:270m",
+    "granite4:350m",
+    "granite3.1-moe:1b",
+    "qwen3:0.6b",
+    "qwen2.5:0.5b",
     "qwen2.5-coder:0.5b-instruct-q4_k_m",
     "tinyllama:latest",
     "llama3.2:1b",
 ]
 
-# Test cases
+# Test cases - 3 tests per category (15 total)
 TESTS = [
-    ("Simple Math", "What is 7 * 8? Answer with just the number.", None, "56"),
-    ("Reasoning", "I have 10 apples, give 3 to Bob and 2 to Alice. How many left? Just number.", None, "5"),
-    ("Capital", "What is the capital of Japan? One word.", None, "tokyo"),
-    ("Calc Tool", "Use calculator to compute 15 * 8", ["calculator"], "120"),
-    ("Code", "Write a Python function is_even(n) that returns True if n is even.", None, "def"),
+    # === SIMPLE MATH (3 tests) ===
+    ("Math: Multiply", "What is 7 * 8? Answer with just the number.", None, "56"),
+    ("Math: Add", "What is 25 + 17? Answer with just the number.", None, "42"),
+    ("Math: Divide", "What is 144 / 12? Answer with just the number.", None, "12"),
+
+    # === REASONING (3 tests) ===
+    ("Reasoning: Apples", "I have 10 apples, give 3 to Bob and 2 to Alice. How many left? Just number.", None, "5"),
+    ("Reasoning: Sequence", "What comes next in the sequence: 2, 4, 6, 8? Just the number.", None, "10"),
+    ("Reasoning: Logic", "If all cats are animals and Fluffy is a cat, what category does Fluffy belong to? Answer: animals (one word).", None, "animal"),
+
+    # === KNOWLEDGE (3 tests) ===
+    ("Knowledge: Japan", "What is the capital of Japan? One word.", None, "tokyo"),
+    ("Knowledge: France", "What is the capital of France? One word.", None, "paris"),
+    ("Knowledge: Brazil", "What is the capital of Brazil? One word, no accents.", None, "brasilia"),
+
+    # === CALC TOOL (3 tests) ===
+    ("Calc: Multiply", "Use calculator to compute 15 * 8", ["calculator"], "120"),
+    ("Calc: Divide", "Use calculator to compute 100 / 4", ["calculator"], "25"),
+    ("Calc: Power", "Use calculator to compute 2 ** 10 (2 to the power of 10)", ["calculator"], "1024"),
+
+    # === CODE (3 tests) ===
+    ("Code: is_even", "Write a Python function is_even(n) that returns True if n is even.", None, "def"),
+    ("Code: reverse", "Write a Python function reverse_string(s) that returns the string reversed.", None, "def"),
+    ("Code: max_num", "Write a Python function find_max(numbers) that returns the largest number in a list.", None, "def"),
 ]
 
 
@@ -43,10 +75,27 @@ def test_model(client: OllamaClient, model: str) -> dict:
     print(f"🧪 Testing: {model}")
     print(f"{'='*60}")
     
-    results = {"model": model, "passed": 0, "total": len(TESTS), "time": 0, "tests": {}}
+    results = {"model": model, "passed": 0, "total": len(TESTS), "time": 0, "tests": {}, "categories": {}}
+    current_category = None
+    category_passed = 0
+    category_total = 0
     
     for test_name, prompt, tools, expected in TESTS:
-        print(f"  📋 {test_name}...", end=" ", flush=True)
+        # Extract category from test name
+        category = test_name.split(":")[0]
+        
+        # Print category header when entering new category
+        if category != current_category:
+            if current_category is not None:
+                # Save previous category score
+                results["categories"][current_category] = {"passed": category_passed, "total": category_total}
+            current_category = category
+            category_passed = 0
+            category_total = 0
+            print(f"\n  📁 {category}")
+        
+        print(f"    • {test_name.split(': ')[1]}...", end=" ", flush=True)
+        category_total += 1
         
         try:
             registry = make_builtin_registry().subset(tools) if tools else None
@@ -65,8 +114,10 @@ def test_model(client: OllamaClient, model: str) -> dict:
             elapsed = time.time() - t0
             results["time"] += elapsed
             
-            passed = expected.lower() in response.lower()
+            passed = normalize_text(expected) in normalize_text(response)
             results["passed"] += int(passed)
+            if passed:
+                category_passed += 1
             results["tests"][test_name] = {"passed": passed, "time": elapsed, "response": response[:100]}
             
             status = "✅" if passed else "❌"
@@ -80,8 +131,20 @@ def test_model(client: OllamaClient, model: str) -> dict:
             results["tests"][test_name] = {"passed": False, "error": str(e)[:100]}
             print(f"❌ ERROR: {str(e)[:50]}")
     
+    # Save last category
+    if current_category is not None:
+        results["categories"][current_category] = {"passed": category_passed, "total": category_total}
+    
     pass_rate = results["passed"] / results["total"] * 100
-    print(f"\n  📊 Score: {results['passed']}/{results['total']} ({pass_rate:.0f}%) in {results['time']:.1f}s")
+    
+    # Print category summary
+    print(f"\n  📊 Categories:")
+    for cat, stats in results["categories"].items():
+        cat_rate = stats["passed"] / stats["total"] * 100 if stats["total"] > 0 else 0
+        bar = "█" * int(cat_rate / 10) + "░" * (10 - int(cat_rate / 10))
+        print(f"     {cat:<12} [{bar}] {stats['passed']}/{stats['total']} ({cat_rate:.0f}%)")
+    
+    print(f"\n  📈 Total: {results['passed']}/{results['total']} ({pass_rate:.0f}%) in {results['time']:.1f}s")
     
     return results
 
@@ -110,7 +173,7 @@ def main():
         all_results.append(result)
     
     # Rankings
-    print(f"\\n{'='*60}")
+    print(f"\n{'='*60}")
     print("🏆 RANKINGS (by pass rate, then speed)")
     print(f"{'='*60}")
     
@@ -123,8 +186,35 @@ def main():
     
     # Winner
     winner = sorted_results[0]
-    print(f"\\n✨ BEST MODEL (<=1B): {winner['model']}")
+    print(f"\n{'='*60}")
+    print(f"✨ BEST MODEL (<=1B): {winner['model']}")
     print(f"   Passed {winner['passed']}/{winner['total']} tests in {winner['time']:.1f}s")
+    
+    # Category breakdown for winner
+    if winner.get("categories"):
+        print(f"\n   📊 Category breakdown:")
+        for cat, stats in winner["categories"].items():
+            cat_rate = stats["passed"] / stats["total"] * 100 if stats["total"] > 0 else 0
+            bar = "█" * int(cat_rate / 10) + "░" * (10 - int(cat_rate / 10))
+            print(f"      {cat:<12} [{bar}] {stats['passed']}/{stats['total']}")
+    
+    # Category champions
+    print(f"\n{'='*60}")
+    print("🏅 CATEGORY CHAMPIONS")
+    print(f"{'='*60}")
+    
+    categories = ["Math", "Reasoning", "Knowledge", "Calc", "Code"]
+    for cat in categories:
+        best_for_cat = None
+        best_score = -1
+        for r in all_results:
+            if cat in r.get("categories", {}):
+                score = r["categories"][cat]["passed"]
+                if score > best_score or (score == best_score and (best_for_cat is None or r["time"] < best_for_cat["time"])):
+                    best_score = score
+                    best_for_cat = r
+        if best_for_cat:
+            print(f"   {cat:<12} 🏆 {best_for_cat['model']} ({best_score}/3)")
     
     # Save results
     output_path = os.path.join(os.path.dirname(__file__), "model_comparison_results.json")
