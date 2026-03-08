@@ -26,7 +26,9 @@ localclaw/
     ├── 03_orchestrator.py     # Multi-agent routing demo
     ├── 04_comprehensive_test.py  # Full test suite
     ├── 05_tool_tests.py       # Tool-specific tests
-    └── 06_interactive_chat.py # Interactive CLI chat
+    ├── 06_interactive_chat.py # Interactive CLI chat
+    ├── 07_model_comparison.py # Compare models on 15 tests (3 per category)
+    └── 08_robust_comparison.py # Progress-saving comparison for unstable connections
 ```
 
 ### Core design decisions
@@ -218,18 +220,58 @@ All other models fall back to **ReAct text-parsing** automatically.
 
 ---
 
-## Tested Small Models (<=1B parameters)
+## Tested Small Models (≤1B parameters)
 
-The following small models have been tested and work with LocalClaw:
+The following small models have been tested with a **15-test benchmark** (3 tests per category: Math, Reasoning, Knowledge, Calc Tool, Code):
 
-| Model | Parameters | Size | Speed | Quality | Tool Support |
-|-------|------------|------|-------|---------|--------------|
-| `qwen2.5:0.5b` | 494M | 379MB | ⚡ Fast | Good | ✅ Native |
-| `tinyllama:latest` | 1B | 608MB | 🐢 Medium | Good | ✅ Native |
-| `llama3.2:1b` | 1.2B | 1.2GB | 🐢 Slow | Best | ✅ Native |
-| `qwen2.5-coder:0.5b` | 494M | 379MB | ⚡ Fast | Code-focused | ✅ Native |
+### Rankings
 
-**Recommended for testing:** `qwen2.5:0.5b` - fastest with good quality for basic tasks.
+| Rank | Model | Score | Time | Math | Reason | Know | Calc | Code |
+|:----:|-------|------:|-----:|:----:|:------:|:----:|:----:|:----:|
+| 🥇 | `qwen2.5-coder:0.5b-instruct-q4_k_m` | **13/15 (87%)** | 108s | 3/3 | 2/3 | 3/3 | 3/3 | 3/3 |
+| 🥈 | `granite3.1-moe:1b` | 11/15 (73%) | 127s | 3/3 | 2/3 | 3/3 | 1/3 | 3/3 |
+| 🥉 | `qwen3:0.6b` | 10/15 (67%) | 442s | 3/3 | 2/3 | 2/3 | 0/3 | 3/3 |
+| 4 | `gemma3:270m` | 9/15 (60%) | 39s | 0/3 | 2/3 | 2/3 | 2/3 | 3/3 |
+| 5 | `granite4:350m` | 8/15 (53%) | 136s | 2/3 | 1/3 | 2/3 | 0/3 | 3/3 |
+| 6 | `qwen2.5:0.5b` | 7/15 (47%) | 48s | 2/3 | 0/3 | 2/3 | 0/3 | 3/3 |
+
+### Model Details
+
+| Model | Parameters | Size | Speed | Tool Support | Notes |
+|-------|------------|------|-------|--------------|-------|
+| `qwen2.5-coder:0.5b` | 494M | ~400MB | ⚡ Fast | ✅ Native | **Best overall** - excellent tool use, code-focused |
+| `granite3.1-moe:1b` | 1B (MoE) | ~700MB | 🚀 Fast | ✅ Native | Great speed/quality balance, MoE architecture |
+| `qwen3:0.6b` | 600M | ~450MB | 🐢 Slow | ✅ Native | Good accuracy but slow inference |
+| `gemma3:270m` | 270M | ~200MB | ⚡⚡ Fastest | ⚠️ Text | Tiny but capable, struggles with math |
+| `granite4:350m` | 350M | ~250MB | ⚡ Fast | ⚠️ Text | IBM's model, calc tools fail |
+| `llama3.2:1b` | 1.2B | ~1.3GB | 🐢 Slow | ✅ Native | Best quality but largest |
+| `tinyllama:latest` | 1.1B | ~600MB | 🐢 Slow | ✅ Native | Older model, decent but surpassed |
+| `qwen2.5:0.5b` | 494M | ~379MB | ⚡ Fast | ✅ Native | Base model, reasoning struggles |
+
+### Test Categories
+
+| Category | Tests | What it measures |
+|----------|-------|------------------|
+| **Math** | Multiply, Add, Divide | Basic arithmetic without tools |
+| **Reasoning** | Apples, Sequence, Logic | Multi-step reasoning and deduction |
+| **Knowledge** | Japan, France, Brazil capitals | World knowledge recall |
+| **Calc** | Multiply, Divide, Power | Tool usage with calculator |
+| **Code** | is_even, reverse, max_num | Python function generation |
+
+### Recommendations
+
+- **Best overall**: `qwen2.5-coder:0.5b-instruct-q4_k_m` - wins on accuracy and speed
+- **Fastest**: `gemma3:270m` - if speed matters more than accuracy
+- **Best reasoning**: `granite3.1-moe:1b` - MoE architecture shows promise
+- **Avoid**: `smollm:135m` - returns empty responses, not usable
+
+### Known Issues with Small Models
+
+Small models may:
+1. **Repeat the last number** in sequence questions (e.g., "2,4,6,8 → ?" returns "8")
+2. **Answer with the category** instead of the type (e.g., "Fluffy is a Cat" not "animal")
+3. **Hallucinate tool names** (e.g., `calculate_expression` instead of `calculator`) - LocalClaw handles this with fuzzy matching
+4. **Pass wrong arguments** to tools - LocalClaw auto-fixes common patterns
 
 ---
 
