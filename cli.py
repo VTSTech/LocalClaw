@@ -119,7 +119,8 @@ def cmd_models(args):
         print(yellow("No models found. Pull one with: ollama pull llama3.2:3b"))
         return
 
-    print(bold(f"\n{'Model':<40} {'Tool support':>12}"))
+    print(bold("\n🦞 LocalClaw Models") + dim(" · VTSTech"))
+    print(bold(f"{'Model':<40} {'Tool support':>12}"))
     print(dim("─" * 54))
     for m in sorted(models):
         support = green("✓ native") if client.model_supports_tools(m) else dim("  ReAct")
@@ -129,7 +130,8 @@ def cmd_models(args):
 
 def cmd_tools(args):
     tools = BUILTIN_REGISTRY.all()
-    print(bold(f"\n{'Tool':<20} Description"))
+    print(bold("\n🦞 LocalClaw Tools") + dim(" · VTSTech"))
+    print(bold(f"{'Tool':<20} Description"))
     print(dim("─" * 70))
     for t in tools:
         params = ", ".join(
@@ -151,6 +153,7 @@ def cmd_run(args):
         sys.exit(1)
 
     agent = _build_agent(args, client)
+    print(bold("🦞 LocalClaw") + dim(" · VTSTech"))
     print(f"Prompt: {args.prompt}")
     if args.stream and not agent.tools.all():
         # Streaming mode — only available without tools
@@ -182,10 +185,11 @@ def cmd_chat(args):
 
     agent = _build_agent(args, client)
     tools_label = f" + tools: {args.tools}" if args.tools else ""
-    print(bold(f"\n🦞 LocalClaw chat") + dim(f"  [{args.model}{tools_label}]"))
+    print(bold(f"\n🦞 LocalClaw chat") + dim(f"  [{args.model}{tools_label}] · VTSTech"))
     print(dim("  Type 'exit', 'quit', or Ctrl+C to quit."))
     print(dim("  Type '/reset' to clear conversation history."))
     print(dim("  Type '/tools' to list available tools."))
+    print(dim("  ─────────────────────────────────────"))
     print()
 
     try:
@@ -253,7 +257,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     parser = argparse.ArgumentParser(
         prog="localclaw",
-        description="🦞 LocalClaw — local agentic AI powered by Ollama",
+        description="🦞 LocalClaw — local agentic AI powered by Ollama · VTSTech",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=textwrap.dedent("""
         examples:
@@ -264,6 +268,8 @@ def build_parser() -> argparse.ArgumentParser:
           localclaw chat --tools calculator,shell,python_repl
           localclaw models
           localclaw tools
+
+        Written by VTSTech — https://www.vts-tech.org — https://github.com/VTSTech/LocalClaw
         """),
     )
 
