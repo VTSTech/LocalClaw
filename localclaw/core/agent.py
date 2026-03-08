@@ -87,10 +87,30 @@ def _fix_calculator_args(t_name: str, t_args: dict, user_input: str, prior_resul
     Detect when a model passes a plain number as a calculator expression
     (e.g. expression='83521') when the question implies a further operation
     like sqrt. Rewrites the expression to the correct form.
+    
+    Also handles cases where the model uses alternative argument names
+    like 'base'/'exponent' instead of 'expression'.
     """
     if t_name != "calculator":
         return t_args
+    
+    t_args = dict(t_args)  # Make a copy
+    
+    # Handle alternative argument formats for power/exponent operations
+    if "expression" not in t_args:
+        base = t_args.get("base") or t_args.get("number") or t_args.get("x") or t_args.get("value")
+        exp = t_args.get("exponent") or t_args.get("power") or t_args.get("n") or t_args.get("p")
+        
+        if base is not None:
+            if exp is not None:
+                # Power operation: base ** exp
+                t_args["expression"] = f"{base} ** {exp}"
+            else:
+                # Just a single value - maybe needs sqrt or other operation?
+                t_args["expression"] = str(base)
+    
     expr = t_args.get("expression", "")
+    
     # Check if expression is just a plain number matching a prior result
     try:
         float(expr)
@@ -99,9 +119,82 @@ def _fix_calculator_args(t_name: str, t_args: dict, user_input: str, prior_resul
 
     q = user_input.lower()
     if "sqrt" in q or "square root" in q:
-        t_args = dict(t_args)
         t_args["expression"] = f"sqrt({expr})"
     return t_args
+
+
+def _fuzzy_match_tool_name(hallucinated_name: str, tools_registry) -> str | None:
+    """
+    Small models often hallucinate tool names. This function attempts to
+    match a hallucinated name to a real tool name using various heuristics.
+    
+    Examples:
+        "calculate_expression" -> "calculator"
+        "get_weather_info" -> "get_weather"
+        "currency_convert" -> "convert_currency"
+    
+    Returns the matched tool name or None if no match found.
+    """
+    # First, try exact match
+    if tools_registry.get(hallucinated_name):
+        return hallucinated_name
+    
+    real_names = [t.name for t in tools_registry.all()]
+    lower_hallucinated = hallucinated_name.lower().replace("_", "")
+    
+    # Strategy 1: Check if any real tool name is a substring of the hallucinated name
+    for real_name in real_names:
+        lower_real = real_name.lower().replace("_", "")
+        if lower_real in lower_hallucinated or lower_hallucinated in lower_real:
+            return real_name
+    
+    # Strategy 2: Check for common word patterns (e.g., "calculate" -> "calculator")
+    word_mappings = {
+        "calculate": "calculator",
+        "calc": "calculator",
+        "math": "calculator",
+        "compute": "calculator",
+        "eval": "calculator",
+        "expression": "calculator",
+        "power": "calculator",
+        "pow": "calculator",
+        "square": "calculator",
+        "sqrt": "calculator",
+        "root": "calculator",
+        "add": "calculator",
+        "subtract": "calculator",
+        "multiply": "calculator",
+        "divide": "calculator",
+        "weather": "get_weather",
+        "currency": "convert_currency",
+        "convert": "convert_currency",
+        "money": "convert_currency",
+        "shell": "shell",
+        "bash": "shell",
+        "cmd": "shell",
+        "command": "shell",
+        "read": "read_file",
+        "write": "write_file",
+        "file": "read_file",
+        "python": "python_repl",
+        "repl": "python_repl",
+        "code": "python_repl",
+    }
+    
+    for keyword, tool_hint in word_mappings.items():
+        if keyword in lower_hallucinated:
+            for real_name in real_names:
+                if tool_hint in real_name or real_name == tool_hint:
+                    return real_name
+    
+    # Strategy 3: Levenshtein-like similarity (first 4+ chars match)
+    for real_name in real_names:
+        lower_real = real_name.lower()
+        if len(lower_real) >= 4 and len(lower_hallucinated) >= 4:
+            if lower_real[:4] == lower_hallucinated[:4]:
+                return real_name
+    
+    return None
 
 
 def _looks_like_tool_schema(text: str) -> bool:
@@ -398,6 +491,13 @@ class Agent:
             # instead of using the tool_calls field.
             if self._native_tools and not tool_calls_raw and self.tools.all() and content:
                 t_name, t_args = _parse_json_tool_call(content)
+                
+                # Try fuzzy matching if exact tool name doesn't exist
+                if t_name and t_args is not None and not self.tools.get(t_name):
+                    fuzzy_name = _fuzzy_match_tool_name(t_name, self.tools)
+                    if fuzzy_name:
+                        t_name = fuzzy_name
+                
                 if t_name and t_args is not None and self.tools.get(t_name):
                     t_args = _normalize_args(t_args, self.tools.get(t_name))
 
@@ -592,6 +692,11 @@ class Agent:
                 self.memory._history.pop()   # remove the nudge from memory
                 self.memory._history.pop()   # remove the bad assistant turn
 
+            # Clean JSON from final answer if needed
+            # Use successful tool results as fallback if available
+            fallback_text = "\n".join(_successful_results) if _successful_results else content
+            content = self._clean_json_from_response(content, fallback_text)
+
             final_step = StepResult(type="final", content=content, elapsed_ms=elapsed)
             run.steps.append(final_step)
             self._emit(final_step)
@@ -633,9 +738,42 @@ class Agent:
                 messages=synthesis_messages,
                 options=self.model_options,
             )
-            return response.get("message", {}).get("content", "").strip() or results_text
+            content = response.get("message", {}).get("content", "").strip()
+            # Clean up any JSON tool schemas from the response
+            content = self._clean_json_from_response(content, results_text)
+            return content or results_text
         except Exception:
             return results_text
+
+    def _clean_json_from_response(self, content: str, fallback: str = "") -> str:
+        """
+        Remove JSON tool-call schemas from a response.
+        Small models sometimes output tool schemas instead of plain text answers.
+        Returns the fallback if the content is just a tool schema.
+        """
+        if not content:
+            return fallback
+        
+        # Check if this looks like a tool schema JSON
+        if not _looks_like_tool_schema(content):
+            return content
+        
+        # If the entire response is just a tool schema, use the fallback
+        # (which should contain actual results)
+        try:
+            cleaned = re.sub(r"```(?:json)?", "", content).strip().rstrip("`").strip()
+            start = cleaned.find("{")
+            end = cleaned.rfind("}")
+            if start != -1 and end != -1:
+                obj = json.loads(cleaned[start:end + 1])
+                # If it's a tool call schema (has name + arguments/parameters)
+                if "name" in obj and ("arguments" in obj or "parameters" in obj):
+                    # This is just a tool call, not an answer - use fallback
+                    return fallback if fallback else content
+        except (json.JSONDecodeError, TypeError):
+            pass
+        
+        return content
 
     def chat(self, user_input: str) -> str:
         """Convenience wrapper — returns just the final answer string."""

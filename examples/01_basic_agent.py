@@ -25,8 +25,16 @@ print("✓  Ollama is running")
 print(f"   Available models: {client.list_models()}\n")
 
 # ── 2. Create an agent ─────────────────────────────────────────────
+# Recommended models (<=1B parameters, tested and working):
+#   - qwen2.5:0.5b      (494M, fastest, good quality)
+#   - tinyllama:latest  (1B, medium speed, good quality)
+#   - llama3.2:1b       (1.2B, slower, best quality)
+#
+# Set LOCALCLAW_MODEL env var to override, or change here
+MODEL = os.environ.get("LOCALCLAW_MODEL", "qwen2.5:0.5b")
+
 agent = Agent(
-    model="qwen2.5-coder:0.5b-instruct-q4_k_m",          # change to any model you have pulled
+    model=MODEL,
     system_prompt="You are a concise and helpful assistant. Keep answers brief.",
     model_options={"temperature": 0.7},
 )

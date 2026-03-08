@@ -75,16 +75,15 @@ def print_step(step: StepResult):
 
 
 # ── 4. Build the agent ─────────────────────────────────────────────
+# Set LOCALCLAW_MODEL env var to override, or change here
+MODEL = os.environ.get("LOCALCLAW_MODEL", "qwen2.5-coder:0.5b-instruct-q4_k_m")
+
 agent = Agent(
-    model="qwen2.5-coder:0.5b-instruct-q4_k_m",
+    model=MODEL,
     tools=registry,
     system_prompt=(
         "You are a helpful assistant with access to tools. "
-        "For each part of a question, call the appropriate tool with the correct arguments. "
-        "When chaining calculations (e.g. 'what is X, and the sqrt of that'), "
-        "call the tool twice: first to get X, then call it again with sqrt(X) as the expression. "
-        "Never pass a plain number as a calculator expression — always write a math expression like sqrt(83521). "
-        "After all tools have been called, give your final answer in plain text."
+        "Call tools when needed. Give brief final answers after getting results."
     ),
     on_step=print_step,
     model_options={"temperature": 0.2},

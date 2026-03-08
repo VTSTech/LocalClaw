@@ -21,9 +21,12 @@ localclaw/
 ├── tools/
 │   └── builtins.py        # Ready-to-use tools: calculator, shell, file I/O, HTTP, REPL
 └── examples/
-    ├── 01_basic_agent.py
-    ├── 02_tool_agent.py
-    └── 03_orchestrator.py
+    ├── 01_basic_agent.py      # Simple Q&A demo
+    ├── 02_tool_agent.py       # Tool calling demo
+    ├── 03_orchestrator.py     # Multi-agent routing demo
+    ├── 04_comprehensive_test.py  # Full test suite
+    ├── 05_tool_tests.py       # Tool-specific tests
+    └── 06_interactive_chat.py # Interactive CLI chat
 ```
 
 ### Core design decisions
@@ -206,12 +209,27 @@ The following model families support native tool calling in Ollama and are auto-
 
 - `llama3.1`, `llama3.2`, `llama3-groq-tool-use`
 - `mistral`, `mixtral`, `mistral-nemo`
-- `qwen2`, `qwen2.5`
+- `qwen2`, `qwen2.5`, `qwen2.5-coder`
 - `command-r`
 - `hermes` (function calling variants)
 - `nemotron`
 
 All other models fall back to **ReAct text-parsing** automatically.
+
+---
+
+## Tested Small Models (<=1B parameters)
+
+The following small models have been tested and work with LocalClaw:
+
+| Model | Parameters | Size | Speed | Quality | Tool Support |
+|-------|------------|------|-------|---------|--------------|
+| `qwen2.5:0.5b` | 494M | 379MB | ⚡ Fast | Good | ✅ Native |
+| `tinyllama:latest` | 1B | 608MB | 🐢 Medium | Good | ✅ Native |
+| `llama3.2:1b` | 1.2B | 1.2GB | 🐢 Slow | Best | ✅ Native |
+| `qwen2.5-coder:0.5b` | 494M | 379MB | ⚡ Fast | Code-focused | ✅ Native |
+
+**Recommended for testing:** `qwen2.5:0.5b` - fastest with good quality for basic tasks.
 
 ---
 
@@ -229,11 +247,36 @@ All other models fall back to **ReAct text-parsing** automatically.
 
 ```bash
 # Make sure Ollama is serving and you have a model pulled
-ollama pull llama3.1:8b
+ollama pull qwen2.5-coder:0.5b-instruct-q4_k_m
 
+# Or use a remote Ollama instance by editing localclaw/core/ollama_client.py
+
+# Run examples
 python examples/01_basic_agent.py
 python examples/02_tool_agent.py
 python examples/03_orchestrator.py
+
+# Test suite
+python examples/04_comprehensive_test.py
+python examples/05_tool_tests.py
+
+# Interactive chat
+python examples/06_interactive_chat.py
+```
+
+### Remote Ollama Configuration
+
+To use a remote Ollama instance, edit `localclaw/core/ollama_client.py`:
+
+```python
+# LOCAL OLLAMA (default):
+# DEFAULT_BASE_URL = "http://localhost:11434"
+#
+# REMOTE OLLAMA (cloudflare tunnel):
+DEFAULT_BASE_URL = "https://your-tunnel.trycloudflare.com"
+
+# Timeout for remote connections (30 minutes recommended)
+DEFAULT_TIMEOUT = 1800.0
 ```
 
 ---

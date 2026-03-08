@@ -14,7 +14,21 @@ import urllib.error
 from typing import Any, Iterator
 
 
+# ═══════════════════════════════════════════════════════════════════════════════
+# OLLAMA HOST CONFIGURATION
+# ═══════════════════════════════════════════════════════════════════════════════
+# Uncomment ONE of the following lines to switch between local and remote Ollama:
+#
+# LOCAL OLLAMA (default):
 DEFAULT_BASE_URL = "http://localhost:11434"
+#
+# REMOTE OLLAMA (cloudflare tunnel):
+#DEFAULT_BASE_URL = "https://your-tunnel.trycloudflare.com"
+#
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# Default timeout: 30 minutes (1800 seconds) for remote connections
+DEFAULT_TIMEOUT = 1800.0
 
 
 class OllamaError(Exception):
@@ -34,7 +48,7 @@ class OllamaClient:
         Request timeout in seconds
     """
 
-    def __init__(self, base_url: str = DEFAULT_BASE_URL, timeout: float = 120.0):
+    def __init__(self, base_url: str = DEFAULT_BASE_URL, timeout: float = DEFAULT_TIMEOUT):
         self.base_url = base_url.rstrip("/")
         self.timeout = timeout
 
@@ -63,7 +77,7 @@ class OllamaClient:
         url = f"{self.base_url}{endpoint}"
         req = urllib.request.Request(url, method="GET")
         try:
-            with urllib.request.urlopen(req, timeout=10) as resp:
+            with urllib.request.urlopen(req, timeout=self.timeout) as resp:
                 return json.loads(resp.read().decode("utf-8"))
         except urllib.error.HTTPError as e:
             raise OllamaError(f"HTTP {e.code}") from e

@@ -1,0 +1,166 @@
+[
+  {
+    "model": "smollm:135m",
+    "passed": 2,
+    "total": 5,
+    "time": 201.02618956565857,
+    "tests": {
+      "Simple Math": {
+        "passed": false,
+        "error": "HTTP 524: error code: 524"
+      },
+      "Reasoning": {
+        "passed": false,
+        "time": 5.105288028717041,
+        "response": "To find the number of left, we need to count the number of apples given to Bob and Alice. We can do "
+      },
+      "Capital": {
+        "passed": true,
+        "time": 22.039321899414062,
+        "response": "While the capital of Japan is Tokyo, it's not just a single city, but a complex and multifaceted ent"
+      },
+      "Calc Tool": {
+        "passed": false,
+        "time": 109.38279485702515,
+        "response": "Here is a Python function that computes 15 * 8:\n\n```python\ndef compute_15_8(num1, num2):\n    result "
+      },
+      "Code": {
+        "passed": true,
+        "time": 4.498784780502319,
+        "response": "Here is a Python function that implements this behavior:\n\n```python\ndef is_even(n):\n    return n % 2"
+      }
+    }
+  },
+  {
+    "model": "qwen2.5:0.5b",
+    "passed": 2,
+    "total": 5,
+    "time": 43.96175026893616,
+    "tests": {
+      "Simple Math": {
+        "passed": false,
+        "time": 3.9994897842407227,
+        "response": "64"
+      },
+      "Reasoning": {
+        "passed": false,
+        "time": 2.121311902999878,
+        "response": "7"
+      },
+      "Capital": {
+        "passed": true,
+        "time": 1.9893443584442139,
+        "response": "Tokyo"
+      },
+      "Calc Tool": {
+        "passed": false,
+        "time": 19.614184141159058,
+        "response": ""
+      },
+      "Code": {
+        "passed": true,
+        "time": 16.237420082092285,
+        "response": "```python\ndef is_even(n):\n    \"\"\"\n    Check if a number is even.\n\n    Args:\n    n (int): The number "
+      }
+    }
+  },
+  {
+    "model": "qwen2.5-coder:0.5b-instruct-q4_k_m",
+    "passed": 5,
+    "total": 5,
+    "time": 67.29078650474548,
+    "tests": {
+      "Simple Math": {
+        "passed": true,
+        "time": 11.23509955406189,
+        "response": "56"
+      },
+      "Reasoning": {
+        "passed": true,
+        "time": 3.5918936729431152,
+        "response": "10 - 3 - 2 = 5"
+      },
+      "Capital": {
+        "passed": true,
+        "time": 1.8375988006591797,
+        "response": "Tokyo"
+      },
+      "Calc Tool": {
+        "passed": true,
+        "time": 41.37929892539978,
+        "response": "- calculator \u2192 120\n- calculator \u2192 120"
+      },
+      "Code": {
+        "passed": true,
+        "time": 9.246895551681519,
+        "response": "```python\ndef is_even(n):\n    \"\"\"\n    Check if the given number n is even.\n\n    Args:\n    n (int): T"
+      }
+    }
+  },
+  {
+    "model": "tinyllama:latest",
+    "passed": 2,
+    "total": 5,
+    "time": 192.38714575767517,
+    "tests": {
+      "Simple Math": {
+        "passed": false,
+        "time": 11.677879810333252,
+        "response": "7 * 8 = 48"
+      },
+      "Reasoning": {
+        "passed": false,
+        "time": 37.23459196090698,
+        "response": "To find the number of remaining apples after giving 3 to Bob and 2 to Alice, you can use the followi"
+      },
+      "Capital": {
+        "passed": true,
+        "time": 17.158511638641357,
+        "response": "Japan's capital is Tokyo."
+      },
+      "Calc Tool": {
+        "passed": false,
+        "time": 93.16661620140076,
+        "response": "Sure, here's an example of how to use the calculator tool in Python to compute 15 * 8:\n\n```python\nim"
+      },
+      "Code": {
+        "passed": true,
+        "time": 33.14954614639282,
+        "response": "```python\ndef is_even(n):\n    \"\"\"\n    Checks if a given number is even.\n\n    Args:\n        n (int): "
+      }
+    }
+  },
+  {
+    "model": "llama3.2:1b",
+    "passed": 4,
+    "total": 5,
+    "time": 127.77369427680969,
+    "tests": {
+      "Simple Math": {
+        "passed": true,
+        "time": 12.247775316238403,
+        "response": "56"
+      },
+      "Reasoning": {
+        "passed": false,
+        "time": 3.9921464920043945,
+        "response": "8"
+      },
+      "Capital": {
+        "passed": true,
+        "time": 1.953575611114502,
+        "response": "Tokyo."
+      },
+      "Calc Tool": {
+        "passed": true,
+        "time": 78.89434480667114,
+        "response": "The result of 120 * 8 is 960."
+      },
+      "Code": {
+        "passed": true,
+        "time": 30.68585205078125,
+        "response": "```python\ndef is_even(n):\n    \"\"\"\n    Returns True if n is even, False otherwise.\n\n    Args:\n       "
+      }
+    }
+  }
+]
