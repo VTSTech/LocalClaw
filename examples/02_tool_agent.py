@@ -76,7 +76,7 @@ def print_step(step: StepResult):
 
 # ── 4. Build the agent ─────────────────────────────────────────────
 agent = Agent(
-    model="qwen3.5:0.8b",       # or qwen2.5:7b, mistral:7b, etc.
+    model="qwen2.5-coder:0.5b-instruct-q4_k_m",       # or qwen2.5:7b, mistral:7b, etc.
     tools=registry,
     system_prompt=(
         "You are a helpful assistant with access to tools. "
@@ -88,7 +88,7 @@ agent = Agent(
     model_options={"temperature": 0.2},
 )
 
-print("=== Multi-tool agent demo ===\n")
+print(f"=== Multi-tool agent demo ({agent.model}) ===\n")
 
 queries = [
     "What's the weather in Tokyo, and how much is 500 JPY in EUR?",

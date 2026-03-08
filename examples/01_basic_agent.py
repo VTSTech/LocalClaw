@@ -30,7 +30,7 @@ agent = Agent(
     system_prompt="You are a concise and helpful assistant. Keep answers brief.",
     model_options={"temperature": 0.7},
 )
-
+print(f"   Using model: {agent.model}\n")
 # ── 3. Single-turn chat ────────────────────────────────────────────
 answer = agent.chat("What is the capital of France, and why is it historically significant?")
 print("Answer:", answer)
