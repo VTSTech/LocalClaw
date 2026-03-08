@@ -122,10 +122,16 @@ class Orchestrator:
             f"Which agent should handle this? Choose exactly one from: {names_list}\n"
             f"Output only the agent name, nothing else."
         )
-        response = self.client.chat(
-            model=self.router_model,
-            messages=[{"role": "user", "content": prompt}],
-        )
+        # Use a short timeout — routing should be fast; fall back on failure
+        router_client = OllamaClient(base_url=self.client.base_url, timeout=30.0)
+        try:
+            response = router_client.chat(
+                model=self.router_model,
+                messages=[{"role": "user", "content": prompt}],
+            )
+        except Exception:
+            return next(iter(self.agents))  # fallback to first agent on timeout/error
+
         chosen = response.get("message", {}).get("content", "").strip().strip('"').strip("'")
 
         # Fuzzy match if the model added extra text

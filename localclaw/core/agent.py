@@ -542,8 +542,9 @@ class Agent:
                 self.memory.add_user(
                     f"You have gathered so far:\n{results_so_far}\n\n"
                     f"The original question was: {user_input}\n\n"
-                    "If answering the question fully requires another tool call "
-                    "(e.g. a further calculation using the result above), call it now. "
+                    "If the question requires further calculation, call the tool with the "
+                    "correct next expression using the result above as input (do NOT pass "
+                    "the raw result as the expression — compute something new with it). "
                     "Otherwise give your final answer in plain text."
                 )
                 continue
