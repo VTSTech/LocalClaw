@@ -24,10 +24,10 @@ def _pick(preferences):
         for m in _models:
             if p in m.lower():
                 return m
-    return _models[0] if _models else "llama3.2:1b"
+    return _models[0] if _models else "qwen2.5-coder:0.5b-instruct-q4_k_m"
 
-MAIN_MODEL   = _pick(["llama3.1:8b", "llama3.2:3b", "qwen2.5:7b", "mistral", "llama3.2:1b"])
-ROUTER_MODEL = _pick(["llama3.2:3b", "llama3.2:1b", "qwen2.5", MAIN_MODEL])
+MAIN_MODEL   = _pick(["llama3.1:8b", "llama3.2:3b", "qwen2.5:7b", "mistral", "qwen2.5-coder:0.5b-instruct-q4_k_m"])
+ROUTER_MODEL = _pick(["llama3.2:3b", "qwen2.5-coder:0.5b-instruct-q4_k_m", "qwen2.5", MAIN_MODEL])
 
 print(f"Using model: {MAIN_MODEL}  |  router: {ROUTER_MODEL}\n")
 

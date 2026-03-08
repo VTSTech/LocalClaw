@@ -147,7 +147,7 @@ class OllamaClient:
         tool_families = (
             "llama3", "llama3.1", "llama3.2", "llama3.3",
             "mistral", "mixtral", "mistral-nemo",
-            "qwen2", "qwen2.5",
+            "qwen2", "qwen2.5", "qwen3", "qwen35",
             "command-r", "firefunction", "hermes",
             "llama3-groq-tool-use", "nemotron",
         )

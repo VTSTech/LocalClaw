@@ -26,7 +26,7 @@ print(f"   Available models: {client.list_models()}\n")
 
 # ── 2. Create an agent ─────────────────────────────────────────────
 agent = Agent(
-    model="llama3.2:1b",          # change to any model you have pulled
+    model="qwen2.5-coder:0.5b-instruct-q4_k_m",          # change to any model you have pulled
     system_prompt="You are a concise and helpful assistant. Keep answers brief.",
     model_options={"temperature": 0.7},
 )

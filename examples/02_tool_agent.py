@@ -76,7 +76,7 @@ def print_step(step: StepResult):
 
 # ── 4. Build the agent ─────────────────────────────────────────────
 agent = Agent(
-    model="llama3.2:1b",       # or qwen2.5:7b, mistral:7b, etc.
+    model="qwen2.5-coder:0.5b-instruct-q4_k_m",       # or qwen2.5:7b, mistral:7b, etc.
     tools=registry,
     system_prompt=(
         "You are a helpful assistant with access to tools. "

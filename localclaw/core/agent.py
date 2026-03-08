@@ -309,8 +309,9 @@ class Agent:
         # Loop guards
         _tool_call_counts: dict[str, int] = {}  # per-tool call counter
         _successful_results: list[str] = []      # accumulate good results for synthesis
-        _max_calls_per_tool = 3
-        _max_total_tool_calls = 6               # hard ceiling across all tools
+        _successful_tools: set[str] = set()      # track which tools have returned good results
+        _max_calls_per_tool = 2
+        _max_total_tool_calls = 4               # hard ceiling across all tools
 
         for _ in range(self.max_steps):
             step_t0 = time.perf_counter()
@@ -374,9 +375,38 @@ class Agent:
                 t_name, t_args = _parse_json_tool_call(content)
                 if t_name and t_args is not None and self.tools.get(t_name):
                     t_args = _normalize_args(t_args, self.tools.get(t_name))
+
+                    # Intercept repeat calls only when args are identical — the model is
+                    # truly stuck. Different args = legitimate chained call (e.g. sqrt after **).
+                    if not hasattr(run, '_last_tool_args'):
+                        run._last_tool_args = {}
+                    already_succeeded = t_name in _successful_tools
+                    same_args = run._last_tool_args.get(t_name) == t_args
+                    if already_succeeded and same_args:
+                        pending = [
+                            t.name for t in self.tools.all()
+                            if t.name not in _successful_tools
+                        ]
+                        if pending:
+                            self.memory.add_user(
+                                f"You already have the result for {t_name} with those arguments. "
+                                f"Please call {pending[0]} next to complete the answer."
+                            )
+                        else:
+                            # All tools done — synthesize now
+                            final_answer = self._synthesize(user_input, _successful_results)
+                            final_step = StepResult(type="final", content=final_answer, elapsed_ms=elapsed)
+                            run.steps.append(final_step)
+                            self._emit(final_step)
+                            run.final_answer = final_answer
+                            break
+                        continue
+
+                    run._last_tool_args[t_name] = t_args
+
                     _tool_call_counts[t_name] = _tool_call_counts.get(t_name, 0) + 1
 
-                    # Model is stuck — synthesize from what we already have
+                    # Hard ceiling — synthesize from what we already have
                     total_calls = sum(_tool_call_counts.values())
                     if _tool_call_counts[t_name] > _max_calls_per_tool or total_calls > _max_total_tool_calls:
                         final_answer = self._synthesize(user_input, _successful_results)
@@ -417,14 +447,17 @@ class Agent:
                         )
                     else:
                         _successful_results.append(f"{t_name} → {result_str}")
+                        _successful_tools.add(t_name)
                         self.memory.add_tool_result(t_name, result_str)
 
-                    # After a successful result, nudge the model to answer if it has enough
-                    total_calls = sum(_tool_call_counts.values())
-                    if not result_str.startswith("[Tool error]") and total_calls >= 4:
+                    # Nudge the model to answer once 2+ distinct tools have succeeded.
+                    # Don't fire on repeats — those are intercepted above.
+                    if not result_str.startswith("[Tool error]") and len(_successful_tools) >= 2:
+                        results_so_far = "\n".join(f"- {r}" for r in _successful_results)
                         self.memory.add_user(
-                            "You have gathered enough information. "
-                            "Please now give your final answer in plain text. "
+                            f"You have already gathered the following information:\n{results_so_far}\n\n"
+                            f"Please now answer the original question in plain text using these results.\n"
+                            f"Original question: {user_input}\n"
                             "Do NOT call any more tools."
                         )
                         nudge_response = self.client.chat(
@@ -554,10 +587,6 @@ class Agent:
             return response.get("message", {}).get("content", "").strip() or results_text
         except Exception:
             return results_text
-
-
-        """Convenience wrapper — returns just the final answer string."""
-        return self.run(user_input).final_answer
 
     def chat(self, user_input: str) -> str:
         """Convenience wrapper — returns just the final answer string."""
