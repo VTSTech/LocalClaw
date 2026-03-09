@@ -228,25 +228,37 @@ The following small models have been tested with a **15-test benchmark** (3 test
 
 | Rank | Model | Score | Time | Math | Reason | Know | Calc | Code |
 |:----:|-------|------:|-----:|:----:|:------:|:----:|:----:|:----:|
-| 🥇 | `qwen2.5-coder:0.5b-instruct-q4_k_m` | **13/15 (87%)** | 108s | 3/3 | 2/3 | 3/3 | 3/3 | 3/3 |
-| 🥈 | `granite3.1-moe:1b` | 11/15 (73%) | 127s | 3/3 | 2/3 | 3/3 | 1/3 | 3/3 |
-| 🥉 | `qwen3:0.6b` | 10/15 (67%) | 442s | 3/3 | 2/3 | 2/3 | 0/3 | 3/3 |
-| 4 | `gemma3:270m` | 9/15 (60%) | 39s | 0/3 | 2/3 | 2/3 | 2/3 | 3/3 |
-| 5 | `granite4:350m` | 8/15 (53%) | 136s | 2/3 | 1/3 | 2/3 | 0/3 | 3/3 |
-| 6 | `qwen2.5:0.5b` | 7/15 (47%) | 48s | 2/3 | 0/3 | 2/3 | 0/3 | 3/3 |
+| 🥇 | `qwen2.5-coder:0.5b-instruct-q4_k_m` | **13/15 (87%)** | 120s | 3/3 | 1/3 | 3/3 | 3/3 | 3/3 |
+| 🥈 | `llama3.2:1b` | **13/15 (87%)** | 300s | 3/3 | 2/3 | 2/3 | 3/3 | 3/3 |
+| 🥉 | `granite3.1-moe:1b` | 12/15 (80%) | 146s | 3/3 | 2/3 | 3/3 | 1/3 | 3/3 |
+| 4 | `qwen3:0.6b` | 12/15 (80%) | 504s | 3/3 | 3/3 | 3/3 | 0/3 | 3/3 |
+| 5 | `gemma3:270m` | 11/15 (73%) | 95s | 0/3 | 3/3 | 3/3 | 2/3 | 3/3 |
+| 6 | `tinyllama:latest` | 10/15 (67%) | 262s | 2/3 | 1/3 | 3/3 | 1/3 | 3/3 |
+| 7 | `qwen2.5:0.5b` | 9/15 (60%) | 46s | 2/3 | 1/3 | 3/3 | 0/3 | 3/3 |
+| 8 | `granite4:350m` | 9/15 (60%) | 290s | 2/3 | 2/3 | 2/3 | 0/3 | 3/3 |
 
 ### Model Details
 
-| Model | Parameters | Size | Speed | Tool Support | Notes |
-|-------|------------|------|-------|--------------|-------|
-| `qwen2.5-coder:0.5b` | 494M | ~400MB | ⚡ Fast | ✅ Native | **Best overall** - excellent tool use, code-focused |
-| `granite3.1-moe:1b` | 1B (MoE) | ~700MB | 🚀 Fast | ✅ Native | Great speed/quality balance, MoE architecture |
-| `qwen3:0.6b` | 600M | ~450MB | 🐢 Slow | ✅ Native | Good accuracy but slow inference |
-| `gemma3:270m` | 270M | ~200MB | ⚡⚡ Fastest | ⚠️ Text | Tiny but capable, struggles with math |
-| `granite4:350m` | 350M | ~250MB | ⚡ Fast | ⚠️ Text | IBM's model, calc tools fail |
-| `llama3.2:1b` | 1.2B | ~1.3GB | 🐢 Slow | ✅ Native | Best quality but largest |
-| `tinyllama:latest` | 1.1B | ~600MB | 🐢 Slow | ✅ Native | Older model, decent but surpassed |
-| `qwen2.5:0.5b` | 494M | ~379MB | ⚡ Fast | ✅ Native | Base model, reasoning struggles |
+| Model | Params | Size | Speed | Tool Support | Notes |
+|-------|--------|------|-------|--------------|-------|
+| `qwen2.5-coder:0.5b` | 494M | ~400MB | ⚡ Fast | ✅ Native | **Best overall** - only model with 100% Calc |
+| `llama3.2:1b` | 1.2B | ~1.3GB | 🐢 Slow | ✅ Native | Ties for best but 2.5x slower |
+| `granite3.1-moe:1b` | 1B MoE | ~700MB | 🚀 Fast | ✅ Native | Great balance, MoE architecture |
+| `qwen3:0.6b` | 600M | ~450MB | 🐢 Slow | ✅ Native | Perfect reasoning but Calc fails |
+| `gemma3:270m` | 270M | ~200MB | ⚡⚡ Fastest | ⚠️ Text | **Reasoning champion** but Math fails |
+| `tinyllama:latest` | 1.1B | ~600MB | 🐢 Slow | ✅ Native | Older model, surpassed by newer |
+| `qwen2.5:0.5b` | 494M | ~379MB | ⚡ Fast | ✅ Native | Fast but Calc tools fail |
+| `granite4:350m` | 350M | ~250MB | ⚡ Fast | ⚠️ Text | Calc tools completely fail |
+
+### Category Champions
+
+| Category | Champion | Score | Notes |
+|----------|----------|-------|-------|
+| **Math** | Multiple models | 3/3 | qwen2.5-coder, llama3.2, granite3.1, qwen3 |
+| **Reasoning** | `gemma3:270m` 🏆 | 3/3 | Only model with perfect reasoning |
+| **Knowledge** | Multiple models | 3/3 | Most models ace this category |
+| **Calc** | `qwen2.5-coder:0.5b` 🏆 | 3/3 | Only model with 100% tool usage |
+| **Code** | Multiple models | 3/3 | All models generate valid Python |
 
 ### Test Categories
 
@@ -260,18 +272,21 @@ The following small models have been tested with a **15-test benchmark** (3 test
 
 ### Recommendations
 
-- **Best overall**: `qwen2.5-coder:0.5b-instruct-q4_k_m` - wins on accuracy and speed
-- **Fastest**: `gemma3:270m` - if speed matters more than accuracy
-- **Best reasoning**: `granite3.1-moe:1b` - MoE architecture shows promise
-- **Avoid**: `smollm:135m` - returns empty responses, not usable
+| Use Case | Recommended Model | Why |
+|----------|-------------------|-----|
+| **General use** | `qwen2.5-coder:0.5b-instruct-q4_k_m` | Best overall, fast, great tools |
+| **Reasoning tasks** | `gemma3:270m` | Only model with perfect reasoning |
+| **Quality over speed** | `llama3.2:1b` | Ties for best, larger model |
+| **Fastest inference** | `gemma3:270m` | 270M params, ~1s responses |
+| **Balanced** | `granite3.1-moe:1b` | Good speed/quality, MoE efficiency |
 
 ### Known Issues with Small Models
 
-Small models may:
-1. **Repeat the last number** in sequence questions (e.g., "2,4,6,8 → ?" returns "8")
-2. **Answer with the category** instead of the type (e.g., "Fluffy is a Cat" not "animal")
-3. **Hallucinate tool names** (e.g., `calculate_expression` instead of `calculator`) - LocalClaw handles this with fuzzy matching
-4. **Pass wrong arguments** to tools - LocalClaw auto-fixes common patterns
+1. **Sequence repetition**: Many answer "8" for "2,4,6,8,?" (repeat last number)
+2. **Category vs instance**: Answer "Cat" instead of "animal" for logic questions
+3. **Tool hallucination**: Call `calculate_expression` instead of `calculator` (LocalClaw handles this)
+4. **Calc tool failures**: Most models struggle with calculator tool usage
+5. **Math echo**: `gemma3:270m` echoes "7" for "7 * 8 = ?"
 
 ---
 
@@ -304,6 +319,12 @@ python examples/05_tool_tests.py
 
 # Interactive chat
 python examples/06_interactive_chat.py
+
+# Model comparison (15 tests per model)
+python examples/07_model_comparison.py
+
+# Robust comparison (saves progress, good for unstable connections)
+python examples/08_robust_comparison.py
 ```
 
 ### Remote Ollama Configuration
@@ -320,6 +341,36 @@ DEFAULT_BASE_URL = "https://your-tunnel.trycloudflare.com"
 # Timeout for remote connections (30 minutes recommended)
 DEFAULT_TIMEOUT = 1800.0
 ```
+
+---
+
+## Recent Improvements
+
+### Small Model Support
+
+LocalClaw now handles quirks of small models (≤1B parameters):
+
+- **Fuzzy tool name matching**: Hallucinated tool names like `calculate_expression` are automatically mapped to `calculator`
+- **Argument auto-fixing**: Common wrong argument patterns are corrected (e.g., `{"base": 2, "exponent": 10}` → `{"expression": "2 ** 10"}`)
+- **JSON response cleaning**: When models output tool schemas instead of text answers, LocalClaw falls back to tool results
+- **Unicode normalization**: Accented characters are normalized for comparison (e.g., "Brasília" matches "brasilia")
+
+### New Examples
+
+| Example | Description |
+|---------|-------------|
+| `07_model_comparison.py` | Benchmark 15 tests across models with category breakdown |
+| `08_robust_comparison.py` | Progress-saving comparison for unstable connections |
+
+### Test Categories (15 tests)
+
+| Category | Tests | Description |
+|----------|-------|-------------|
+| Math | Multiply, Add, Divide | Basic arithmetic (no tools) |
+| Reasoning | Apples, Sequence, Logic | Multi-step reasoning |
+| Knowledge | Japan, France, Brazil | World knowledge |
+| Calc | Multiply, Divide, Power | Calculator tool usage |
+| Code | is_even, reverse, max_num | Python code generation |
 
 ---
 
