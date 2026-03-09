@@ -220,45 +220,53 @@ All other models fall back to **ReAct text-parsing** automatically.
 
 ---
 
-## Tested Small Models (≤1B parameters)
+## Tested Small Models (≤1.5B parameters)
 
-The following small models have been tested with a **15-test benchmark** (3 tests per category: Math, Reasoning, Knowledge, Calc Tool, Code):
+The following models have been tested with a **15-test benchmark** (3 tests per category: Math, Reasoning, Knowledge, Calc Tool, Code):
 
 ### Rankings
 
 | Rank | Model | Score | Time | Math | Reason | Know | Calc | Code |
 |:----:|-------|------:|-----:|:----:|:------:|:----:|:----:|:----:|
-| 🥇 | `qwen2.5-coder:0.5b-instruct-q4_k_m` | **13/15 (87%)** | 120s | 3/3 | 1/3 | 3/3 | 3/3 | 3/3 |
-| 🥈 | `llama3.2:1b` | **13/15 (87%)** | 300s | 3/3 | 2/3 | 2/3 | 3/3 | 3/3 |
-| 🥉 | `granite3.1-moe:1b` | 12/15 (80%) | 146s | 3/3 | 2/3 | 3/3 | 1/3 | 3/3 |
-| 4 | `qwen3:0.6b` | 12/15 (80%) | 504s | 3/3 | 3/3 | 3/3 | 0/3 | 3/3 |
-| 5 | `gemma3:270m` | 11/15 (73%) | 95s | 0/3 | 3/3 | 3/3 | 2/3 | 3/3 |
-| 6 | `tinyllama:latest` | 10/15 (67%) | 262s | 2/3 | 1/3 | 3/3 | 1/3 | 3/3 |
-| 7 | `qwen2.5:0.5b` | 9/15 (60%) | 46s | 2/3 | 1/3 | 3/3 | 0/3 | 3/3 |
-| 8 | `granite4:350m` | 9/15 (60%) | 290s | 2/3 | 2/3 | 2/3 | 0/3 | 3/3 |
+| 🥇 | `qwen2.5-coder:0.5b-instruct-q4_k_m` | **12/15 (80%)** | 210s | **3/3** | 1/3 | **3/3** | **3/3** | 2/3 |
+| 🥈 | `llama3.2:1b` | **12/15 (80%)** | 331s | **3/3** | 1/3 | 2/3 | **3/3** | **3/3** |
+| 🥉 | `qwen2-math:1.5b` | **12/15 (80%)** | 611s | **3/3** | **3/3** | **3/3** | ❌ | **3/3** |
+| 4 | `gemma3:270m` | 10/15 (67%) | 73s | **3/3** | 0/3 | 2/3 | 2/3 | **3/3** |
+| 5 | `qwen2.5:0.5b` | 10/15 (67%) | 107s | 1/3 | **3/3** | **3/3** | 0/3 | **3/3** |
+| 6 | `tinyllama:latest` | 9/15 (60%) | 587s | 2/3 | 2/3 | **3/3** | 0/3 | 2/3 |
+| 7 | `qwen3:0.6b` | 9/15 (60%) | 595s | 2/3 | **3/3** | 2/3 | 0/3 | 2/3 |
+| 8 | `granite4:350m` | 8/15 (53%) | 83s | 2/3 | 1/3 | 2/3 | 0/3 | **3/3** |
+| 9 | `granite3.1-moe:1b` | 8/15 (53%) | 435s | 2/3 | 1/3 | **3/3** | 0/3 | 2/3 |
+| 10 | `smollm:135m` | 7/15 (47%) | 285s | 0/3 | 2/3 | 2/3 | 0/3 | **3/3** |
+| 11 | `functiongemma:270m` | 1/15 (7%) | 90s | 0/3 | 0/3 | 0/3 | 0/3 | 1/3 |
+
+> **Note**: `qwen2-math:1.5b` Calc tests failed with HTTP 400 (model doesn't support native tool calling)
 
 ### Model Details
 
 | Model | Params | Size | Speed | Tool Support | Notes |
 |-------|--------|------|-------|--------------|-------|
-| `qwen2.5-coder:0.5b` | 494M | ~400MB | ⚡ Fast | ✅ Native | **Best overall** - only model with 100% Calc |
-| `llama3.2:1b` | 1.2B | ~1.3GB | 🐢 Slow | ✅ Native | Ties for best but 2.5x slower |
-| `granite3.1-moe:1b` | 1B MoE | ~700MB | 🚀 Fast | ✅ Native | Great balance, MoE architecture |
-| `qwen3:0.6b` | 600M | ~450MB | 🐢 Slow | ✅ Native | Perfect reasoning but Calc fails |
-| `gemma3:270m` | 270M | ~200MB | ⚡⚡ Fastest | ⚠️ Text | **Reasoning champion** but Math fails |
-| `tinyllama:latest` | 1.1B | ~600MB | 🐢 Slow | ✅ Native | Older model, surpassed by newer |
-| `qwen2.5:0.5b` | 494M | ~379MB | ⚡ Fast | ✅ Native | Fast but Calc tools fail |
-| `granite4:350m` | 350M | ~250MB | ⚡ Fast | ⚠️ Text | Calc tools completely fail |
+| `qwen2.5-coder:0.5b` | 494M | ~400MB | ⚡ Fast | ✅ Native | **Best overall** - fastest winner, great tools |
+| `llama3.2:1b` | 1.2B | ~1.3GB | 🐢 Medium | ✅ Native | Strong all-rounder, perfect Code |
+| `qwen2-math:1.5b` | 1.5B | ~935MB | 🐢 Slow | ❌ No tools | **4 perfect categories!** No tool support |
+| `gemma3:270m` | 270M | ~292MB | ⚡⚡ Fastest | ⚠️ Text | **Math & Code champion** - tiny but capable |
+| `qwen2.5:0.5b` | 494M | ~398MB | ⚡ Fast | ⚠️ Text | **Reasoning & Knowledge champ**, Calc fails |
+| `tinyllama:latest` | 1.1B | ~638MB | 🐢 Slow | ⚠️ Text | Older model, verbose, unstable |
+| `qwen3:0.6b` | 600M | ~523MB | 🐢 Slow | ⚠️ Text | Perfect reasoning but Calc returns empty |
+| `granite4:350m` | 350M | ~708MB | ⚡ Fast | ❌ Refused | **Refuses calculator** - safety filter |
+| `granite3.1-moe:1b` | 1B MoE | ~1.4GB | 🐢 Slow | ✅ Native | HTTP 500 errors, unstable |
+| `smollm:135m` | 135M | ~92MB | ⚡ Fast | ❌ None | **Smallest** - hallucinates math (7×8=42!) |
+| `functiongemma:270m` | 270M | ~301MB | ⚡ Fast | ❌ Broken | **Worst performer** - refuses most tasks |
 
 ### Category Champions
 
 | Category | Champion | Score | Notes |
 |----------|----------|-------|-------|
-| **Math** | Multiple models | 3/3 | qwen2.5-coder, llama3.2, granite3.1, qwen3 |
-| **Reasoning** | `gemma3:270m` 🏆 | 3/3 | Only model with perfect reasoning |
-| **Knowledge** | Multiple models | 3/3 | Most models ace this category |
-| **Calc** | `qwen2.5-coder:0.5b` 🏆 | 3/3 | Only model with 100% tool usage |
-| **Code** | Multiple models | 3/3 | All models generate valid Python |
+| **Math** | `gemma3:270m` 🏆 | 3/3 | 270M params - impressive! |
+| **Reasoning** | `qwen2.5:0.5b`, `qwen3:0.6b`, `qwen2-math` 🏆 | 3/3 | Qwen family excels |
+| **Knowledge** | `qwen2.5:0.5b`, `qwen2-math` 🏆 | 3/3 | Multiple perfect scores |
+| **Calc** | `qwen2.5-coder`, `llama3.2` 🏆 | 3/3 | Only models with 100% tool usage |
+| **Code** | `gemma3:270m` 🏆 | 3/3 | Tiny but generates valid Python |
 
 ### Test Categories
 
@@ -274,19 +282,37 @@ The following small models have been tested with a **15-test benchmark** (3 test
 
 | Use Case | Recommended Model | Why |
 |----------|-------------------|-----|
-| **General use** | `qwen2.5-coder:0.5b-instruct-q4_k_m` | Best overall, fast, great tools |
-| **Reasoning tasks** | `gemma3:270m` | Only model with perfect reasoning |
-| **Quality over speed** | `llama3.2:1b` | Ties for best, larger model |
-| **Fastest inference** | `gemma3:270m` | 270M params, ~1s responses |
-| **Balanced** | `granite3.1-moe:1b` | Good speed/quality, MoE efficiency |
+| **General use** | `qwen2.5-coder:0.5b-instruct-q4_k_m` | Best overall, fastest winner, great tools |
+| **Math tasks** | `gemma3:270m` or `qwen2-math:1.5b` | Perfect score, gemma fastest |
+| **Reasoning tasks** | `qwen2.5:0.5b` or `qwen2-math:1.5b` | Perfect reasoning, qwen2.5 faster |
+| **Quality over speed** | `llama3.2:1b` or `qwen2-math:1.5b` | Ties for best, more capable |
+| **Tool usage** | `qwen2.5-coder:0.5b` or `llama3.2:1b` | Only models with 100% Calc |
+| **Fastest inference** | `gemma3:270m` | 270M params, ~73s total |
+| **No tools needed** | `qwen2-math:1.5b` | 4/5 categories perfect |
+| **Smallest footprint** | `smollm:135m` | 92MB - but expect hallucinations |
+
+### ⚠️ Models to Avoid
+
+| Model | Issue |
+|-------|-------|
+| `functiongemma:270m` | Despite the name, terrible at function calling - returns empty or refuses |
+| `smollm:135m` | Hallucinates wrong math (7×8=42), only 7/15 score |
+| `granite4:350m` | Refuses calculator tools (safety filter) |
 
 ### Known Issues with Small Models
 
-1. **Sequence repetition**: Many answer "8" for "2,4,6,8,?" (repeat last number)
-2. **Category vs instance**: Answer "Cat" instead of "animal" for logic questions
-3. **Tool hallucination**: Call `calculate_expression` instead of `calculator` (LocalClaw handles this)
-4. **Calc tool failures**: Most models struggle with calculator tool usage
-5. **Math echo**: `gemma3:270m` echoes "7" for "7 * 8 = ?"
+1. **Tool calling variations**:
+   - `granite4:350m`: Refuses calculator ("I'm sorry, but I can't assist with that")
+   - `functiongemma:270m`: Asks for clarification instead of using tools
+   - `qwen2.5:0.5b`, `qwen3:0.6b`: Returns empty responses on Calc tests
+   - `qwen2-math:1.5b`: HTTP 400 - doesn't support tool calling at all
+2. **Math hallucinations**: `smollm:135m` says "7×8=42", `tinyllama` says "7×8=45"
+3. **Power operator confusion**: `gemma3:270m` reads `2**10` as `2*10=20`
+4. **Reasoning failures**: Some models answer "8" for sequence "2,4,6,8,?" (repeat last)
+5. **Stability issues**:
+   - `granite3.1-moe:1b`: HTTP 500 crashes
+   - `tinyllama`, `qwen3:0.6b`: HTTP 524 timeouts
+6. **Empty responses**: `functiongemma:270m` returns empty strings on most tests
 
 ---
 
