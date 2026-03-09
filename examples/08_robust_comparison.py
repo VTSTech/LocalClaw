@@ -2,6 +2,8 @@
 examples/08_robust_comparison.py
 --------------------------------
 Robust model comparison that saves progress incrementally.
+Starts fresh each run - clears old results.
+
 Run: python examples/08_robust_comparison.py
 
 Written by VTSTech — https://www.vts-tech.org — https://github.com/VTSTech/LocalClaw
@@ -24,6 +26,21 @@ def normalize_text(text: str) -> str:
     return ''.join(c for c in normalized if unicodedata.category(c) != 'Mn')
 
 
+# System prompts for different test types
+SYSTEM_PROMPT_NO_TOOLS = """You are a helpful assistant. Follow these rules:
+- Answer directly and concisely
+- For math questions, provide only the numerical answer
+- For knowledge questions, provide one-word answers when asked
+- For reasoning, think step-by-step but give the final answer clearly
+- For code requests, write clean, working Python functions"""
+
+SYSTEM_PROMPT_WITH_TOOLS = """You are a helpful assistant with access to tools.
+- Use tools when they can help answer the question
+- For calculator requests, pass the complete mathematical expression to the calculator tool
+- After using tools, report the results clearly and concisely
+- Always execute tools rather than describing how to use them"""
+
+
 # Models to test
 MODELS = [
     'qwen2.5-coder:0.5b-instruct-q4_k_m',
@@ -31,7 +48,13 @@ MODELS = [
     'qwen3:0.6b',
     'llama3.2:1b',
     'gemma3:270m',
+    'qwen2-math:1.5b',
+    'functiongemma:270m',
+    'smollm:135m',
 ]
+
+# Verbosity level: 0=minimal, 1=show failures, 2=show all responses
+VERBOSITY = 2
 
 # 15 tests: 3 per category
 TESTS = [
@@ -60,18 +83,6 @@ TESTS = [
 RESULTS_FILE = os.path.join(os.path.dirname(__file__), 'model_comparison_results.json')
 
 
-def load_results():
-    """Load existing results if any."""
-    if os.path.exists(RESULTS_FILE):
-        with open(RESULTS_FILE, 'r') as f:
-            data = json.load(f)
-            # Convert list to dict keyed by model name
-            if isinstance(data, list):
-                return {r['model']: r for r in data if 'model' in r}
-            return data
-    return {}
-
-
 def save_results(results):
     """Save results to JSON."""
     with open(RESULTS_FILE, 'w') as f:
@@ -84,7 +95,6 @@ def test_model(client: OllamaClient, model: str, results: dict) -> dict:
         results[model] = {
             'model': model,
             'tests': {},
-            'passed': 0,
             'total': len(TESTS),
             'time': 0
         }
@@ -102,12 +112,14 @@ def test_model(client: OllamaClient, model: str, results: dict) -> dict:
 
         try:
             registry = make_builtin_registry().subset(tools) if tools else None
+            system_prompt = SYSTEM_PROMPT_WITH_TOOLS if tools else SYSTEM_PROMPT_NO_TOOLS
+            
             agent = Agent(
                 model=model,
-                client=client,
                 tools=registry,
-                system_prompt="Be concise and accurate.",
+                system_prompt=system_prompt,
                 max_steps=5,
+                client=client,
                 model_options={"temperature": 0.1},
             )
 
@@ -115,21 +127,49 @@ def test_model(client: OllamaClient, model: str, results: dict) -> dict:
             response = agent.chat(prompt)
             elapsed = time.time() - t0
 
-            passed = normalize_text(expected) in normalize_text(response)
+            response_norm = normalize_text(response)
+            expected_norm = normalize_text(expected)
+            passed = expected_norm in response_norm
+            
+            # Check for near-misses (e.g., correct number but with extra text)
+            near_miss = False
+            if not passed:
+                # Extract numbers from response for math/calc tests
+                import re
+                numbers = re.findall(r'-?\d+\.?\d*', response_norm)
+                if numbers and expected_norm.replace('.', '').replace('-', '').isdigit():
+                    near_miss = expected_norm in numbers
+            
             model_results['tests'][full_name] = {
                 'passed': passed,
+                'near_miss': near_miss,
                 'time': elapsed,
-                'response': response[:100]
+                'response': response,  # Full response for analysis
+                'response_norm': response_norm,
+                'expected': expected,
+                'expected_norm': expected_norm
             }
 
-            if passed:
-                model_results['passed'] += 1
             model_results['time'] += elapsed
 
-            status = "✅" if passed else "❌"
-            print(f"{status} ({elapsed:.1f}s)")
-            if not passed:
-                print(f"    Expected '{expected}' in: {response[:60]}...")
+            if passed:
+                print(f"✅ ({elapsed:.1f}s)")
+                if VERBOSITY >= 2:
+                    print(f"    📝 Found '{expected}' in: {response[:150]}")
+            elif near_miss:
+                print(f"⚠️ NEAR-MISS ({elapsed:.1f}s)")
+                print(f"    ⚠️ Expected '{expected}' found in numbers: {numbers}")
+                print(f"    📝 RESPONSE: {response}")
+            else:
+                print(f"❌ ({elapsed:.1f}s)")
+                if VERBOSITY >= 1:
+                    print(f"    ❌ EXPECTED: '{expected}' (norm: '{expected_norm}')")
+                    print(f"    📝 RESPONSE: {response}")
+                    print(f"    📝 NORMALIZED: '{response_norm}'")
+                    # Show if expected is a substring almost found
+                    if expected_norm[:3] in response_norm:
+                        idx = response_norm.find(expected_norm[:3])
+                        print(f"    🔍 Partial match at pos {idx}: '...{response_norm[max(0,idx-5):idx+10]}...'")
 
         except Exception as e:
             model_results['tests'][full_name] = {
@@ -158,8 +198,11 @@ def main():
     print(f"🦞 LocalClaw Robust Model Comparison")
     print(f"   Available: {', '.join(available)}")
 
-    # Load existing results
-    results = load_results()
+    # Clear old results - start fresh each run
+    results = {}
+    # Also delete the old results file
+    if os.path.exists(RESULTS_FILE):
+        os.remove(RESULTS_FILE)
 
     # Filter to available models
     models_to_test = [m for m in MODELS if any(m.split(':')[0] in a or m.split('-')[0] in a for a in available)]
@@ -180,17 +223,64 @@ def main():
     print("🏆 RANKINGS")
     print(f"{'='*50}")
 
+    # Calculate passed count from tests dict
+    for model_name, model_data in results.items():
+        if 'tests' in model_data:
+            model_data['passed'] = sum(1 for t in model_data['tests'].values() if t.get('passed', False))
+            model_data['total'] = len(TESTS)
+
     sorted_results = sorted(
         results.values(),
         key=lambda x: (-x.get('passed', 0), x.get('time', 9999))
     )
 
     for i, r in enumerate(sorted_results, 1):
-        if 'passed' not in r:
+        if 'tests' not in r or len(r.get('tests', {})) == 0:
             continue
         medal = "🥇" if i == 1 else "🥈" if i == 2 else "🥉" if i == 3 else "  "
-        rate = r['passed'] / r['total'] * 100 if r['total'] > 0 else 0
-        print(f"{medal} {r['model']:<40} {r['passed']}/{r['total']} ({rate:.0f}%) - {r.get('time', 0):.1f}s")
+        passed = r.get('passed', 0)
+        total = r.get('total', len(TESTS))
+        rate = passed / total * 100 if total > 0 else 0
+        
+        # Count near-misses
+        near_misses = sum(1 for t in r.get('tests', {}).values() if t.get('near_miss', False))
+        nm_str = f" (+{near_misses}⚠️)" if near_misses else ""
+        
+        print(f"{medal} {r['model']:<40} {passed}/{total} ({rate:.0f}%) - {r.get('time', 0):.1f}s{nm_str}")
+
+    # Print category breakdown
+    print(f"\n{'='*50}")
+    print("📊 CATEGORY BREAKDOWN")
+    print(f"{'='*50}")
+    
+    categories = ['Math', 'Reason', 'Know', 'Calc', 'Code']
+    cat_labels = {'Math': 'Math', 'Reason': 'Reasoning', 'Know': 'Knowledge', 'Calc': 'Calc', 'Code': 'Code'}
+    
+    for cat in categories:
+        print(f"\n  {cat_labels[cat]}:")
+        cat_results = []
+        for model_name, model_data in results.items():
+            if 'tests' not in model_data:
+                continue
+            cat_tests = [t for k, t in model_data['tests'].items() if k.startswith(f"{cat}:")]
+            if cat_tests:
+                passed = sum(1 for t in cat_tests if t.get('passed', False))
+                cat_results.append((model_name, passed, len(cat_tests)))
+        
+        cat_results.sort(key=lambda x: (-x[1], x[0]))
+        for model, passed, total in cat_results:
+            bar = "█" * passed + "░" * (total - passed)
+            print(f"    {model:<35} {bar} {passed}/{total}")
+
+    # Print near-miss summary
+    total_near_misses = sum(
+        sum(1 for t in r.get('tests', {}).values() if t.get('near_miss', False))
+        for r in results.values()
+    )
+    if total_near_misses > 0:
+        print(f"\n⚠️  NEAR-MISS ANALYSIS")
+        print(f"   {total_near_misses} test(s) had the correct answer but with extra text")
+        print(f"   These are counted as failures but may indicate partial success")
 
     print(f"\n📄 Results saved to: {RESULTS_FILE}")
 

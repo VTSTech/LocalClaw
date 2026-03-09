@@ -12,6 +12,8 @@ Written by VTSTech — https://www.vts-tech.org — https://github.com/VTSTech/L
 import sys
 import os
 import time
+import re
+import json
 import unicodedata
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -28,6 +30,9 @@ def normalize_text(text: str) -> str:
     return without_accents.strip()
 
 
+# Verbosity level: 0=minimal, 1=show failures, 2=show all responses
+VERBOSITY = 2
+
 # Models to test (1B parameters or less)
 MODELS = [
     "gemma3:270m",
@@ -38,7 +43,25 @@ MODELS = [
     "qwen2.5-coder:0.5b-instruct-q4_k_m",
     "tinyllama:latest",
     "llama3.2:1b",
+    "qwen2-math:1.5b",
+    "functiongemma:270m",
+    "smollm:135m",
 ]
+
+# System prompts for different test types
+SYSTEM_PROMPT_NO_TOOLS = """You are a helpful assistant. Follow these rules:
+- Answer directly and concisely
+- For math questions, provide only the numerical answer
+- For knowledge questions, provide one-word answers when asked
+- For reasoning, think step-by-step but give the final answer clearly
+- For code requests, write clean, working Python functions"""
+
+SYSTEM_PROMPT_WITH_TOOLS = """You are a helpful assistant with access to tools.
+- Use tools when they can help answer the question
+- For calculator requests, pass the complete mathematical expression to the calculator tool
+- After using tools, report the results clearly and concisely
+- Always execute tools rather than describing how to use them"""
+
 
 # Test cases - 3 tests per category (15 total)
 TESTS = [
@@ -99,13 +122,14 @@ def test_model(client: OllamaClient, model: str) -> dict:
         
         try:
             registry = make_builtin_registry().subset(tools) if tools else None
+            system_prompt = SYSTEM_PROMPT_WITH_TOOLS if tools else SYSTEM_PROMPT_NO_TOOLS
             
             agent = Agent(
                 model=model,
-                client=client,
                 tools=registry,
-                system_prompt="Be concise and accurate.",
+                system_prompt=system_prompt,
                 max_steps=5,
+                client=client,
                 model_options={"temperature": 0.1},
             )
             
@@ -114,17 +138,44 @@ def test_model(client: OllamaClient, model: str) -> dict:
             elapsed = time.time() - t0
             results["time"] += elapsed
             
-            passed = normalize_text(expected) in normalize_text(response)
+            response_norm = normalize_text(response)
+            expected_norm = normalize_text(expected)
+            passed = expected_norm in response_norm
+            
+            # Check for near-misses (correct number but with extra text)
+            near_miss = False
+            if not passed:
+                numbers = re.findall(r'-?\d+\.?\d*', response_norm)
+                if numbers and expected_norm.replace('.', '').replace('-', '').isdigit():
+                    near_miss = expected_norm in numbers
+            
             results["passed"] += int(passed)
             if passed:
                 category_passed += 1
-            results["tests"][test_name] = {"passed": passed, "time": elapsed, "response": response[:100]}
+            results["tests"][test_name] = {
+                "passed": passed,
+                "near_miss": near_miss,
+                "time": elapsed,
+                "response": response,  # Full response
+                "response_norm": response_norm,
+                "expected": expected,
+                "expected_norm": expected_norm
+            }
             
-            status = "✅" if passed else "❌"
-            print(f"{status} ({elapsed:.1f}s)")
-            
-            if not passed:
-                print(f"      Expected '{expected}' in: {response[:80].replace(chr(10), ' ')}...")
+            if passed:
+                print(f"✅ ({elapsed:.1f}s)")
+                if VERBOSITY >= 2:
+                    print(f"      📝 Found '{expected}' in: {response[:100].replace(chr(10), ' ')}")
+            elif near_miss:
+                print(f"⚠️ NEAR-MISS ({elapsed:.1f}s)")
+                print(f"      ⚠️ Expected '{expected}' found in numbers: {numbers}")
+                print(f"      📝 RESPONSE: {response[:100].replace(chr(10), ' ')}")
+            else:
+                print(f"❌ ({elapsed:.1f}s)")
+                if VERBOSITY >= 1:
+                    print(f"      ❌ EXPECTED: '{expected}' (norm: '{expected_norm}')")
+                    print(f"      📝 RESPONSE: {response[:100].replace(chr(10), ' ')}")
+                    print(f"      📝 NORMALIZED: '{response_norm}''")
                 
         except Exception as e:
             results["time"] += 60  # penalty for errors
@@ -157,13 +208,14 @@ def main():
         return
     
     available = client.list_models()
-    print(f"\\n🦞 LocalClaw Model Comparison")
+    print(f"\n🦞 LocalClaw Model Comparison")
     print(f"   Available models: {', '.join(available)}")
     
     # Filter to available models
     models_to_test = [m for m in MODELS if any(m.split(':')[0] in a for a in available)]
     print(f"   Testing: {', '.join(models_to_test)}")
     
+    # Clear old results - start fresh
     all_results = []
     
     for model in models_to_test:
@@ -221,7 +273,7 @@ def main():
     import json
     with open(output_path, "w") as f:
         json.dump(all_results, f, indent=2, default=str)
-    print(f"\\n📄 Results saved to: {output_path}")
+    print(f"\n📄 Results saved to: {output_path}")
 
 
 if __name__ == "__main__":
