@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import os
+import socket
 import time
 import urllib.request
 import urllib.error
@@ -22,16 +23,16 @@ from typing import Any, Iterator
 # Uncomment ONE of the following lines to switch between local and remote Ollama:
 #
 # LOCAL OLLAMA (default):
-# DEFAULT_BASE_URL = "http://localhost:11434"
+DEFAULT_BASE_URL = "http://localhost:11434"
 #
 # REMOTE OLLAMA (cloudflare tunnel):
-DEFAULT_BASE_URL = "https://problems-wales-tied-individually.trycloudflare.com/"
+#DEFAULT_BASE_URL = "https://your-tunnel.trycloudflare.com"
 #
 # ═══════════════════════════════════════════════════════════════════════════════
 
 # Default timeout: configurable via environment variable
 # Cloudflare tunnels have ~100 second timeout, so default to 90s for remote
-DEFAULT_TIMEOUT = float(os.environ.get("OLLAMA_TIMEOUT", "500.0"))
+DEFAULT_TIMEOUT = float(os.environ.get("OLLAMA_TIMEOUT", "600.0"))
 
 # Retry configuration
 MAX_RETRIES = int(os.environ.get("OLLAMA_MAX_RETRIES", "3"))
@@ -114,6 +115,20 @@ class OllamaClient:
                     is_timeout=True, can_retry=True
                 ) from e
             raise OllamaError(f"Connection error: {e.reason}") from e
+        except (TimeoutError, socket.timeout) as e:
+            # Socket-level timeout (distinct from URLError)
+            if _retry_count < MAX_RETRIES:
+                delay = RETRY_DELAY * (2 ** _retry_count)
+                print(f"  ⚠ Socket timeout, retrying in {delay:.1f}s (attempt {_retry_count + 1}/{MAX_RETRIES})...")
+                time.sleep(delay)
+                return self._post(endpoint, payload, _retry_count + 1)
+            raise OllamaError(
+                f"Socket timeout after {MAX_RETRIES} retries. "
+                f"The model may be too slow or the connection unstable. "
+                f"Try: 1) Increase OLLAMA_TIMEOUT (current: {self.timeout}s), "
+                f"2) Use a smaller/faster model, or 3) Check Ollama server status.",
+                is_timeout=True, can_retry=True
+            ) from e
 
     def _get(self, endpoint: str, _retry_count: int = 0) -> dict:
         url = f"{self.base_url}{endpoint}"
