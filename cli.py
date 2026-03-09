@@ -28,6 +28,7 @@ import argparse
 import os
 import sys
 import textwrap
+from pathlib import Path
 
 # Allow running as `python cli.py` or as installed entry point
 _here = os.path.dirname(os.path.abspath(__file__))
@@ -385,6 +386,238 @@ def cmd_chat(args):
                         print(dim(f"    • {name}: {instr_len:,} chars"))
                 
                 print()
+                continue
+
+            if user_input == "/help":
+                print()
+                print(cyan("  Available Commands"))
+                print(dim("  ─────────────────────────────────────"))
+                print("  " + bold("Session Control"))
+                print(dim("    exit, quit       End the session"))
+                print(dim("    /reset           Clear conversation history"))
+                print(dim("    /undo            Remove last exchange"))
+                print(dim("    /retry           Retry last request"))
+                print()
+                print("  " + bold("Information"))
+                print(dim("    /status          Show session status"))
+                print(dim("    /context         Show context/token info"))
+                print(dim("    /tools           List active tools"))
+                print(dim("    /skills          List active skills"))
+                print(dim("    /stats           Show session statistics"))
+                print(dim("    /messages        Show raw message history"))
+                print()
+                print("  " + bold("Export/Save"))
+                print(dim("    /export          Export to markdown file"))
+                print(dim("    /save <name>     Save conversation"))
+                print(dim("    /load <name>     Load conversation"))
+                print()
+                print("  " + bold("Configuration"))
+                print(dim("    /system          View system prompt"))
+                print(dim("    /temp <value>    Change temperature"))
+                print()
+                continue
+
+            if user_input == "/undo":
+                # Remove last exchange (user + assistant messages)
+                history = agent.memory._history
+                if len(history) >= 2:
+                    # Remove last assistant and user message
+                    removed = []
+                    while len(history) > 0 and len(removed) < 2:
+                        removed.append(history.pop())
+                    print(dim(f"  ↺  Removed {len(removed)} messages from history"))
+                elif len(history) == 1:
+                    history.pop()
+                    print(dim("  ↺  Removed 1 message from history"))
+                else:
+                    print(dim("  No messages to undo"))
+                continue
+
+            if user_input == "/retry":
+                # Retry the last user message
+                history = agent.memory._history
+                last_user_msg = None
+                for msg in reversed(history):
+                    if msg.get('role') == 'user':
+                        last_user_msg = msg.get('content', '')
+                        break
+                
+                if last_user_msg:
+                    # Remove last exchange
+                    removed = 0
+                    while len(history) > 0:
+                        last = history[-1]
+                        if last.get('role') == 'user' and removed > 0:
+                            break
+                        history.pop()
+                        removed += 1
+                    
+                    print(dim(f"  ↻  Retrying: {last_user_msg[:50]}..."))
+                    run = agent.run(last_user_msg)
+                    print(f"{bold('Agent')}: {run.final_answer}")
+                    if getattr(args, "verbose", False) and run.steps:
+                        tool_steps = [s for s in run.steps if s.type == "tool_call"]
+                        print(dim(f"         [{len(tool_steps)} tool calls · {run.total_ms:.0f}ms]"))
+                    print()
+                else:
+                    print(dim("  No user message to retry"))
+                continue
+
+            if user_input == "/stats":
+                print()
+                print(cyan("  Session Statistics"))
+                print(dim("  ─────────────────────────────────────"))
+                
+                # Message counts
+                history = agent.memory._history
+                user_msgs = sum(1 for m in history if m.get('role') == 'user')
+                assistant_msgs = sum(1 for m in history if m.get('role') == 'assistant')
+                tool_msgs = sum(1 for m in history if m.get('role') == 'tool')
+                
+                print(f"  Messages: {len(history)} total")
+                print(dim(f"    • User: {user_msgs}"))
+                print(dim(f"    • Assistant: {assistant_msgs}"))
+                print(dim(f"    • Tool results: {tool_msgs}"))
+                print()
+                
+                # Token estimation
+                sys_prompt = agent.memory.system_prompt or ""
+                total_chars = sum(len(m.get('content', '')) for m in history)
+                total_chars += len(sys_prompt)
+                est_tokens = total_chars // 4
+                print(f"  Estimated tokens: ~{est_tokens:,}")
+                print()
+                
+                # Model info
+                print(f"  Model: {args.model}")
+                print(f"  Temperature: {getattr(args, 'temperature', 0.7)}")
+                print()
+                continue
+
+            if user_input == "/messages":
+                print()
+                print(cyan("  Message History"))
+                print(dim("  ─────────────────────────────────────"))
+                
+                history = agent.memory._history
+                if not history:
+                    print(dim("  No messages in history"))
+                    print()
+                    continue
+                
+                for i, msg in enumerate(history, 1):
+                    role = msg.get('role', 'unknown')
+                    content = msg.get('content', '')
+                    
+                    # Truncate long content
+                    if len(content) > 100:
+                        content = content[:100] + "..."
+                    
+                    role_icon = {"user": "👤", "assistant": "🤖", "tool": "🔧"}.get(role, "❓")
+                    print(f"  {role_icon} {bold(role)}:")
+                    print(dim(f"    {content[:80]}"))
+                    print()
+                continue
+
+            if user_input == "/export":
+                import datetime
+                timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+                filename = f"conversation_{timestamp}.md"
+                filepath = Path(filename)
+                
+                # Build markdown content
+                lines = [
+                    f"# LocalClaw Conversation",
+                    f"",
+                    f"**Model**: {args.model}",
+                    f"**Date**: {datetime.datetime.now().isoformat()}",
+                    f"",
+                    "---",
+                    "",
+                ]
+                
+                history = agent.memory._history
+                for msg in history:
+                    role = msg.get('role', 'unknown')
+                    content = msg.get('content', '')
+                    
+                    if role == 'user':
+                        lines.append(f"## User")
+                        lines.append(f"")
+                        lines.append(content)
+                        lines.append(f"")
+                    elif role == 'assistant':
+                        lines.append(f"## Assistant")
+                        lines.append(f"")
+                        lines.append(content)
+                        lines.append(f"")
+                    elif role == 'tool':
+                        lines.append(f"### Tool Result")
+                        lines.append(f"")
+                        lines.append(f"```")
+                        lines.append(content[:500])
+                        lines.append(f"```")
+                        lines.append(f"")
+                
+                filepath.write_text("\n".join(lines), encoding='utf-8')
+                print(green(f"  ✓ Exported to {filename}"))
+                continue
+
+            if user_input.startswith("/temp "):
+                try:
+                    new_temp = float(user_input.split()[1])
+                    args.temperature = new_temp
+                    agent.model_options = {"temperature": new_temp}
+                    print(dim(f"  Temperature set to {new_temp}"))
+                except (ValueError, IndexError):
+                    print(dim("  Usage: /temp <value> (e.g., /temp 0.5)"))
+                continue
+
+            if user_input == "/system":
+                print()
+                print(cyan("  System Prompt"))
+                print(dim("  ─────────────────────────────────────"))
+                sys_prompt = agent.memory.system_prompt or "(none)"
+                print(f"  Length: {len(sys_prompt)} chars")
+                print()
+                # Show first 500 chars
+                preview = sys_prompt[:500]
+                print(dim(preview))
+                if len(sys_prompt) > 500:
+                    print(dim(f"\n  ... ({len(sys_prompt) - 500} more chars)"))
+                print()
+                continue
+
+            if user_input.startswith("/save "):
+                name = user_input.split()[1]
+                filename = f"{name}.json"
+                filepath = Path(filename)
+                
+                import json
+                data = {
+                    "model": args.model,
+                    "temperature": getattr(args, 'temperature', 0.7),
+                    "history": agent.memory._history,
+                    "system_prompt": agent.memory.system_prompt,
+                }
+                filepath.write_text(json.dumps(data, indent=2), encoding='utf-8')
+                print(green(f"  ✓ Saved to {filename}"))
+                continue
+
+            if user_input.startswith("/load "):
+                name = user_input.split()[1]
+                filename = f"{name}.json"
+                filepath = Path(filename)
+                
+                if not filepath.exists():
+                    print(red(f"  ✗ File not found: {filename}"))
+                    continue
+                
+                import json
+                data = json.loads(filepath.read_text(encoding='utf-8'))
+                agent.memory._history = data.get("history", [])
+                agent.memory.system_prompt = data.get("system_prompt", agent.memory.system_prompt)
+                print(green(f"  ✓ Loaded from {filename} ({len(agent.memory._history)} messages)"))
                 continue
 
             run = agent.run(user_input)
