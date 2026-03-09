@@ -20,7 +20,7 @@ from typing import Any, Iterator
 # Uncomment ONE of the following lines to switch between local and remote Ollama:
 #
 # LOCAL OLLAMA (default):
-DEFAULT_BASE_URL = "http://localhost:11434"
+# DEFAULT_BASE_URL = "http://localhost:11434"
 #
 # REMOTE OLLAMA (cloudflare tunnel):
 #DEFAULT_BASE_URL = "https://your-tunnel.trycloudflare.com"
@@ -159,13 +159,68 @@ class OllamaClient:
         """
         Heuristic check for native tool-calling support.
         Models not in this list fall back to text-based ReAct parsing.
+        
+        Based on Ollama's native tool-calling support:
+        https://github.com/ollama/ollama/blob/main/docs/api.md#generate-chat-completion
+        
+        Model families confirmed to support tools:
+        - Llama 3.x (Meta)
+        - Mistral/Mixtral (Mistral AI)
+        - Qwen 2/2.5/3 (Alibaba)
+        - Command-R (Cohere)
+        - DeepSeek V2/V3 (DeepSeek)
+        - Phi-3 (Microsoft)
+        - And others listed below
+        
+        Note: Some models may have native support but behave poorly:
+        - functiongemma: Designed for tools but often returns empty/refuses
+        - granite: Has support but may refuse due to safety filters
+        - gemma3: Limited tool support, ReAct fallback often works better
         """
         tool_families = (
-            "llama3", "llama3.1", "llama3.2", "llama3.3",
-            "mistral", "mixtral", "mistral-nemo",
+            # Meta Llama family
+            "llama", "llama3", "llama3.1", "llama3.2", "llama3.3",
+            "llama3-groq-tool-use",
+            
+            # Mistral AI family
+            "mistral", "mixtral", "mistral-nemo", "mistral-small", "mistral-large",
+            "codestral", "ministral",
+            
+            # Alibaba Qwen family
             "qwen2", "qwen2.5", "qwen3", "qwen35",
-            "command-r", "firefunction", "hermes",
-            "llama3-groq-tool-use", "nemotron",
+            "qwen2.5-coder", "qwen2-math",
+            
+            # Cohere family
+            "command-r", "command-r7b",
+            
+            # DeepSeek family (strong tool support)
+            "deepseek", "deepseek-coder", "deepseek-v2", "deepseek-v3",
+            
+            # Microsoft Phi family
+            "phi-3", "phi3", "phi-4",
+            
+            # Google Gemma family (limited support)
+            "functiongemma",  # Specifically designed for function calling
+            "gemma3",  # Uncomment if you want to enable for gemma3
+            
+            # IBM Granite family (may refuse due to safety filters)
+            "granite", "granitemoe",  # Uncomment if needed
+            
+            # 01.ai Yi family
+            "yi-", "yi1.5", "yi34b",
+            
+            # InternLM family
+            "internlm2", "internlm2.5",
+            
+            # Upstage Solar
+            "solar",
+            
+            # ChatGLM / GLM-4
+            "glm4", "chatglm",
+            
+            # Other tool-capable models
+            "firefunction", "hermes", "nemotron",
+            "cogito", "athene",
         )
         return any(f in model.lower() for f in tool_families)
 
