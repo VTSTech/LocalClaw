@@ -1,6 +1,6 @@
 from __future__ import annotations
 """
-LocalClaw — CLI
+🦞 LocalClaw R00 — CLI
 Entry point: localclaw <command> [options]
 
 Commands:
@@ -119,7 +119,7 @@ def cmd_models(args):
         print(yellow("No models found. Pull one with: ollama pull llama3.2:3b"))
         return
 
-    print(bold("\n🦞 LocalClaw Models") + dim(" · VTSTech"))
+    print(bold("\n🦞 LocalClaw R00 Models") + dim(" · VTSTech"))
     print(bold(f"{'Model':<40} {'Tool support':>12}"))
     print(dim("─" * 54))
     for m in sorted(models):
@@ -130,7 +130,7 @@ def cmd_models(args):
 
 def cmd_tools(args):
     tools = BUILTIN_REGISTRY.all()
-    print(bold("\n🦞 LocalClaw Tools") + dim(" · VTSTech"))
+    print(bold("\n🦞 LocalClaw R00 Tools") + dim(" · VTSTech"))
     print(bold(f"{'Tool':<20} Description"))
     print(dim("─" * 70))
     for t in tools:
@@ -153,7 +153,7 @@ def cmd_run(args):
         sys.exit(1)
 
     agent = _build_agent(args, client)
-    print(bold("🦞 LocalClaw") + dim(" · VTSTech"))
+    print(bold("🦞 LocalClaw R00") + dim(" · Written by VTSTech"))
     print(f"Prompt: {args.prompt}")
     if args.stream and not agent.tools.all():
         # Streaming mode — only available without tools
@@ -185,7 +185,7 @@ def cmd_chat(args):
 
     agent = _build_agent(args, client)
     tools_label = f" + tools: {args.tools}" if args.tools else ""
-    print(bold(f"\n🦞 LocalClaw chat") + dim(f"  [{args.model}{tools_label}] · VTSTech"))
+    print(bold(f"\n🦞 LocalClaw R00 chat") + dim(f"  [{args.model}{tools_label}] ·"))
     print(dim("  Type 'exit', 'quit', or Ctrl+C to quit."))
     print(dim("  Type '/reset' to clear conversation history."))
     print(dim("  Type '/tools' to list available tools."))
@@ -257,7 +257,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     parser = argparse.ArgumentParser(
         prog="localclaw",
-        description="🦞 LocalClaw — local agentic AI powered by Ollama · VTSTech",
+        description="🦞 LocalClaw R00 — local agentic AI powered by Ollama · VTSTech",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=textwrap.dedent("""
         examples:

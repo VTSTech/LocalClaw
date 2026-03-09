@@ -1,5 +1,5 @@
 """
-LocalClaw 🦞 - A minimal, hackable agentic framework for Ollama
+🦞 LocalClaw R00 - A minimal, hackable agentic framework for Ollama
 
 Written by VTSTech
 https://www.vts-tech.org

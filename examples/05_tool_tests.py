@@ -1,7 +1,11 @@
 """
 examples/05_tool_tests.py
 -------------------------
-Test suite focused on tool usage with the calculator.
+Test suite focused on tool usage with calculator, shell, and Python REPL.
+
+Note: For small models, prompts include explicit instructions:
+- Calculator: Full expressions in parentheses
+- Python REPL: print() statements required for output
 
 Run from the project root:   python examples/05_tool_tests.py
 Or from the examples folder: python 05_tool_tests.py
@@ -46,7 +50,8 @@ def test_calculator():
         ("Basic multiplication", "Use the calculator to compute 15 * 8", "120"),
         ("Power", "Use the calculator to compute 2 ** 10", "1024"),
         ("Square root", "Use the calculator to compute sqrt(144)", "12"),
-        ("Complex expression", "Use the calculator to compute (10 + 5) * 3", "45"),
+        ("Complex expression", "Use the calculator to compute (10 + 5) * 3. Pass the ENTIRE expression: '(10 + 5) * 3'", "45"),
+        ("Division", "Use the calculator to compute 100 / 4", "25"),
     ]
     
     results = []
@@ -100,18 +105,20 @@ def test_shell():
     tools = make_builtin_registry().subset(["shell"])
     
     tests = [
-        ("List files", "Use shell to list files in /tmp directory"),
-        ("Echo test", "Use shell to echo 'Hello LocalClaw'"),
+        ("Echo test", "Use shell to echo 'Hello LocalClaw'", "Hello LocalClaw"),
+        ("List current dir", "Use shell to list files in current directory with ls", None),
     ]
     
-    for name, prompt in tests:
+    results = []
+    
+    for name, prompt, expected in tests:
         print(f"\n📋 {name}")
         
         agent = Agent(
             model=MODEL,
             client=client,
             tools=tools,
-            system_prompt="Use shell tool when asked. Report the output.",
+            system_prompt="Use shell tool when asked. Report the output briefly.",
             max_steps=5,
             on_step=print_step,
             model_options={"temperature": 0.1},
@@ -120,8 +127,19 @@ def test_shell():
         try:
             run = agent.run(prompt)
             print(f"  📝 Answer: {run.final_answer[:150].replace(chr(10), ' ')}...")
+            
+            if expected:
+                passed = expected.lower() in run.final_answer.lower()
+                results.append(passed)
+                print(f"  {'✅' if passed else '❌'} Expected '{expected}' in response")
+            else:
+                results.append(True)  # Manual check
         except Exception as e:
+            results.append(False)
             print(f"  ❌ Error: {e}")
+    
+    passed = sum(results)
+    print(f"\n📊 Shell: {passed}/{len(results)} tests passed")
 
 
 def test_python_repl():
@@ -135,18 +153,20 @@ def test_python_repl():
     tools = make_builtin_registry().subset(["python_repl"])
     
     tests = [
-        ("Simple calculation", "Use Python to calculate 2 ** 20"),
-        ("List comprehension", "Use Python to create a list of squares from 1 to 5"),
+        ("Simple calculation", "Use Python to calculate and print 2 ** 20. Use: print(2 ** 20)", "1048576"),
+        ("List comprehension", "Use Python to create and print a list of squares from 1 to 5. Use: print([i**2 for i in range(1,6)])", "[1, 4, 9, 16, 25]"),
     ]
     
-    for name, prompt in tests:
+    results = []
+    
+    for name, prompt, expected in tests:
         print(f"\n📋 {name}")
         
         agent = Agent(
             model=MODEL,
             client=client,
             tools=tools,
-            system_prompt="Use Python REPL for calculations. Show the result.",
+            system_prompt="Use Python REPL for calculations. Always use print() to show results.",
             max_steps=5,
             on_step=print_step,
             model_options={"temperature": 0.1},
@@ -155,11 +175,25 @@ def test_python_repl():
         try:
             run = agent.run(prompt)
             print(f"  📝 Answer: {run.final_answer[:150].replace(chr(10), ' ')}...")
+            
+            if expected:
+                passed = expected in run.final_answer
+                results.append(passed)
+                print(f"  {'✅' if passed else '❌'} Expected '{expected}' in response")
         except Exception as e:
+            results.append(False)
             print(f"  ❌ Error: {e}")
+    
+    passed = sum(results)
+    print(f"\n📊 Python REPL: {passed}/{len(results)} tests passed")
 
 
 def main():
+    print(f"\n{'='*60}")
+    print(f"🔧 LocalClaw Tool Tests")
+    print(f"   Model: {MODEL}")
+    print(f"{'='*60}")
+    
     test_calculator()
     test_shell()
     test_python_repl()

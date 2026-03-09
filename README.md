@@ -1,4 +1,4 @@
-# LocalClaw 🦞
+# 🦞 LocalClaw R00
 
 A minimal, hackable agentic framework engineered to run **entirely locally** with [Ollama](https://ollama.com).
 
@@ -373,7 +373,7 @@ DEFAULT_TIMEOUT = 1800.0
 
 ### Small Model Support
 
-LocalClaw now handles quirks of small models (≤1.5B parameters):
+🦞 LocalClaw R00 now handles quirks of small models (≤1.5B parameters):
 
 - **Fuzzy tool name matching**: Hallucinated tool names like `calculate_expression` are automatically mapped to `calculator`
 - **Argument auto-fixing**: Common wrong argument patterns are corrected (e.g., `{"base": 2, "exponent": 10}` → `{"expression": "2 ** 10"}`)
@@ -412,7 +412,7 @@ Key insights for small model prompt engineering:
 
 ## About
 
-**LocalClaw** is written and maintained by **VTSTech**.
+**🦞 LocalClaw R00** is written and maintained by **VTSTech**.
 
 - 🌐 Website: [https://www.vts-tech.org](https://www.vts-tech.org)
 - 📦 GitHub: [https://github.com/VTSTech/LocalClaw](https://github.com/VTSTech/LocalClaw)

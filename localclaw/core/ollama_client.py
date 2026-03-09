@@ -1,5 +1,5 @@
 """
-LocalClaw — Ollama Client
+🦞 LocalClaw R00 — Ollama Client
 Zero-dependency wrapper around the local Ollama HTTP API.
 Uses only Python stdlib (urllib + json) — no pip install required.
 
@@ -179,7 +179,7 @@ class OllamaClient:
         """
         tool_families = (
             # Meta Llama family
-            "llama", "llama3", "llama3.1", "llama3.2", "llama3.3",
+            "llama3", "llama3.1", "llama3.2", "llama3.3",
             "llama3-groq-tool-use",
             
             # Mistral AI family
@@ -201,10 +201,10 @@ class OllamaClient:
             
             # Google Gemma family (limited support)
             "functiongemma",  # Specifically designed for function calling
-            "gemma3",  # Uncomment if you want to enable for gemma3
+            # "gemma3",  # Uncomment if you want to enable for gemma3
             
             # IBM Granite family (may refuse due to safety filters)
-            "granite", "granitemoe",  # Uncomment if needed
+            # "granite", "granitemoe",  # Uncomment if needed
             
             # 01.ai Yi family
             "yi-", "yi1.5", "yi34b",

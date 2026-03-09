@@ -1,5 +1,5 @@
 """
-LocalClaw — Built-in Tools
+🦞 LocalClaw R00 — Built-in Tools
 A curated set of safe, practical tools for local agents.
 Import whichever you need and add them to a ToolRegistry.
 
@@ -172,7 +172,7 @@ def _register_stateless_tools(registry: ToolRegistry):
     def http_get(url: str, max_chars: int = 3000) -> str:
         """Retrieve the text content of a web page or API endpoint."""
         try:
-            req = urllib.request.Request(url, headers={"User-Agent": "LocalClaw/1.0"})
+            req = urllib.request.Request(url, headers={"User-Agent": "LocalClaw-R00/1.0"})
             with urllib.request.urlopen(req, timeout=15) as resp:
                 text = resp.read().decode("utf-8", errors="replace")
             return text[:max_chars] + ("..." if len(text) > max_chars else "")

@@ -1,5 +1,5 @@
 """
-LocalClaw — Agent
+🦞 LocalClaw R00 — Agent
 Core ReAct agent that drives the think → act → observe loop.
 
 Supports:
@@ -90,6 +90,9 @@ def _fix_calculator_args(t_name: str, t_args: dict, user_input: str, prior_resul
     
     Also handles cases where the model uses alternative argument names
     like 'base'/'exponent' instead of 'expression'.
+    
+    Also detects REDUNDANT calls where expression is just a prior result
+    and marks them with _skip=True to avoid unnecessary tool calls.
     """
     if t_name != "calculator":
         return t_args
@@ -111,12 +114,30 @@ def _fix_calculator_args(t_name: str, t_args: dict, user_input: str, prior_resul
     
     expr = t_args.get("expression", "")
     
-    # Check if expression is just a plain number matching a prior result
+    # Check if expression is just a plain number
     try:
-        float(expr)
+        num_val = float(expr)
     except (ValueError, TypeError):
         return t_args  # already a real expression, leave it alone
 
+    # Check for redundant call: expression is a plain number that appears in prior results
+    # This means the model is just re-calling with the result it already got
+    for result in prior_results:
+        # Match patterns like "calculator → 120" or just "120"
+        result_clean = result.split("→")[-1].strip() if "→" in result else result.strip()
+        try:
+            result_num = float(result_clean)
+            # Check if this is the same number (or close for floats)
+            if abs(num_val - result_num) < 0.001:
+                # REDUNDANT: Model is calling calculator with a result it already has
+                # Mark for synthesis instead of executing
+                t_args["_redundant"] = True
+                t_args["_prior_result"] = result_clean
+                return t_args
+        except (ValueError, TypeError):
+            continue
+
+    # Not redundant - check if question implies further operation
     q = user_input.lower()
     if "sqrt" in q or "square root" in q:
         t_args["expression"] = f"sqrt({expr})"
@@ -150,6 +171,7 @@ def _fuzzy_match_tool_name(hallucinated_name: str, tools_registry) -> str | None
     
     # Strategy 2: Check for common word patterns (e.g., "calculate" -> "calculator")
     word_mappings = {
+        # Calculator-related
         "calculate": "calculator",
         "calc": "calculator",
         "math": "calculator",
@@ -165,20 +187,47 @@ def _fuzzy_match_tool_name(hallucinated_name: str, tools_registry) -> str | None
         "subtract": "calculator",
         "multiply": "calculator",
         "divide": "calculator",
-        "weather": "get_weather",
-        "currency": "convert_currency",
-        "convert": "convert_currency",
-        "money": "convert_currency",
+        
+        # Python REPL - EXPANDED
+        "python": "python_repl",
+        "repl": "python_repl",
+        "code": "python_repl",
+        "print": "python_repl",      # Model often uses "print(...)" as tool name
+        "execute": "python_repl",
+        "run": "python_repl",
+        "exec": "python_repl",
+        
+        # Shell - EXPANDED
         "shell": "shell",
         "bash": "shell",
         "cmd": "shell",
         "command": "shell",
+        "ls": "shell",             # Model may output "ls" as tool name
+        "dir": "shell",
+        "cat": "shell",
+        "echo": "shell",
+        "grep": "shell",
+        "find": "shell",
+        "pwd": "shell",
+        "mkdir": "shell",
+        "rm": "shell",
+        "cp": "shell",
+        "mv": "shell",
+        
+        # File I/O
         "read": "read_file",
         "write": "write_file",
         "file": "read_file",
-        "python": "python_repl",
-        "repl": "python_repl",
-        "code": "python_repl",
+        "load": "read_file",
+        "save": "write_file",
+        
+        # Weather (example custom tool)
+        "weather": "get_weather",
+        
+        # Currency (example custom tool)
+        "currency": "convert_currency",
+        "convert": "convert_currency",
+        "money": "convert_currency",
     }
     
     for keyword, tool_hint in word_mappings.items():
@@ -219,6 +268,70 @@ def _looks_like_tool_schema(text: str) -> bool:
         )
     except json.JSONDecodeError:
         return False
+
+
+def _looks_like_tool_schema_dump(text: str) -> bool:
+    """
+    Detect when a model dumps the entire tool schema as text instead of
+    using it properly. This happens with some models like granite3.1-moe.
+    
+    Pattern example:
+      ოC[{"function <nil> {calculator Evaluate a mathematical expression...
+    
+    This is different from _looks_like_tool_schema which detects when a model
+    outputs a single tool call as JSON. This detects when the model outputs
+    the entire schema definition.
+    """
+    if not text:
+        return False
+    
+    # Signs that the model dumped the tool schema
+    dump_indicators = [
+        # Schema dump pattern from granite models
+        '{"function <nil>',
+        # Multiple tool definitions in one output
+        '"type":"function"',
+        '"parameters":{"type":"object"',
+        # Ollama-style schema dump
+        '[{"type":',
+        # Contains schema definition keywords
+        '"required":',
+        '"properties":',
+    ]
+    
+    text_lower = text.lower()
+    matches = sum(1 for indicator in dump_indicators if indicator.lower() in text_lower)
+    
+    # If 2+ indicators match, it's likely a schema dump
+    return matches >= 2
+
+
+def _is_greeting_or_simple(text: str) -> bool:
+    """
+    Check if the user input is a simple greeting or short message
+    that shouldn't require tool usage.
+    """
+    lower = text.lower().strip()
+    greetings = [
+        "hi", "hello", "hey", "hola", "howdy", "greetings",
+        "good morning", "good afternoon", "good evening",
+        "what's up", "whats up", "sup", "yo",
+        "thanks", "thank you", "ok", "okay", "yes", "no", "sure",
+        "bye", "goodbye", "see you", "cya",
+    ]
+    
+    # Check for exact match or greeting at start
+    if lower in greetings:
+        return True
+    for g in greetings:
+        if lower.startswith(g + " ") or lower == g:
+            return True
+    
+    # Very short messages (< 10 chars) are likely simple
+    if len(lower) < 10 and not any(c in lower for c in "0123456789+-*/=><"):
+        return True
+    
+    return False
 
 
 # ------------------------------------------------------------------ #
@@ -290,7 +403,14 @@ def _parse_json_tool_call(text: str) -> tuple[str | None, dict | None]:
         ```
 
     Returns (tool_name, tool_args) or (None, None) if not found.
+    
+    Also handles cases where the model puts code in the 'name' field:
+        {"name": "print(2 ** 20)", "arguments": {"code": "2 ** 20"}}
     """
+    # Check for tool schema dump first - don't try to parse it
+    if _looks_like_tool_schema_dump(text):
+        return None, None
+    
     # Strip markdown fences
     cleaned = re.sub(r"```(?:json)?", "", text).strip().rstrip("`").strip()
 
@@ -310,6 +430,16 @@ def _parse_json_tool_call(text: str) -> tuple[str | None, dict | None]:
     args = obj.get("arguments") or obj.get("parameters") or obj.get("args") or {}
 
     if not name or not isinstance(args, dict):
+        return None, None
+
+    # Detect if the 'name' field contains code instead of a tool name
+    # Models sometimes put the code/operation in 'name' instead of the tool name
+    code_indicators = ["(", ")", "+", "-", "*", "/", "=", "[", "]", "print", "def ", "return"]
+    if any(indicator in name for indicator in code_indicators):
+        # This looks like code, not a tool name
+        # The 'name' field might be the actual code to execute
+        # We can't determine the tool name from this, so return None
+        # The caller should handle this case
         return None, None
 
     return name, args
@@ -446,7 +576,18 @@ class Agent:
             tool_calls_raw = msg.get("tool_calls", [])
 
             # ---- Native tool calling --------------------------------- #
+            # Skip tool calls for simple greetings
             if self._native_tools and tool_calls_raw:
+                # Check if this is a simple greeting that shouldn't trigger tools
+                if _is_greeting_or_simple(user_input):
+                    # Model incorrectly tried to use tools - just respond normally
+                    final_step = StepResult(type="final", content="Hello! How can I help you today?", elapsed_ms=elapsed)
+                    run.steps.append(final_step)
+                    self._emit(final_step)
+                    run.final_answer = "Hello! How can I help you today?"
+                    self.memory.add_assistant(content or "Hello!")
+                    break
+                
                 self.memory.add_assistant(content or "", tool_calls=tool_calls_raw)
 
                 for tc in tool_calls_raw:
@@ -461,6 +602,17 @@ class Agent:
 
                     t_args = _normalize_args(t_args, self.tools.get(t_name))
                     t_args = _fix_calculator_args(t_name, t_args, user_input, _successful_results)
+                    
+                    # Skip redundant calculator calls (model re-calling with prior result)
+                    if t_args.get("_redundant"):
+                        # Don't execute - just use the prior result
+                        prior = t_args.get("_prior_result", "")
+                        result_step = StepResult(type="tool_result", content=f"[Skipped redundant call] {prior}", tool_name=t_name)
+                        run.steps.append(result_step)
+                        self._emit(result_step)
+                        self.memory.add_tool_result(t_name, prior)
+                        continue
+                    
                     _tool_call_counts[t_name] = _tool_call_counts.get(t_name, 0) + 1
 
                     call_step = StepResult(
@@ -489,7 +641,20 @@ class Agent:
             # ---- JSON-in-text fallback (small models that ignore tool API) -- #
             # Some models (e.g. llama3.2:1b) output JSON in the message body
             # instead of using the tool_calls field.
+            # Skip tool parsing for simple greetings to avoid false positives
             if self._native_tools and not tool_calls_raw and self.tools.all() and content:
+                # Don't try to parse tool calls for simple greetings/messages
+                if _is_greeting_or_simple(user_input):
+                    # Just return the content as-is, possibly cleaned
+                    if _looks_like_tool_schema(content):
+                        content = "Hello! How can I help you today?"
+                    final_step = StepResult(type="final", content=content, elapsed_ms=elapsed)
+                    run.steps.append(final_step)
+                    self._emit(final_step)
+                    run.final_answer = content
+                    self.memory.add_assistant(content)
+                    break
+                
                 t_name, t_args = _parse_json_tool_call(content)
                 
                 # Try fuzzy matching if exact tool name doesn't exist

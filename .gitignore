@@ -184,3 +184,6 @@ R0.zip
 *.zip
 examples/websocket/server.ts
 examples/websocket/frontend.tsx
+examples/model_comparison_results.json
+examples/expanded_benchmark_results.json
+examples/model_comparison_results.json
