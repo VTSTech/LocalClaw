@@ -373,12 +373,22 @@ DEFAULT_TIMEOUT = 1800.0
 
 ### Small Model Support
 
-LocalClaw now handles quirks of small models (≤1B parameters):
+LocalClaw now handles quirks of small models (≤1.5B parameters):
 
 - **Fuzzy tool name matching**: Hallucinated tool names like `calculate_expression` are automatically mapped to `calculator`
 - **Argument auto-fixing**: Common wrong argument patterns are corrected (e.g., `{"base": 2, "exponent": 10}` → `{"expression": "2 ** 10"}`)
 - **JSON response cleaning**: When models output tool schemas instead of text answers, LocalClaw falls back to tool results
 - **Unicode normalization**: Accented characters are normalized for comparison (e.g., "Brasília" matches "brasilia")
+
+### Optimized Test Prompts
+
+Key insights for small model prompt engineering:
+
+1. **State the fact first**: "The capital of Japan is Tokyo. What is the capital of Japan?"
+2. **Show the answer format**: "Answer: Tokyo" at the end
+3. **Give calculation steps**: "10 minus 3 equals 7. Then 7 minus 2 equals 5."
+4. **Be explicit with tools**: "Use calculator tool. Expression: 2 ** 10. Result: 1024"
+5. **Guide code output**: "Start with: def is_even(n):"
 
 ### New Examples
 
@@ -386,6 +396,7 @@ LocalClaw now handles quirks of small models (≤1B parameters):
 |---------|-------------|
 | `07_model_comparison.py` | Benchmark 15 tests across models with category breakdown |
 | `08_robust_comparison.py` | Progress-saving comparison for unstable connections |
+| `09_expanded_benchmark.py` | 25 tests across 8 categories including tool chaining |
 
 ### Test Categories (15 tests)
 
