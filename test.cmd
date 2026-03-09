@@ -14,5 +14,3 @@ python cli.py run "Generate the first 10 Fibonacci numbers" --tools python_repl 
 python cli.py run "What is the md5 hash of the string 'localclaw'?" --tools python_repl --verbose
 python cli.py run "Write a fibonacci function to hello.txt then read it back" --tools write_file,read_file --verbose
 python cli.py run "Calculate compound interest: $1000 at 5% for 20 years compounded monthly" --tools calculator --verbose
-
-python cli.py run "What is my current working directory and username?" --model qwen3.5:35b-a3b --stream --verbose

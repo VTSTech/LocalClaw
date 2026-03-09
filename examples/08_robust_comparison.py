@@ -58,29 +58,28 @@ MODELS = [
 VERBOSITY = 2
 
 # 15 tests: 3 per category
-# Prompts heavily optimized for small models (≤1.5B parameters)
-# Key insight: State the fact, then ask the question, then show answer format
+# Fair prompts without answer spoilers
 TESTS = [
-    # Math - state the equation, then ask
-    ('Math', 'Multiply', '7 times 8 equals 56. What is 7 times 8? Answer with just the number: 56', None, '56'),
-    ('Math', 'Add', '25 plus 17 equals 42. What is 25 plus 17? Answer with just the number: 42', None, '42'),
-    ('Math', 'Divide', '144 divided by 12 equals 12. What is 144 divided by 12? Answer with just the number: 12', None, '12'),
-    # Reasoning - show the calculation steps
-    ('Reason', 'Apples', '10 minus 3 equals 7. Then 7 minus 2 equals 5. So 10 - 3 - 2 = ? Answer: 5', None, '5'),
-    ('Reason', 'Sequence', 'In the sequence 2, 4, 6, 8, each number increases by 2. So 8 plus 2 equals the next number. What comes after 8? Answer: 10', None, '10'),
-    ('Reason', 'Logic', 'All cats belong to the category called animals. Fluffy is a cat. Therefore Fluffy belongs to what category? Answer: animal', None, 'animal'),
-    # Knowledge - state the fact, then ask to repeat
-    ('Know', 'Japan', 'The capital of Japan is Tokyo. What is the capital of Japan? Answer: Tokyo', None, 'tokyo'),
-    ('Know', 'France', 'The capital of France is Paris. What is the capital of France? Answer: Paris', None, 'paris'),
-    ('Know', 'Brazil', 'The capital of Brazil is Brasilia. What is the capital of Brazil? Answer: Brasilia', None, 'brasilia'),
-    # Calc (with tools) - show the exact expression to use
-    ('Calc', 'Multiply', 'Use the calculator tool. Pass the expression 15 * 8 to the calculator. The result will be 120.', ['calculator'], '120'),
-    ('Calc', 'Divide', 'Use the calculator tool. Pass the expression 100 / 4 to the calculator. The result will be 25.', ['calculator'], '25'),
-    ('Calc', 'Power', 'Use the calculator tool. Pass the expression 2 ** 10 to the calculator. The result will be 1024.', ['calculator'], '1024'),
-    # Code - show the function signature to start with
-    ('Code', 'is_even', 'Write Python code. Define function is_even(n) that returns True if n is even. Start with: def is_even(n):', None, 'def'),
-    ('Code', 'reverse', 'Write Python code. Define function reverse_string(s) that returns the reversed string. Start with: def reverse_string(s):', None, 'def'),
-    ('Code', 'max_num', 'Write Python code. Define function find_max(numbers) that returns the largest number. Start with: def find_max(numbers):', None, 'def'),
+    # Math - basic arithmetic
+    ('Math', 'Multiply', 'What is 7 times 8? Answer with just the number.', None, '56'),
+    ('Math', 'Add', 'What is 25 plus 17? Answer with just the number.', None, '42'),
+    ('Math', 'Divide', 'What is 144 divided by 12? Answer with just the number.', None, '12'),
+    # Reasoning - multi-step thinking
+    ('Reason', 'Apples', 'I have 10 apples. I give 3 to Bob and 2 to Alice. How many apples do I have left? Answer with just the number.', None, '5'),
+    ('Reason', 'Sequence', 'What comes next in this sequence: 2, 4, 6, 8, ? Answer with just the number.', None, '10'),
+    ('Reason', 'Logic', 'All cats are animals. Fluffy is a cat. What category does Fluffy belong to? Answer with one word.', None, 'animal'),
+    # Knowledge - world facts
+    ('Know', 'Japan', 'What is the capital of Japan? Answer with one word.', None, 'tokyo'),
+    ('Know', 'France', 'What is the capital of France? Answer with one word.', None, 'paris'),
+    ('Know', 'Brazil', 'What is the capital of Brazil? Answer with one word.', None, 'brasilia'),
+    # Calc (with tools) - tool usage
+    ('Calc', 'Multiply', 'Use the calculator tool to compute 15 times 8.', ['calculator'], '120'),
+    ('Calc', 'Divide', 'Use the calculator tool to compute 100 divided by 4.', ['calculator'], '25'),
+    ('Calc', 'Power', 'Use the calculator tool to compute 2 to the power of 10.', ['calculator'], '1024'),
+    # Code - code generation
+    ('Code', 'is_even', 'Write a Python function called is_even(n) that returns True if n is even.', None, 'def'),
+    ('Code', 'reverse', 'Write a Python function called reverse_string(s) that returns the reversed string.', None, 'def'),
+    ('Code', 'max_num', 'Write a Python function called find_max(numbers) that returns the largest number in a list.', None, 'def'),
 ]
 
 RESULTS_FILE = os.path.join(os.path.dirname(__file__), 'model_comparison_results.json')

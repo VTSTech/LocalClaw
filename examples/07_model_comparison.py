@@ -71,25 +71,25 @@ TESTS = [
     ("Math: Add", "What is 25 + 17? Answer with just the number.", None, "42"),
     ("Math: Divide", "What is 144 / 12? Answer with just the number.", None, "12"),
 
-    # === REASONING (3 tests) - prompts made explicit for small models ===
-    ("Reasoning: Apples", "Starting with 10 apples, I give away 3 apples to Bob and 2 apples to Alice. Calculate: 10 minus 3 minus 2 equals? Answer with just the final number.", None, "5"),
-    ("Reasoning: Sequence", "This is an arithmetic sequence where each number increases by 2. The sequence is: 2, 4, 6, 8. What is the NEXT number after 8? Answer with just the number.", None, "10"),
-    ("Reasoning: Logic", "All cats belong to the category called animals. Fluffy is a cat. So Fluffy is a member of what category? Answer: animals (one word).", None, "animal"),
+    # === REASONING (3 tests) - multi-step thinking ===
+    ("Reasoning: Apples", "I have 10 apples. I give 3 to Bob and 2 to Alice. How many apples do I have left? Answer with just the number.", None, "5"),
+    ("Reasoning: Sequence", "What comes next in this sequence: 2, 4, 6, 8, ? Answer with just the number.", None, "10"),
+    ("Reasoning: Logic", "All cats are animals. Fluffy is a cat. What category does Fluffy belong to? Answer with one word.", None, "animal"),
 
     # === KNOWLEDGE (3 tests) ===
-    ("Knowledge: Japan", "What is the capital of Japan? One word.", None, "tokyo"),
-    ("Knowledge: France", "What is the capital of France? One word.", None, "paris"),
-    ("Knowledge: Brazil", "The capital of Brazil is Brasilia. What is the capital of Brazil? One word.", None, "brasilia"),
+    ("Knowledge: Japan", "What is the capital of Japan? Answer with one word.", None, "tokyo"),
+    ("Knowledge: France", "What is the capital of France? Answer with one word.", None, "paris"),
+    ("Knowledge: Brazil", "What is the capital of Brazil? Answer with one word.", None, "brasilia"),
 
-    # === CALC TOOL (3 tests) - explicit tool usage instructions ===
-    ("Calc: Multiply", "Use the calculator tool to compute 15 * 8. Pass the expression \"15 * 8\" to the calculator.", ["calculator"], "120"),
-    ("Calc: Divide", "Use the calculator tool to compute 100 / 4. Pass the expression \"100 / 4\" to the calculator.", ["calculator"], "25"),
-    ("Calc: Power", "Use the calculator tool to compute 2 ** 10. Pass the expression \"2 ** 10\" to the calculator.", ["calculator"], "1024"),
+    # === CALC TOOL (3 tests) - tool usage ===
+    ("Calc: Multiply", "Use the calculator tool to compute 15 times 8.", ["calculator"], "120"),
+    ("Calc: Divide", "Use the calculator tool to compute 100 divided by 4.", ["calculator"], "25"),
+    ("Calc: Power", "Use the calculator tool to compute 2 to the power of 10.", ["calculator"], "1024"),
 
-    # === CODE (3 tests) - explicit code generation instructions ===
-    ("Code: is_even", "Write Python code. Define a function called is_even(n) that returns True if n is even. Start with: def is_even", None, "def"),
-    ("Code: reverse", "Write Python code. Define a function called reverse_string(s) that returns the reversed string. Start with: def reverse_string", None, "def"),
-    ("Code: max_num", "Write Python code. Define a function called find_max(numbers) that returns the largest number. Start with: def find_max", None, "def"),
+    # === CODE (3 tests) - code generation ===
+    ("Code: is_even", "Write a Python function called is_even(n) that returns True if n is even.", None, "def"),
+    ("Code: reverse", "Write a Python function called reverse_string(s) that returns the reversed string.", None, "def"),
+    ("Code: max_num", "Write a Python function called find_max(numbers) that returns the largest number in a list.", None, "def"),
 ]
 
 

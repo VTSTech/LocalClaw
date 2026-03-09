@@ -34,7 +34,7 @@ SYSTEM_PROMPT_WITH_TOOLS = """You are a helpful assistant with access to tools. 
 
 
 # 25 tests: 8 categories
-# Prompts heavily optimized for small models (≤1.5B parameters)
+# Fair prompts without answer spoilers
 TESTS = [
     # === MATH (3 tests) - Basic arithmetic ===
     ('Math', 'Multiply', 'What is 7 * 8? Answer with just the number.', None, '56'),
@@ -42,40 +42,40 @@ TESTS = [
     ('Math', 'Divide', 'What is 144 / 12? Answer with just the number.', None, '12'),
 
     # === REASONING (4 tests) - Multi-step thinking ===
-    ('Reason', 'Apples', 'Starting with 10 apples, I give away 3 apples to Bob and 2 apples to Alice. Calculate: 10 minus 3 minus 2 equals? Answer with just the final number.', None, '5'),
-    ('Reason', 'Sequence', 'This is an arithmetic sequence where each number increases by 2. The sequence is: 2, 4, 6, 8. What is the NEXT number after 8? Answer with just the number.', None, '10'),
-    ('Reason', 'Logic', 'All cats belong to the category called animals. Fluffy is a cat. So Fluffy is a member of what category? Answer: animals (one word).', None, 'animal'),
-    ('Reason', 'Marbles', 'I have 100 marbles total. I remove 20 marbles and then remove 15 more marbles. Calculate: 100 minus 20 minus 15 equals? Answer with just the final number.', None, '65'),
+    ('Reason', 'Apples', 'I have 10 apples. I give 3 to Bob and 2 to Alice. How many apples do I have left? Answer with just the number.', None, '5'),
+    ('Reason', 'Sequence', 'What comes next in this sequence: 2, 4, 6, 8, ? Answer with just the number.', None, '10'),
+    ('Reason', 'Logic', 'All cats are animals. Fluffy is a cat. What category does Fluffy belong to? Answer with one word.', None, 'animal'),
+    ('Reason', 'Marbles', 'I have 100 marbles. I remove 20, then remove 15 more. How many marbles do I have left? Answer with just the number.', None, '65'),
 
     # === KNOWLEDGE (3 tests) - World facts ===
-    ('Know', 'Japan', 'What is the capital of Japan? One word.', None, 'tokyo'),
-    ('Know', 'France', 'What is the capital of France? One word.', None, 'paris'),
-    ('Know', 'Brazil', 'The capital of Brazil is Brasilia. What is the capital of Brazil? One word.', None, 'brasilia'),
+    ('Know', 'Japan', 'What is the capital of Japan? Answer with one word.', None, 'tokyo'),
+    ('Know', 'France', 'What is the capital of France? Answer with one word.', None, 'paris'),
+    ('Know', 'Brazil', 'What is the capital of Brazil? Answer with one word.', None, 'brasilia'),
 
     # === CALC TOOL (3 tests) - Calculator tool usage ===
-    ('Calc', 'Multiply', 'Use the calculator tool. Pass the expression 15 * 8 to the calculator. What is the result?', ['calculator'], '120'),
-    ('Calc', 'Divide', 'Use the calculator tool. Pass the expression 100 / 4 to the calculator. What is the result?', ['calculator'], '25'),
-    ('Calc', 'Power', 'Use the calculator tool. Pass the expression 2 ** 10 to the calculator. What is the result?', ['calculator'], '1024'),
+    ('Calc', 'Multiply', 'Use the calculator tool to compute 15 times 8.', ['calculator'], '120'),
+    ('Calc', 'Divide', 'Use the calculator tool to compute 100 divided by 4.', ['calculator'], '25'),
+    ('Calc', 'Power', 'Use the calculator tool to compute 2 to the power of 10.', ['calculator'], '1024'),
 
     # === CODE (3 tests) - Python code generation ===
-    ('Code', 'is_even', 'Write Python code. Define a function called is_even(n) that returns True if n is even. Start with: def is_even', None, 'def'),
-    ('Code', 'reverse', 'Write Python code. Define a function called reverse_string(s) that returns the reversed string. Start with: def reverse_string', None, 'def'),
-    ('Code', 'max_num', 'Write Python code. Define a function called find_max(numbers) that returns the largest number. Start with: def find_max', None, 'def'),
+    ('Code', 'is_even', 'Write a Python function called is_even(n) that returns True if n is even.', None, 'def'),
+    ('Code', 'reverse', 'Write a Python function called reverse_string(s) that returns the reversed string.', None, 'def'),
+    ('Code', 'max_num', 'Write a Python function called find_max(numbers) that returns the largest number in a list.', None, 'def'),
 
     # === COMPARISON (3 tests) - Compare values ===
     ('Compare', 'Larger', 'Which is larger: 100 or 99? Answer with the larger number.', None, '100'),
     ('Compare', 'Smaller', 'Which is smaller: 5 or 3? Answer with the smaller number.', None, '3'),
-    ('Compare', 'Power', '2 to the power of 10 equals 1024. 3 to the power of 5 equals 243. Which result is larger: 1024 or 243? Answer with the larger number.', None, '1024'),
+    ('Compare', 'Power', 'Which is larger: 2 to the power of 10, or 3 to the power of 5? Answer with the larger number.', None, '1024'),
 
     # === MULTI-STEP (3 tests) - Requires multiple operations ===
-    ('Multi', 'SquareSum', 'First calculate 3 squared (which is 9). Then calculate 4 squared (which is 16). Then add them together: 9 + 16 equals? Answer with just the final number.', None, '25'),
-    ('Multi', 'Perimeter', 'A rectangle has width 5 and length 8. The perimeter is calculated as 2 times width plus 2 times length. Calculate: 2*5 + 2*8 equals? Answer with just the number.', None, '26'),
-    ('Multi', 'Average', 'To find the average of 10, 20, and 30: first add them to get 60, then divide by 3. Calculate: 60 / 3 equals? Answer with just the number.', None, '20'),
+    ('Multi', 'SquareSum', 'Calculate 3 squared plus 4 squared. Answer with just the number.', None, '25'),
+    ('Multi', 'Perimeter', 'A rectangle has width 5 and length 8. Calculate the perimeter (2 times width plus 2 times length). Answer with just the number.', None, '26'),
+    ('Multi', 'Average', 'Find the average of 10, 20, and 30. Answer with just the number.', None, '20'),
 
     # === PYTHON REPL (3 tests) - Code execution with tool ===
-    ('Repl', 'List', 'Use the python_repl tool. Pass the code: print(list(range(5))). What does it print?', ['python_repl'], '0, 1, 2, 3, 4'),
-    ('Repl', 'Sum', 'Use the python_repl tool. Pass the code: print(sum([1,2,3,4,5])). What does it print?', ['python_repl'], '15'),
-    ('Repl', 'Squares', 'Use the python_repl tool. Pass the code: print([x**2 for x in range(4)]). What list does it print?', ['python_repl'], '0, 1, 4, 9'),
+    ('Repl', 'List', 'Use the python_repl tool to run: print(list(range(5))). What does it print?', ['python_repl'], '0, 1, 2, 3, 4'),
+    ('Repl', 'Sum', 'Use the python_repl tool to run: print(sum([1,2,3,4,5])). What does it print?', ['python_repl'], '15'),
+    ('Repl', 'Squares', 'Use the python_repl tool to run: print([x**2 for x in range(4)]). What does it print?', ['python_repl'], '0, 1, 4, 9'),
 ]
 
 RESULTS_FILE = os.path.join(os.path.dirname(__file__), 'expanded_benchmark_results.json')
