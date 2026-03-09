@@ -1,6 +1,0 @@
-ollama
-chromadb
-streamlit
-python-dotenv
-colorama
-keyring
