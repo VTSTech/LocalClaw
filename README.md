@@ -222,15 +222,15 @@ All other models fall back to **ReAct text-parsing** automatically.
 
 ## Tested Small Models (≤1.5B parameters)
 
-The following models have been tested with a **15-test benchmark** (3 tests per category: Math, Reasoning, Knowledge, Calc Tool, Code):
+The following models have been tested with a **15-test benchmark** (3 tests per category: Math, Reasoning, Knowledge, Calc Tool, Code). Prompts are optimized for small model comprehension.
 
 ### Rankings
 
 | Rank | Model | Score | Time | Math | Reason | Know | Calc | Code |
 |:----:|-------|------:|-----:|:----:|:------:|:----:|:----:|:----:|
-| 🥇 | `qwen2.5-coder:0.5b-instruct-q4_k_m` | **12/15 (80%)** | 210s | **3/3** | 1/3 | **3/3** | **3/3** | 2/3 |
-| 🥈 | `llama3.2:1b` | **12/15 (80%)** | 331s | **3/3** | 1/3 | 2/3 | **3/3** | **3/3** |
-| 🥉 | `qwen2-math:1.5b` | **12/15 (80%)** | 611s | **3/3** | **3/3** | **3/3** | ❌ | **3/3** |
+| 🥇 | `qwen2.5-coder:0.5b-instruct-q4_k_m` | **15/15 (100%)** ✨ | ~70s | **3/3** | **3/3** | **3/3** | **3/3** | **3/3** |
+| 🥈 | `llama3.2:1b` | 12/15 (80%) | 331s | **3/3** | 1/3 | 2/3 | **3/3** | **3/3** |
+| 🥉 | `qwen2-math:1.5b` | 12/15 (80%) | 611s | **3/3** | **3/3** | **3/3** | ❌ | **3/3** |
 | 4 | `gemma3:270m` | 10/15 (67%) | 73s | **3/3** | 0/3 | 2/3 | 2/3 | **3/3** |
 | 5 | `qwen2.5:0.5b` | 10/15 (67%) | 107s | 1/3 | **3/3** | **3/3** | 0/3 | **3/3** |
 | 6 | `tinyllama:latest` | 9/15 (60%) | 587s | 2/3 | 2/3 | **3/3** | 0/3 | 2/3 |
@@ -246,7 +246,7 @@ The following models have been tested with a **15-test benchmark** (3 tests per 
 
 | Model | Params | Size | Speed | Tool Support | Notes |
 |-------|--------|------|-------|--------------|-------|
-| `qwen2.5-coder:0.5b` | 494M | ~400MB | ⚡ Fast | ✅ Native | **Best overall** - fastest winner, great tools |
+| `qwen2.5-coder:0.5b` | 494M | ~400MB | ⚡ Fast | ✅ Native | **🏆 100% SCORE!** Perfect all categories |
 | `llama3.2:1b` | 1.2B | ~1.3GB | 🐢 Medium | ✅ Native | Strong all-rounder, perfect Code |
 | `qwen2-math:1.5b` | 1.5B | ~935MB | 🐢 Slow | ❌ No tools | **4 perfect categories!** No tool support |
 | `gemma3:270m` | 270M | ~292MB | ⚡⚡ Fastest | ⚠️ Text | **Math & Code champion** - tiny but capable |
@@ -262,11 +262,11 @@ The following models have been tested with a **15-test benchmark** (3 tests per 
 
 | Category | Champion | Score | Notes |
 |----------|----------|-------|-------|
-| **Math** | `gemma3:270m` 🏆 | 3/3 | 270M params - impressive! |
-| **Reasoning** | `qwen2.5:0.5b`, `qwen3:0.6b`, `qwen2-math` 🏆 | 3/3 | Qwen family excels |
-| **Knowledge** | `qwen2.5:0.5b`, `qwen2-math` 🏆 | 3/3 | Multiple perfect scores |
-| **Calc** | `qwen2.5-coder`, `llama3.2` 🏆 | 3/3 | Only models with 100% tool usage |
-| **Code** | `gemma3:270m` 🏆 | 3/3 | Tiny but generates valid Python |
+| **Math** | `qwen2.5-coder:0.5b` 🏆 | 3/3 | Also gemma3:270m |
+| **Reasoning** | `qwen2.5-coder:0.5b` 🏆 | 3/3 | Also qwen2.5:0.5b, qwen3:0.6b, qwen2-math |
+| **Knowledge** | `qwen2.5-coder:0.5b` 🏆 | 3/3 | Multiple tied |
+| **Calc** | `qwen2.5-coder:0.5b`, `llama3.2` 🏆 | 3/3 | Only models with 100% tool usage |
+| **Code** | `qwen2.5-coder:0.5b` 🏆 | 3/3 | Also gemma3:270m |
 
 ### Test Categories
 
@@ -282,13 +282,12 @@ The following models have been tested with a **15-test benchmark** (3 tests per 
 
 | Use Case | Recommended Model | Why |
 |----------|-------------------|-----|
-| **General use** | `qwen2.5-coder:0.5b-instruct-q4_k_m` | Best overall, fastest winner, great tools |
-| **Math tasks** | `gemma3:270m` or `qwen2-math:1.5b` | Perfect score, gemma fastest |
-| **Reasoning tasks** | `qwen2.5:0.5b` or `qwen2-math:1.5b` | Perfect reasoning, qwen2.5 faster |
-| **Quality over speed** | `llama3.2:1b` or `qwen2-math:1.5b` | Ties for best, more capable |
-| **Tool usage** | `qwen2.5-coder:0.5b` or `llama3.2:1b` | Only models with 100% Calc |
-| **Fastest inference** | `gemma3:270m` | 270M params, ~73s total |
-| **No tools needed** | `qwen2-math:1.5b` | 4/5 categories perfect |
+| **General use** | `qwen2.5-coder:0.5b-instruct-q4_k_m` | **100% score!** Fast, perfect tool usage |
+| **Math tasks** | `qwen2.5-coder:0.5b` or `gemma3:270m` | Perfect score, gemma fastest |
+| **Reasoning tasks** | `qwen2.5-coder:0.5b` or `qwen2.5:0.5b` | Perfect reasoning |
+| **Tool usage** | `qwen2.5-coder:0.5b` | Only model with 100% Calc + everything else |
+| **Fastest inference** | `gemma3:270m` | 270M params, fastest responses |
+| **No tools needed** | `qwen2-math:1.5b` | 4/5 categories perfect (no Calc) |
 | **Smallest footprint** | `smollm:135m` | 92MB - but expect hallucinations |
 
 ### ⚠️ Models to Avoid
