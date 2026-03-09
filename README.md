@@ -1,4 +1,4 @@
-# 🦞 LocalClaw R00
+# 🦞 LocalClaw R01
 
 A minimal, hackable agentic framework engineered to run **entirely locally** with [Ollama](https://ollama.com).
 
@@ -13,11 +13,14 @@ Inspired by the architecture of OpenClaw, rebuilt from scratch for local-first o
 ```
 localclaw/
 ├── core/
-│   ├── ollama_client.py   # Thin HTTP wrapper around the Ollama API
+│   ├── ollama_client.py   # Zero-dependency HTTP wrapper (stdlib urllib only)
 │   ├── tools.py           # Decorator-based tool registry + JSON schema generation
 │   ├── memory.py          # Sliding-window conversation memory with summarization
 │   ├── agent.py           # ReAct loop — native tool-call + text-fallback modes
 │   └── orchestrator.py    # Multi-agent routing (router / pipeline / parallel)
+├── skills/
+│   ├── loader.py          # Agent Skills specification loader (progressive disclosure)
+│   └── skill-creator/     # OpenClaw skill-creator for generating new skills
 ├── tools/
 │   └── builtins.py        # Ready-to-use tools: calculator, shell, file I/O, HTTP, REPL
 └── examples/
@@ -28,32 +31,36 @@ localclaw/
     ├── 05_tool_tests.py       # Tool-specific tests
     ├── 06_interactive_chat.py # Interactive CLI chat
     ├── 07_model_comparison.py # Compare models on 15 tests (3 per category)
-    └── 08_robust_comparison.py # Progress-saving comparison for unstable connections
+    ├── 08_robust_comparison.py # Progress-saving comparison for unstable connections
+    ├── 09_expanded_benchmark.py # 25 tests across 8 categories
+    └── 10_skills_demo.py      # Agent Skills system demo
 ```
 
 ### Core design decisions
 
 | Concern | Approach |
 |---|---|
+| **HTTP Client** | Zero external dependencies — uses Python stdlib `urllib` only |
 | **Tool calling** | Native Ollama tool-call protocol when supported; automatic ReAct text-parsing fallback for other models |
 | **Memory** | Sliding window — older turns are archived and optionally compressed via LLM summarization |
 | **Tools** | Decorator-based, auto-generates JSON schemas from Python type hints |
 | **Orchestration** | Router (LLM picks agent), Pipeline (chain), or Parallel (concurrent + merge) |
 | **Streaming** | First-class via generator interface |
+| **Error handling** | Automatic retry with exponential backoff for transient network/server errors |
 
 ---
 
 ## Installation
 
 ```bash
-# Clone / copy the localclaw directory into your project, then:
-pip install httpx
+# Clone / copy the localclaw directory into your project
+# No pip install required — uses only Python stdlib!
 
 # Make sure Ollama is running:
 ollama serve
 
 # Pull a model:
-ollama pull llama3.1:8b
+ollama pull qwen2.5-coder:0.5b-instruct-q4_k_m
 ```
 
 ---
@@ -209,12 +216,21 @@ agent = Agent(
 
 The following model families support native tool calling in Ollama and are auto-detected:
 
-- `llama3.1`, `llama3.2`, `llama3-groq-tool-use`
-- `mistral`, `mixtral`, `mistral-nemo`
-- `qwen2`, `qwen2.5`, `qwen2.5-coder`
-- `command-r`
-- `hermes` (function calling variants)
-- `nemotron`
+**Meta Llama**: `llama3`, `llama3.1`, `llama3.2`, `llama3.3`, `llama3-groq-tool-use`
+
+**Mistral AI**: `mistral`, `mixtral`, `mistral-nemo`, `mistral-small`, `mistral-large`, `codestral`, `ministral`
+
+**Alibaba Qwen**: `qwen2`, `qwen2.5`, `qwen3`, `qwen35`, `qwen2.5-coder`, `qwen2-math`
+
+**Cohere**: `command-r`, `command-r7b`
+
+**DeepSeek**: `deepseek`, `deepseek-coder`, `deepseek-v2`, `deepseek-v3`
+
+**Microsoft Phi**: `phi-3`, `phi3`, `phi-4`
+
+**Google Gemma**: `functiongemma` (designed for function calling)
+
+**Others**: `yi-`, `yi1.5`, `internlm2`, `internlm2.5`, `solar`, `glm4`, `chatglm`, `firefunction`, `hermes`, `nemotron`, `cogito`, `athene`
 
 All other models fall back to **ReAct text-parsing** automatically.
 
@@ -224,49 +240,49 @@ All other models fall back to **ReAct text-parsing** automatically.
 
 The following models have been tested with a **15-test benchmark** (3 tests per category: Math, Reasoning, Knowledge, Calc Tool, Code). Prompts are optimized for small model comprehension.
 
-### Rankings
+### Rankings (Updated)
 
 | Rank | Model | Score | Time | Math | Reason | Know | Calc | Code |
 |:----:|-------|------:|-----:|:----:|:------:|:----:|:----:|:----:|
-| 🥇 | `qwen2.5-coder:0.5b-instruct-q4_k_m` | **15/15 (100%)** ✨ | ~70s | **3/3** | **3/3** | **3/3** | **3/3** | **3/3** |
-| 🥈 | `llama3.2:1b` | 12/15 (80%) | 331s | **3/3** | 1/3 | 2/3 | **3/3** | **3/3** |
-| 🥉 | `qwen2-math:1.5b` | 12/15 (80%) | 611s | **3/3** | **3/3** | **3/3** | ❌ | **3/3** |
-| 4 | `gemma3:270m` | 10/15 (67%) | 73s | **3/3** | 0/3 | 2/3 | 2/3 | **3/3** |
-| 5 | `qwen2.5:0.5b` | 10/15 (67%) | 107s | 1/3 | **3/3** | **3/3** | 0/3 | **3/3** |
-| 6 | `tinyllama:latest` | 9/15 (60%) | 587s | 2/3 | 2/3 | **3/3** | 0/3 | 2/3 |
-| 7 | `qwen3:0.6b` | 9/15 (60%) | 595s | 2/3 | **3/3** | 2/3 | 0/3 | 2/3 |
-| 8 | `granite4:350m` | 8/15 (53%) | 83s | 2/3 | 1/3 | 2/3 | 0/3 | **3/3** |
-| 9 | `granite3.1-moe:1b` | 8/15 (53%) | 435s | 2/3 | 1/3 | **3/3** | 0/3 | 2/3 |
-| 10 | `smollm:135m` | 7/15 (47%) | 285s | 0/3 | 2/3 | 2/3 | 0/3 | **3/3** |
-| 11 | `functiongemma:270m` | 1/15 (7%) | 90s | 0/3 | 0/3 | 0/3 | 0/3 | 1/3 |
+| 🥇 | `qwen2.5-coder:0.5b-instruct-q4_k_m` | **14/15 (93%)** | ~80s | **3/3** | 2/3 | 2/3 | **3/3** | **3/3** |
+| 🥈 | `granite3.1-moe:1b` | **12/15 (80%)** | ~60s | **3/3** | 2/3 | **3/3** | 1/3 | **3/3** |
+| 🥉 | `llama3.2:1b` | **12/15 (80%)** | ~600s | **3/3** | 1/3 | 2/3 | **3/3** | **3/3** |
+| 4 | `gemma3:270m` | 10/15 (67%) | ~75s | **3/3** | 1/3 | 1/3 | 2/3 | **3/3** |
+| 5 | `qwen3:0.6b` | ~9/12 | ~130s | 2/3 | **3/3** | **3/3** | 0/3 | — |
+| 6 | `granite4:350m` | 8/15 (53%) | ~97s | 2/3 | 1/3 | 2/3 | 0/3 | **3/3** |
+| 7 | `qwen2.5:0.5b` | 10/15 (67%) | ~107s | 1/3 | **3/3** | **3/3** | 0/3 | **3/3** |
+| 8 | `qwen2-math:1.5b` | 12/15 (80%) | ~611s | **3/3** | **3/3** | **3/3** | ❌ | **3/3** |
+| 9 | `tinyllama:latest` | 9/15 (60%) | ~587s | 2/3 | 2/3 | **3/3** | 0/3 | 2/3 |
+| 10 | `smollm:135m` | 7/15 (47%) | ~285s | 0/3 | 2/3 | 2/3 | 0/3 | **3/3** |
+| 11 | `functiongemma:270m` | 1/15 (7%) | ~90s | 0/3 | 0/3 | 0/3 | 0/3 | 1/3 |
 
-> **Note**: `qwen2-math:1.5b` Calc tests failed with HTTP 400 (model doesn't support native tool calling)
+> **Note**: Scores vary between runs due to model non-determinism. The `qwen2.5-coder:0.5b` achieved 100% in some runs.
 
 ### Model Details
 
 | Model | Params | Size | Speed | Tool Support | Notes |
 |-------|--------|------|-------|--------------|-------|
-| `qwen2.5-coder:0.5b` | 494M | ~400MB | ⚡ Fast | ✅ Native | **🏆 100% SCORE!** Perfect all categories |
-| `llama3.2:1b` | 1.2B | ~1.3GB | 🐢 Medium | ✅ Native | Strong all-rounder, perfect Code |
-| `qwen2-math:1.5b` | 1.5B | ~935MB | 🐢 Slow | ❌ No tools | **4 perfect categories!** No tool support |
-| `gemma3:270m` | 270M | ~292MB | ⚡⚡ Fastest | ⚠️ Text | **Math & Code champion** - tiny but capable |
-| `qwen2.5:0.5b` | 494M | ~398MB | ⚡ Fast | ⚠️ Text | **Reasoning & Knowledge champ**, Calc fails |
-| `tinyllama:latest` | 1.1B | ~638MB | 🐢 Slow | ⚠️ Text | Older model, verbose, unstable |
-| `qwen3:0.6b` | 600M | ~523MB | 🐢 Slow | ⚠️ Text | Perfect reasoning but Calc returns empty |
+| `qwen2.5-coder:0.5b` | 494M | ~400MB | ⚡ Fast | ✅ Native | **🏆 Best overall!** Excellent tool usage |
+| `granite3.1-moe:1b` | 1B MoE | ~1.4GB | ⚡ Medium | ✅ Native | Strong knowledge, HTTP 500 on long context |
+| `llama3.2:1b` | 1.2B | ~1.3GB | 🐢 Slow | ✅ Native | **128k context!** Thorough but slow |
+| `gemma3:270m` | 270M | ~292MB | ⚡⚡ Fastest | ⚠️ ReAct JSON | Uses JSON ReAct format, Math & Code champion |
+| `qwen3:0.6b` | 600M | ~523MB | ⚡ Medium | ⚠️ Text | Perfect reasoning but Calc returns empty |
 | `granite4:350m` | 350M | ~708MB | ⚡ Fast | ❌ Refused | **Refuses calculator** - safety filter |
-| `granite3.1-moe:1b` | 1B MoE | ~1.4GB | 🐢 Slow | ✅ Native | HTTP 500 errors, unstable |
+| `qwen2.5:0.5b` | 494M | ~398MB | ⚡ Fast | ⚠️ Text | **Reasoning & Knowledge champ**, Calc fails |
+| `qwen2-math:1.5b` | 1.5B | ~935MB | 🐢 Slow | ❌ No tools | **4 perfect categories!** No tool support |
+| `tinyllama:latest` | 1.1B | ~638MB | 🐢 Slow | ⚠️ Text | Older model, verbose, unstable |
 | `smollm:135m` | 135M | ~92MB | ⚡ Fast | ❌ None | **Smallest** - hallucinates math (7×8=42!) |
-| `functiongemma:270m` | 270M | ~301MB | ⚡ Fast | ❌ Broken | **Worst performer** - refuses most tasks |
+| `functiongemma:270m` | 270M | ~301MB | ⚡ Fast | ❌ Broken | **Worst performer** - returns empty |
 
 ### Category Champions
 
 | Category | Champion | Score | Notes |
 |----------|----------|-------|-------|
-| **Math** | `qwen2.5-coder:0.5b` 🏆 | 3/3 | Also gemma3:270m |
-| **Reasoning** | `qwen2.5-coder:0.5b` 🏆 | 3/3 | Also qwen2.5:0.5b, qwen3:0.6b, qwen2-math |
-| **Knowledge** | `qwen2.5-coder:0.5b` 🏆 | 3/3 | Multiple tied |
-| **Calc** | `qwen2.5-coder:0.5b`, `llama3.2` 🏆 | 3/3 | Only models with 100% tool usage |
-| **Code** | `qwen2.5-coder:0.5b` 🏆 | 3/3 | Also gemma3:270m |
+| **Math** | `qwen2.5-coder:0.5b`, `granite3.1-moe:1b` | 3/3 | Also gemma3:270m |
+| **Reasoning** | `qwen2.5:0.5b`, `qwen3:0.6b`, `qwen2-math` | 3/3 | Multiple tied |
+| **Knowledge** | `granite3.1-moe:1b`, `qwen2-math` | 3/3 | Multiple tied at 3/3 |
+| **Calc** | `qwen2.5-coder:0.5b`, `llama3.2:1b` | 3/3 | Only models with 100% tool usage |
+| **Code** | Many models | 3/3 | Code generation is easy for small models! |
 
 ### Test Categories
 
@@ -282,10 +298,11 @@ The following models have been tested with a **15-test benchmark** (3 tests per 
 
 | Use Case | Recommended Model | Why |
 |----------|-------------------|-----|
-| **General use** | `qwen2.5-coder:0.5b-instruct-q4_k_m` | **100% score!** Fast, perfect tool usage |
-| **Math tasks** | `qwen2.5-coder:0.5b` or `gemma3:270m` | Perfect score, gemma fastest |
-| **Reasoning tasks** | `qwen2.5-coder:0.5b` or `qwen2.5:0.5b` | Perfect reasoning |
-| **Tool usage** | `qwen2.5-coder:0.5b` | Only model with 100% Calc + everything else |
+| **General use** | `qwen2.5-coder:0.5b-instruct-q4_k_m` | Best all-around, fast, great tool usage |
+| **Large context** | `llama3.2:1b` | **128k context window** - handles long conversations |
+| **Math tasks** | `qwen2.5-coder:0.5b` or `qwen2-math:1.5b` | Perfect math scores |
+| **Reasoning tasks** | `qwen2.5:0.5b` or `qwen3:0.6b` | Perfect reasoning |
+| **Tool usage** | `qwen2.5-coder:0.5b` | Most reliable tool calling |
 | **Fastest inference** | `gemma3:270m` | 270M params, fastest responses |
 | **No tools needed** | `qwen2-math:1.5b` | 4/5 categories perfect (no Calc) |
 | **Smallest footprint** | `smollm:135m` | 92MB - but expect hallucinations |
@@ -309,9 +326,80 @@ The following models have been tested with a **15-test benchmark** (3 tests per 
 3. **Power operator confusion**: `gemma3:270m` reads `2**10` as `2*10=20`
 4. **Reasoning failures**: Some models answer "8" for sequence "2,4,6,8,?" (repeat last)
 5. **Stability issues**:
-   - `granite3.1-moe:1b`: HTTP 500 crashes
+   - `granite3.1-moe:1b`: HTTP 500 crashes (server EOF)
    - `tinyllama`, `qwen3:0.6b`: HTTP 524 timeouts
 6. **Empty responses**: `functiongemma:270m` returns empty strings on most tests
+
+---
+
+## Skills (Agent Skills Specification)
+
+🦞 LocalClaw R01 supports the **[Agent Skills](https://agentskills.io/)** specification for reusable instruction bundles.
+
+### Skill Structure
+
+```
+skills/
+└── my-skill/
+    ├── SKILL.md          # Required: name, description, instructions
+    ├── scripts/          # Optional: executable scripts
+    ├── references/       # Optional: additional docs
+    └── assets/           # Optional: templates, images
+```
+
+### SKILL.md Format
+
+```yaml
+---
+name: calculator
+description: Perform mathematical calculations. Use when the user needs to compute expressions.
+---
+
+# Calculator Skill
+
+Instructions for the model on how to use this skill...
+```
+
+### Using Skills
+
+```python
+from localclaw import Agent, SkillLoader, SkillRegistry
+from localclaw.tools.builtins import make_builtin_registry
+
+# Load skills
+loader = SkillLoader()
+registry = SkillRegistry()
+
+for skill_name in loader.list_skills():
+    skill = loader.load(skill_name)
+    registry.add(skill)
+
+# Create agent with skills
+tools = make_builtin_registry().subset(["calculator"])
+skill_prompt = registry.to_system_prompt_addition()
+
+agent = Agent(
+    model="qwen2.5-coder:0.5b-instruct-q4_k_m",
+    tools=tools,
+    system_prompt="You are a helpful assistant." + skill_prompt,
+)
+
+response = agent.chat("What is 25 times 17?")
+```
+
+### Progressive Disclosure
+
+Skills follow a three-level loading system:
+
+1. **Metadata** (~100 tokens): `name` + `description` loaded at startup
+2. **Instructions** (<500 lines): Full `SKILL.md` body loaded when skill triggers
+3. **Resources** (as needed): Files in `scripts/`, `references/`, `assets/` loaded on demand
+
+### Built-in Skills
+
+| Skill | Description |
+|-------|-------------|
+| `skill-creator` | OpenClaw's platform-agnostic skill generator. Creates new skills from user requests. |
 
 ---
 
@@ -352,33 +440,100 @@ python examples/07_model_comparison.py
 python examples/08_robust_comparison.py
 ```
 
-### Remote Ollama Configuration
+---
 
-To use a remote Ollama instance, edit `localclaw/core/ollama_client.py`:
+## Remote Ollama Configuration
+
+To use a remote Ollama instance (e.g., via Cloudflare tunnel), edit `localclaw/core/ollama_client.py`:
 
 ```python
 # LOCAL OLLAMA (default):
-# DEFAULT_BASE_URL = "http://localhost:11434"
-#
-# REMOTE OLLAMA (cloudflare tunnel):
-DEFAULT_BASE_URL = "https://your-tunnel.trycloudflare.com"
+DEFAULT_BASE_URL = "http://localhost:11434"
 
-# Timeout for remote connections (30 minutes recommended)
-DEFAULT_TIMEOUT = 1800.0
+# REMOTE OLLAMA (cloudflare tunnel):
+# DEFAULT_BASE_URL = "https://your-tunnel.trycloudflare.com"
+```
+
+### Timeout Configuration
+
+Configure via environment variables:
+
+```bash
+# Request timeout in seconds (default: 90s for Cloudflare tunnel compatibility)
+export OLLAMA_TIMEOUT=90
+
+# Max retry attempts for transient errors (default: 3)
+export OLLAMA_MAX_RETRIES=3
+
+# Initial retry delay in seconds (default: 5s, doubles each retry)
+export OLLAMA_RETRY_DELAY=5
+```
+
+### Automatic Retry
+
+LocalClaw automatically retries on transient errors with exponential backoff:
+
+| Error Code | Description | Retry Behavior |
+|------------|-------------|----------------|
+| HTTP 524 | Cloudflare tunnel timeout | Retries up to 3 times |
+| HTTP 502/503/504 | Server temporarily unavailable | Retries up to 3 times |
+| HTTP 500 | Server error (model loading, memory pressure) | Retries up to 3 times |
+| Timeout | Socket or connection timeout | Retries up to 3 times |
+
+---
+
+## CLI Commands (Interactive Chat)
+
+When using `examples/06_interactive_chat.py`, the following commands are available:
+
+| Command | Description |
+|---------|-------------|
+| `/help` | Show available commands |
+| `/status` | Show agent status (model, tools, memory) |
+| `/context` | Show current conversation context |
+| `/stats` | Show session statistics |
+| `/messages` | Show message count |
+| `/undo` | Undo last exchange |
+| `/retry` | Retry last message |
+| `/export` | Export conversation to file |
+| `/save <file>` | Save conversation to file |
+| `/load <file>` | Load conversation from file |
+| `/system <prompt>` | Change system prompt |
+| `/temp <value>` | Change temperature |
+| `/quit` or `exit` | Exit the chat |
+
+### CLI Flags
+
+```bash
+python examples/06_interactive_chat.py --model llama3.2:1b --verbose
+
+# Use --force-react for models without native tool support
+python examples/06_interactive_chat.py --model phi3.5:3.8b --force-react
 ```
 
 ---
 
 ## Recent Improvements
 
+### Zero Dependencies
+
+🦞 LocalClaw R01 now uses **only Python stdlib** — no pip install required! The HTTP client uses `urllib` instead of `httpx`.
+
+### Automatic Error Recovery
+
+- **HTTP 524/502/503/504/500 retry**: Transient server errors are automatically retried with exponential backoff
+- **Timeout retry**: Socket timeouts are retried automatically
+- **Configurable via environment variables**: `OLLAMA_TIMEOUT`, `OLLAMA_MAX_RETRIES`, `OLLAMA_RETRY_DELAY`
+
 ### Small Model Support
 
-🦞 LocalClaw R00 now handles quirks of small models (≤1.5B parameters):
+🦞 LocalClaw R01 handles quirks of small models (≤1.5B parameters):
 
 - **Fuzzy tool name matching**: Hallucinated tool names like `calculate_expression` are automatically mapped to `calculator`
 - **Argument auto-fixing**: Common wrong argument patterns are corrected (e.g., `{"base": 2, "exponent": 10}` → `{"expression": "2 ** 10"}`)
 - **JSON response cleaning**: When models output tool schemas instead of text answers, LocalClaw falls back to tool results
 - **Unicode normalization**: Accented characters are normalized for comparison (e.g., "Brasília" matches "brasilia")
+- **ReAct text parsing**: Models without native tool support automatically fall back to text-based ReAct format
 
 ### Optimized Test Prompts
 
@@ -397,6 +552,7 @@ Key insights for small model prompt engineering:
 | `07_model_comparison.py` | Benchmark 15 tests across models with category breakdown |
 | `08_robust_comparison.py` | Progress-saving comparison for unstable connections |
 | `09_expanded_benchmark.py` | 25 tests across 8 categories including tool chaining |
+| `10_skills_demo.py` | Demonstrate Agent Skills system with skill-creator |
 
 ### Test Categories (15 tests)
 
@@ -412,7 +568,7 @@ Key insights for small model prompt engineering:
 
 ## About
 
-**🦞 LocalClaw R00** is written and maintained by **VTSTech**.
+**🦞 LocalClaw R01** is written and maintained by **VTSTech**.
 
 - 🌐 Website: [https://www.vts-tech.org](https://www.vts-tech.org)
 - 📦 GitHub: [https://github.com/VTSTech/LocalClaw](https://github.com/VTSTech/LocalClaw)
