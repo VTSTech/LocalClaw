@@ -126,6 +126,7 @@ def _build_agent(args, client: OllamaClient):
         client=client,
         on_step=_make_step_printer(getattr(args, "verbose", False)),
         model_options={"temperature": temperature} if temperature else {},
+        force_react=getattr(args, "force_react", False),
     )
     
     return agent, skill_registry
@@ -398,6 +399,11 @@ def build_parser() -> argparse.ArgumentParser:
         default=0.7,
         metavar="TEMP",
         help="Temperature (default: 0.7)",
+    )
+    shared.add_argument(
+        "--force-react",
+        action="store_true",
+        help="Force ReAct text-based tool calling (for models without native tool support)",
     )
 
     # ── run ─────────────────────────────────────────────────────────

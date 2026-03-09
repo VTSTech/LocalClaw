@@ -1,263 +1,372 @@
 ---
 name: skill-creator
-description: >-
-  Create cross-platform agent skills from workflow descriptions. Activates when
-  users ask to create an agent, automate a repetitive workflow, create a custom
-  skill, or need advanced agent creation. Triggers on phrases like create agent
-  for, automate workflow, create skill for, every day I have to, daily I need to,
-  turn process into agent, need to automate, create a cross-platform skill,
-  validate this skill, export this skill, migrate this skill. Supports single
-  skills, multi-agent suites, transcript processing, template-based creation,
-  interactive configuration, cross-platform export, and spec validation.
-license: MIT
-metadata:
-  author: Francy Lisboa Charuto
-  version: 4.0.0
-compatibility: >-
-  Works on all platforms supporting the Agent Skills Open Standard (SKILL.md):
-  Claude Code, GitHub Copilot CLI, VS Code Copilot, Cursor, Windsurf, Cline,
-  OpenAI Codex CLI, Gemini CLI, and 20+ others.
+description: Create, edit, improve, or audit AgentSkills. Use when creating a new skill from scratch or when asked to improve, review, audit, tidy up, or clean up an existing skill or SKILL.md file. Also use when editing or restructuring a skill directory (moving files to references/ or scripts/, removing stale content, validating against the AgentSkills spec). Triggers on phrases like "create a skill", "author a skill", "tidy up a skill", "improve this skill", "review the skill", "clean up the skill", "audit the skill".
 ---
-# /skill-creator — Level 5 Skill Dark Factory
 
-You are an autonomous skill factory. You exist because humans are cognitively incapable of writing specifications clear enough for an agent to build from without intervention. A human-written spec will never reach Level 5 — it will always be incomplete, ambiguous, and missing the requirements the human assumed were obvious. That is not a flaw to fix. That is the design constraint this factory is built around.
+# Skill Creator
 
-The user provides raw material — workflow descriptions, documentation, links, existing code, API docs, PDFs, database schemas, transcripts, compliance checklists, vague intentions, anything — and you produce a complete, production-ready, cross-platform agent skill. The human provides sources and evaluates the outcome. You handle everything in between.
+This skill provides guidance for creating effective skills.
 
-This is a Level 5 dark factory for skill creation. The user should never need to write code, review implementation details, fill out templates, or understand the skill spec. Any cognitively constrained human should be able to pass you whatever they have — a messy transcript, a GitHub link, a half-written doc — and receive back an opinionated piece of reusable software that makes them genuinely productive. You bridge the gap between what humans can articulate and what agents need to build.
+## About Skills
 
-## Trigger
+Skills are modular, self-contained packages that extend Codex's capabilities by providing
+specialized knowledge, workflows, and tools. Think of them as "onboarding guides" for specific
+domains or tasks—they transform Codex from a general-purpose agent into a specialized agent
+equipped with procedural knowledge that no model can fully possess.
 
-User invokes `/skill-creator` followed by their input:
+### What Skills Provide
 
-```
-/skill-creator Every week I pull sales data, clean it, and generate a report
-/skill-creator https://wiki.internal/deploy-runbook
-/skill-creator See scripts/invoice_processor.py — turn it into a reusable skill
-/skill-creator Here's our API docs: https://api.internal/docs — make a skill for querying inventory
-/skill-creator Based on compliance-checklist.pdf, create a skill for SOX audits
-```
+1. Specialized workflows - Multi-step procedures for specific domains
+2. Tool integrations - Instructions for working with specific file formats or APIs
+3. Domain expertise - Company-specific knowledge, schemas, business logic
+4. Bundled resources - Scripts, references, and assets for complex and repetitive tasks
 
-The user can also activate naturally without the prefix:
+## Core Principles
 
-```
-Create a skill for analyzing CSV files
-Every day I process invoices manually, automate this
-Automate this workflow
-Validate this skill
-Export this skill for Cursor
-```
+### Concise is Key
 
-## How the Factory Works
+The context window is a public good. Skills share the context window with everything else Codex needs: system prompt, conversation history, other Skills' metadata, and the actual user request.
 
-Raw material goes in. A validated, security-scanned, self-contained skill comes out. The factory operates in two stages:
+**Default assumption: Codex is already very smart.** Only add context Codex doesn't already have. Challenge each piece of information: "Does Codex really need this explanation?" and "Does this paragraph justify its token cost?"
 
-### Stage 1: Understand and Specify (Phases 1-2)
+Prefer concise examples over verbose explanations.
 
-Read every piece of material the user provides. Follow links. Read files. Parse PDFs. Study existing code. But do not take any of it at face value.
+### Set Appropriate Degrees of Freedom
 
-**Humans describe what they do, not what they need.** "I pull sales data and make a report" hides a dozen implicit requirements: What decisions does the report drive? Who reads it? What format? What happens when data is missing? What constitutes a good report vs. a bad one? The human knows the answers to these questions but won't think to tell you. Your job is to uncover them from the material itself.
+Match the level of specificity to the task's fragility and variability:
 
-**Clarity principles** (self-guided, no external dependency):
+**High freedom (text-based instructions)**: Use when multiple approaches are valid, decisions depend on context, or heuristics guide the approach.
 
-1. **Read everything before concluding anything.** Do not start forming the spec after the first paragraph. Consume all material — every link, every file, every page — then synthesize.
-2. **Challenge the surface description.** The human's words are a starting point, not a specification. Look for what's missing, what's implied, what's contradictory. If someone says "generate a report," ask yourself: report for whom? In what format? With what data? At what frequency? Answering what triggers it?
-3. **Extract implicit requirements.** Error handling, data validation, edge cases, output formats, failure modes — the human assumed these were obvious. They aren't. Make them explicit in your spec.
-4. **Identify the real output.** The human says "report" but means "a PDF my VP can read in 2 minutes that shows whether we're hitting targets." The human says "clean the data" but means "deduplicate, normalize dates, flag outliers, and log what was changed." Dig past the label to the substance.
-5. **Generate a spec that surpasses the human's understanding.** Your specification should contain requirements the human would say "yes, exactly" to — but could never have articulated themselves. That is the standard.
+**Medium freedom (pseudocode or scripts with parameters)**: Use when a preferred pattern exists, some variation is acceptable, or configuration affects behavior.
 
-Then produce your internal specification — a complete implementation contract structured as a linear walkthrough:
+**Low freedom (specific scripts, few parameters)**: Use when operations are fragile and error-prone, consistency is critical, or a specific sequence must be followed.
 
-- What problem does this *actually* solve (not what the human said — what they meant)?
-- What are the real inputs, outputs, and data sources?
-- What are the use cases (4-6, covering 80% of real usage)?
-- What methodology does each use case follow?
-- What APIs or libraries are needed?
-- What are the failure modes and edge cases the human didn't mention?
+Think of Codex as exploring a path: a narrow bridge with cliffs needs specific guardrails (low freedom), while an open field allows many routes (high freedom).
 
-This specification is for you, not the user. The quality of the skill depends entirely on the quality of this specification. Be thorough. Be precise. Be opinionated — you understand the material better than the human can articulate it.
+### Anatomy of a Skill
 
-### Stage 2: Build and Verify (Phases 3-5)
-
-Implement the skill end-to-end from your specification. Structure the directory. Write every file. Generate functional code — no placeholders, no TODOs, no stubs. Then run automated validation and security scanning. If either fails, fix the issues and re-run. Do not deliver a skill that fails its own quality gates.
-
-```
-Phase 1: DISCOVERY       Read all material, research APIs, data sources, tools
-Phase 2: DESIGN          Generate internal specification (use cases, methods, outputs)
-Phase 3: ARCHITECTURE    Structure the skill directory (simple vs. complex suite)
-Phase 4: DETECTION       Craft activation description + keywords for reliable triggering
-Phase 5: IMPLEMENTATION  Create all files, validate, security scan, deliver
-```
-
-The human removes the cognitive constraint by providing the raw material. The factory removes the implementation constraint by building the skill autonomously. The quality gates remove the trust constraint by validating the output automatically.
-
-**Output**: A self-contained skill that is installed and invoked the same way as skill-creator itself:
+Every skill consists of a required SKILL.md file and optional bundled resources:
 
 ```
 skill-name/
-├── SKILL.md          # Starts with "# /skill-name" — the invocation trigger
-├── scripts/          # Functional Python code (no placeholders)
-├── references/       # Detailed documentation (loaded on demand)
-├── assets/           # Templates, schemas, data files
-└── README.md         # Multi-platform installation instructions
+├── SKILL.md (required)
+│   ├── YAML frontmatter metadata (required)
+│   │   ├── name: (required)
+│   │   └── description: (required)
+│   └── Markdown instructions (required)
+└── Bundled Resources (optional)
+    ├── scripts/          - Executable code (Python/Bash/etc.)
+    ├── references/       - Documentation intended to be loaded into context as needed
+    └── assets/           - Files used in output (templates, icons, fonts, etc.)
 ```
 
-Once installed, anyone on any platform types `/skill-name` and the skill activates — exactly like `/skill-creator`. The generated skill is a first-class citizen, not a second-class output.
+#### SKILL.md (required)
 
-## Core Workflow
+Every SKILL.md consists of:
 
-### Phase 1: Discovery
+- **Frontmatter** (YAML): Contains `name` and `description` fields. These are the only fields that Codex reads to determine when the skill gets used, thus it is very important to be clear and comprehensive in describing what the skill is, and when it should be used.
+- **Body** (Markdown): Instructions and guidance for using the skill. Only loaded AFTER the skill triggers (if at all).
 
-Research available APIs and data sources for the user's domain. Compare options by cost, rate limits, data quality, and documentation. **Decide** which API to use with justification.
+#### Bundled Resources (optional)
 
-### Phase 2: Design
+##### Scripts (`scripts/`)
 
-Define 4-6 priority analyses covering 80% of use cases. For each: name, objective, inputs, outputs, methodology. Always include a comprehensive report function.
+Executable code (Python/Bash/etc.) for tasks that require deterministic reliability or are repeatedly rewritten.
 
-### Phase 3: Architecture
+- **When to include**: When the same code is being rewritten repeatedly or deterministic reliability is needed
+- **Example**: `scripts/rotate_pdf.py` for PDF rotation tasks
+- **Benefits**: Token efficient, deterministic, may be executed without loading into context
+- **Note**: Scripts may still need to be read by Codex for patching or environment-specific adjustments
 
-Structure the skill using the Agent Skills Open Standard:
+##### References (`references/`)
 
-- **Simple Skill**: Single SKILL.md + scripts + references + assets
-- **Complex Suite**: Multiple component skills with shared resources
+Documentation and reference material intended to be loaded as needed into context to inform Codex's process and thinking.
 
-**Decision criteria**: Number of workflows, code complexity, maintenance needs.
+- **When to include**: For documentation that Codex should reference while working
+- **Examples**: `references/finance.md` for financial schemas, `references/mnda.md` for company NDA template, `references/policies.md` for company policies, `references/api_docs.md` for API specifications
+- **Use cases**: Database schemas, API documentation, domain knowledge, company policies, detailed workflow guides
+- **Benefits**: Keeps SKILL.md lean, loaded only when Codex determines it's needed
+- **Best practice**: If files are large (>10k words), include grep search patterns in SKILL.md
+- **Avoid duplication**: Information should live in either SKILL.md or references files, not both. Prefer references files for detailed information unless it's truly core to the skill—this keeps SKILL.md lean while making information discoverable without hogging the context window. Keep only essential procedural instructions and workflow guidance in SKILL.md; move detailed reference material, schemas, and examples to references files.
 
-### Phase 4: Detection
+##### Assets (`assets/`)
 
-Generate a description (<=1024 chars) with domain keywords for agent discovery. The description is the primary activation mechanism across all platforms.
+Files not intended to be loaded into context, but rather used within the output Codex produces.
 
-### Phase 5: Implementation
+- **When to include**: When the skill needs files that will be used in the final output
+- **Examples**: `assets/logo.png` for brand assets, `assets/slides.pptx` for PowerPoint templates, `assets/frontend-template/` for HTML/React boilerplate, `assets/font.ttf` for typography
+- **Use cases**: Templates, images, icons, boilerplate code, fonts, sample documents that get copied or modified
+- **Benefits**: Separates output resources from documentation, enables Codex to use files without loading them into context
 
-Create all files in this order:
+#### What to Not Include in a Skill
 
-1. Create directory structure
-2. Write **SKILL.md** — starts with `# /skill-name`, includes trigger section with invocation examples, spec-compliant frontmatter
-3. Implement Python scripts (functional, no placeholders, no TODOs)
-4. Write references (detailed documentation the skill loads on demand)
-5. Write assets (templates, configs)
-6. Write `README.md` (multi-platform install instructions)
-7. Run **validation** against the official spec
-8. Run **security scan** for hardcoded keys and injection patterns
-9. Report results to user with clear next steps
+A skill should only contain essential files that directly support its functionality. Do NOT create extraneous documentation or auxiliary files, including:
 
-## Naming Convention
+- README.md
+- INSTALLATION_GUIDE.md
+- QUICK_REFERENCE.md
+- CHANGELOG.md
+- etc.
 
-Every generated skill name must end with `-skill`. This suffix makes skills instantly discoverable across GitHub and GitLab organizations.
+The skill should only contain the information needed for an AI agent to do the job at hand. It should not contain auxiliary context about the process that went into creating it, setup and testing procedures, user-facing documentation, etc. Creating additional documentation files just adds clutter and confusion.
 
-**Format**: `{domain}-{objective}-skill`
+### Progressive Disclosure Design Principle
 
-**Rules**:
-- Must end with `-skill`
-- 1-64 characters total, lowercase letters, numbers, and hyphens
-- Must match parent directory name
-- Must not contain consecutive hyphens
+Skills use a three-level loading system to manage context efficiently:
 
-**Examples**: `sales-report-skill`, `csv-cleaner-skill`, `deploy-checklist-skill`, `stock-analyzer-skill`
+1. **Metadata (name + description)** - Always in context (~100 words)
+2. **SKILL.md body** - When skill triggers (<5k words)
+3. **Bundled resources** - As needed by Codex (Unlimited because scripts can be executed without reading into context window)
 
-## Generated SKILL.md Format
+#### Progressive Disclosure Patterns
 
-Every generated skill's SKILL.md must follow this structure:
+Keep SKILL.md body to the essentials and under 500 lines to minimize context bloat. Split content into separate files when approaching this limit. When splitting out content into other files, it is very important to reference them from SKILL.md and describe clearly when to read them, to ensure the reader of the skill knows they exist and when to use them.
 
-```yaml
----
-name: skill-name-skill      # 1-64 chars, must end with -skill, matches directory
-description: >-             # 1-1024 chars, activation keywords
-  Description here...
-license: MIT                # or appropriate license
-metadata:
-  author: Author Name
-  version: 1.0.0
-  created: YYYY-MM-DD                # When the skill was created
-  last_reviewed: YYYY-MM-DD          # Last time content was verified current
-  review_interval_days: 90           # Days between required reviews
----
-# /skill-name — Short Description
+**Key principle:** When a skill supports multiple variations, frameworks, or options, keep only the core workflow and selection guidance in SKILL.md. Move variant-specific details (patterns, examples, configuration) into separate reference files.
 
-You are an expert [domain]. Your job is to [what the skill does].
+**Pattern 1: High-level guide with references**
 
-## Trigger
+```markdown
+# PDF Processing
 
-User invokes `/skill-name` followed by their input:
+## Quick start
 
-[examples of invocation]
+Extract text with pdfplumber:
+[code example]
 
-## [Rest of skill body — workflow, instructions, references]
+## Advanced features
+
+- **Form filling**: See [FORMS.md](FORMS.md) for complete guide
+- **API reference**: See [REFERENCE.md](REFERENCE.md) for all methods
+- **Examples**: See [EXAMPLES.md](EXAMPLES.md) for common patterns
 ```
 
-The SKILL.md body must start with `# /skill-name` so the agent recognizes the slash invocation. The body must be <500 lines. Move detailed content to `references/`.
+Codex loads FORMS.md, REFERENCE.md, or EXAMPLES.md only when needed.
 
-**Critical**: Every skill the factory produces must be invocable with `/skill-name` on any platform. The generated skill is software that gets installed and used — not a document to read.
+**Pattern 2: Domain-specific organization**
 
-## Architecture Decision
+For Skills with multiple domains, organize content by domain to avoid loading irrelevant context:
 
-| Factor | Simple Skill | Complex Suite |
-|--------|-------------|---------------|
-| Workflows | 1-2 | 3+ distinct |
-| Code size | <1000 lines | >2000 lines |
-| Maintenance | Single developer | Team |
-| Structure | Single SKILL.md | Multiple component SKILL.md files |
+```
+bigquery-skill/
+├── SKILL.md (overview and navigation)
+└── reference/
+    ├── finance.md (revenue, billing metrics)
+    ├── sales.md (opportunities, pipeline)
+    ├── product.md (API usage, features)
+    └── marketing.md (campaigns, attribution)
+```
 
-## Cross-Platform Support
+When a user asks about sales metrics, Codex only reads sales.md.
 
-Generated skills work on all platforms supporting the SKILL.md standard:
+Similarly, for skills supporting multiple frameworks or variants, organize by variant:
 
-| Platform | Install Location |
-|----------|-----------------|
-| **Universal** | `~/.agents/skills/` or `.agents/skills/` |
-| Claude Code | `~/.claude/skills/` or `.claude/skills/` |
-| GitHub Copilot | `.github/skills/` |
-| Cursor | `.cursor/rules/` |
-| Windsurf | `.windsurf/rules/` |
-| Cline | `.clinerules/` |
-| Codex CLI | `~/.agents/skills/` |
-| Gemini CLI | `~/.gemini/skills/` |
-| LocalClaw | `localclaw/skills/` |
+```
+cloud-deploy/
+├── SKILL.md (workflow + provider selection)
+└── references/
+    ├── aws.md (AWS deployment patterns)
+    ├── gcp.md (GCP deployment patterns)
+    └── azure.md (Azure deployment patterns)
+```
 
-## Validation and Security
+When the user chooses AWS, Codex only reads aws.md.
 
-After generating a skill, check:
+**Pattern 3: Conditional details**
 
-- **Spec validation**: Frontmatter format, naming, structure, line count
-- **Security scan**: Hardcoded API keys, .env files, injection patterns
+Show basic content, link to advanced content:
 
-## Quality Standards
+```markdown
+# DOCX Processing
 
-**Always**:
-- Complete, functional code (no TODOs, no `pass`)
-- Detailed docstrings and type hints
-- Robust error handling
-- Real content in references (not "see docs")
-- Configs with real values
+## Creating documents
 
-**Never**:
-- Placeholder code or empty functions
-- `api_key: YOUR_KEY_HERE` without env var instructions
-- SKILL.md over 500 lines
-- Platform-specific hacks
+Use docx-js for new documents. See [DOCX-JS.md](DOCX-JS.md).
 
-## Example: Creating a File Conversion Skill
+## Editing documents
 
-When the user asks to create a file-conversion skill, you would:
+For simple edits, modify the XML directly.
 
-1. **Discovery**: Identify common file formats (CSV, JSON, XML, YAML, etc.) and Python libraries (pandas, pyyaml, openpyxl, etc.)
+**For tracked changes**: See [REDLINING.md](REDLINING.md)
+**For OOXML details**: See [OOXML.md](OOXML.md)
+```
 
-2. **Design**: Define use cases:
-   - Convert CSV to JSON
-   - Convert JSON to CSV
-   - Convert Excel to CSV
-   - Convert YAML to JSON
-   - Batch convert multiple files
+Codex reads REDLINING.md or OOXML.md only when the user needs those features.
 
-3. **Architecture**: Simple skill with:
-   - SKILL.md with instructions
-   - scripts/converter.py with conversion functions
-   - references/supported-formats.md with format details
+**Important guidelines:**
 
-4. **Detection**: Write description: "Convert between common file formats (CSV, JSON, XML, YAML, Excel). Activates when users need to convert, transform, or migrate data between formats..."
+- **Avoid deeply nested references** - Keep references one level deep from SKILL.md. All reference files should link directly from SKILL.md.
+- **Structure longer reference files** - For files longer than 100 lines, include a table of contents at the top so Codex can see the full scope when previewing.
 
-5. **Implementation**: Create all files using the write_file tool, validate, and report.
+## Skill Creation Process
 
----
+Skill creation involves these steps:
 
-Good luck! You are the bridge between human intent and agent capability.
+1. Understand the skill with concrete examples
+2. Plan reusable skill contents (scripts, references, assets)
+3. Initialize the skill (run init_skill.py)
+4. Edit the skill (implement resources and write SKILL.md)
+5. Package the skill (run package_skill.py)
+6. Iterate based on real usage
+
+Follow these steps in order, skipping only if there is a clear reason why they are not applicable.
+
+### Skill Naming
+
+- Use lowercase letters, digits, and hyphens only; normalize user-provided titles to hyphen-case (e.g., "Plan Mode" -> `plan-mode`).
+- When generating names, generate a name under 64 characters (letters, digits, hyphens).
+- Prefer short, verb-led phrases that describe the action.
+- Namespace by tool when it improves clarity or triggering (e.g., `gh-address-comments`, `linear-address-issue`).
+- Name the skill folder exactly after the skill name.
+
+### Step 1: Understanding the Skill with Concrete Examples
+
+Skip this step only when the skill's usage patterns are already clearly understood. It remains valuable even when working with an existing skill.
+
+To create an effective skill, clearly understand concrete examples of how the skill will be used. This understanding can come from either direct user examples or generated examples that are validated with user feedback.
+
+For example, when building an image-editor skill, relevant questions include:
+
+- "What functionality should the image-editor skill support? Editing, rotating, anything else?"
+- "Can you give some examples of how this skill would be used?"
+- "I can imagine users asking for things like 'Remove the red-eye from this image' or 'Rotate this image'. Are there other ways you imagine this skill being used?"
+- "What would a user say that should trigger this skill?"
+
+To avoid overwhelming users, avoid asking too many questions in a single message. Start with the most important questions and follow up as needed for better effectiveness.
+
+Conclude this step when there is a clear sense of the functionality the skill should support.
+
+### Step 2: Planning the Reusable Skill Contents
+
+To turn concrete examples into an effective skill, analyze each example by:
+
+1. Considering how to execute on the example from scratch
+2. Identifying what scripts, references, and assets would be helpful when executing these workflows repeatedly
+
+Example: When building a `pdf-editor` skill to handle queries like "Help me rotate this PDF," the analysis shows:
+
+1. Rotating a PDF requires re-writing the same code each time
+2. A `scripts/rotate_pdf.py` script would be helpful to store in the skill
+
+Example: When designing a `frontend-webapp-builder` skill for queries like "Build me a todo app" or "Build me a dashboard to track my steps," the analysis shows:
+
+1. Writing a frontend webapp requires the same boilerplate HTML/React each time
+2. An `assets/hello-world/` template containing the boilerplate HTML/React project files would be helpful to store in the skill
+
+Example: When building a `big-query` skill to handle queries like "How many users have logged in today?" the analysis shows:
+
+1. Querying BigQuery requires re-discovering the table schemas and relationships each time
+2. A `references/schema.md` file documenting the table schemas would be helpful to store in the skill
+
+To establish the skill's contents, analyze each concrete example to create a list of the reusable resources to include: scripts, references, and assets.
+
+### Step 3: Initializing the Skill
+
+At this point, it is time to actually create the skill.
+
+Skip this step only if the skill being developed already exists, and iteration or packaging is needed. In this case, continue to the next step.
+
+When creating a new skill from scratch, always run the `init_skill.py` script. The script conveniently generates a new template skill directory that automatically includes everything a skill requires, making the skill creation process much more efficient and reliable.
+
+Usage:
+
+```bash
+scripts/init_skill.py <skill-name> --path <output-directory> [--resources scripts,references,assets] [--examples]
+```
+
+Examples:
+
+```bash
+scripts/init_skill.py my-skill --path skills/public
+scripts/init_skill.py my-skill --path skills/public --resources scripts,references
+scripts/init_skill.py my-skill --path skills/public --resources scripts --examples
+```
+
+The script:
+
+- Creates the skill directory at the specified path
+- Generates a SKILL.md template with proper frontmatter and TODO placeholders
+- Optionally creates resource directories based on `--resources`
+- Optionally adds example files when `--examples` is set
+
+After initialization, customize the SKILL.md and add resources as needed. If you used `--examples`, replace or delete placeholder files.
+
+### Step 4: Edit the Skill
+
+When editing the (newly-generated or existing) skill, remember that the skill is being created for another instance of Codex to use. Include information that would be beneficial and non-obvious to Codex. Consider what procedural knowledge, domain-specific details, or reusable assets would help another Codex instance execute these tasks more effectively.
+
+#### Learn Proven Design Patterns
+
+Consult these helpful guides based on your skill's needs:
+
+- **Multi-step processes**: See references/workflows.md for sequential workflows and conditional logic
+- **Specific output formats or quality standards**: See references/output-patterns.md for template and example patterns
+
+These files contain established best practices for effective skill design.
+
+#### Start with Reusable Skill Contents
+
+To begin implementation, start with the reusable resources identified above: `scripts/`, `references/`, and `assets/` files. Note that this step may require user input. For example, when implementing a `brand-guidelines` skill, the user may need to provide brand assets or templates to store in `assets/`, or documentation to store in `references/`.
+
+Added scripts must be tested by actually running them to ensure there are no bugs and that the output matches what is expected. If there are many similar scripts, only a representative sample needs to be tested to ensure confidence that they all work while balancing time to completion.
+
+If you used `--examples`, delete any placeholder files that are not needed for the skill. Only create resource directories that are actually required.
+
+#### Update SKILL.md
+
+**Writing Guidelines:** Always use imperative/infinitive form.
+
+##### Frontmatter
+
+Write the YAML frontmatter with `name` and `description`:
+
+- `name`: The skill name
+- `description`: This is the primary triggering mechanism for your skill, and helps Codex understand when to use the skill.
+  - Include both what the Skill does and specific triggers/contexts for when to use it.
+  - Include all "when to use" information here - Not in the body. The body is only loaded after triggering, so "When to Use This Skill" sections in the body are not helpful to Codex.
+  - Example description for a `docx` skill: "Comprehensive document creation, editing, and analysis with support for tracked changes, comments, formatting preservation, and text extraction. Use when Codex needs to work with professional documents (.docx files) for: (1) Creating new documents, (2) Modifying or editing content, (3) Working with tracked changes, (4) Adding comments, or any other document tasks"
+
+Do not include any other fields in YAML frontmatter.
+
+##### Body
+
+Write instructions for using the skill and its bundled resources.
+
+### Step 5: Packaging a Skill
+
+Once development of the skill is complete, it must be packaged into a distributable .skill file that gets shared with the user. The packaging process automatically validates the skill first to ensure it meets all requirements:
+
+```bash
+scripts/package_skill.py <path/to/skill-folder>
+```
+
+Optional output directory specification:
+
+```bash
+scripts/package_skill.py <path/to/skill-folder> ./dist
+```
+
+The packaging script will:
+
+1. **Validate** the skill automatically, checking:
+   - YAML frontmatter format and required fields
+   - Skill naming conventions and directory structure
+   - Description completeness and quality
+   - File organization and resource references
+
+2. **Package** the skill if validation passes, creating a .skill file named after the skill (e.g., `my-skill.skill`) that includes all files and maintains the proper directory structure for distribution. The .skill file is a zip file with a .skill extension.
+
+   Security restriction: symlinks are rejected and packaging fails when any symlink is present.
+
+If validation fails, the script will report the errors and exit without creating a package. Fix any validation errors and run the packaging command again.
+
+### Step 6: Iterate
+
+After testing the skill, users may request improvements. Often this happens right after using the skill, with fresh context of how the skill performed.
+
+**Iteration workflow:**
+
+1. Use the skill on real tasks
+2. Notice struggles or inefficiencies
+3. Identify how SKILL.md or bundled resources should be updated
+4. Implement changes and test again
