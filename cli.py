@@ -260,6 +260,8 @@ def cmd_chat(args):
     print(dim("  Type '/reset' to clear conversation history."))
     print(dim("  Type '/tools' to list available tools."))
     print(dim("  Type '/skills' to list active skills."))
+    print(dim("  Type '/status' to show session status."))
+    print(dim("  Type '/context' to show context information."))
     print(dim("  ─────────────────────────────────────"))
     
     # Show loaded skills if verbose
@@ -308,6 +310,81 @@ def cmd_chat(args):
                         print(dim(f"  • {name}: {desc}"))
                 else:
                     print(dim("  No skills active. Use --skills to add some."))
+                continue
+
+            if user_input == "/status":
+                # Show current session status
+                print()
+                print(cyan("  Session Status"))
+                print(dim("  ─────────────────────────────────────"))
+                print(f"  Model:     {bold(args.model)}")
+                print(f"  Ollama:    {agent.client.base_url}")
+                print(f"  Timeout:   {agent.client.timeout}s")
+                print(f"  ReAct:     {'forced' if getattr(args, 'force_react', False) else 'auto-detect'}")
+                print()
+                print(f"  Tools:     {len(agent.tools.all())} active")
+                if agent.tools.all():
+                    print(dim(f"             {', '.join(t.name for t in agent.tools.all())}"))
+                print()
+                print(f"  Skills:    {len(skill_registry)} active")
+                if len(skill_registry) > 0:
+                    print(dim(f"             {', '.join(skill_registry.list())}"))
+                print()
+                print(f"  Memory:    {len(agent.memory._history)} messages")
+                print(f"  Max steps: {agent.max_steps}")
+                print()
+                continue
+
+            if user_input == "/context":
+                # Show context/memory information
+                print()
+                print(cyan("  Context Information"))
+                print(dim("  ─────────────────────────────────────"))
+                
+                # System prompt
+                sys_prompt = agent.memory.system_prompt or "(none)"
+                sys_lines = sys_prompt.split('\n')
+                print(f"  System prompt: {len(sys_prompt)} chars, {len(sys_lines)} lines")
+                if len(sys_lines) <= 5:
+                    print(dim("  ┌─────────────────────────────────────"))
+                    for line in sys_lines[:5]:
+                        print(dim(f"  │ {line[:50]}{'...' if len(line) > 50 else ''}"))
+                    print(dim("  └─────────────────────────────────────"))
+                else:
+                    print(dim(f"  Preview: {sys_lines[0][:60]}..."))
+                
+                print()
+                
+                # Memory history
+                history = agent.memory._history
+                print(f"  Conversation history: {len(history)} messages")
+                
+                # Count message types
+                user_msgs = sum(1 for m in history if m.get('role') == 'user')
+                assistant_msgs = sum(1 for m in history if m.get('role') == 'assistant')
+                tool_msgs = sum(1 for m in history if m.get('role') == 'tool')
+                
+                print(dim(f"    • User messages: {user_msgs}"))
+                print(dim(f"    • Assistant messages: {assistant_msgs}"))
+                print(dim(f"    • Tool results: {tool_msgs}"))
+                
+                # Estimate token usage (rough: ~4 chars per token)
+                total_chars = sum(len(m.get('content', '')) for m in history)
+                total_chars += len(sys_prompt)
+                est_tokens = total_chars // 4
+                print()
+                print(f"  Estimated context: ~{est_tokens:,} tokens ({total_chars:,} chars)")
+                
+                # Skill context
+                if len(skill_registry) > 0:
+                    print()
+                    print("  Skill context loaded:")
+                    for name in skill_registry.list():
+                        skill = skill_registry.get(name)
+                        instr_len = len(skill.instructions)
+                        print(dim(f"    • {name}: {instr_len:,} chars"))
+                
+                print()
                 continue
 
             run = agent.run(user_input)
