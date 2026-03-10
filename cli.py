@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-🦞 LocalClaw R01 — CLI
+🦞 LocalClaw R02 — CLI
 Entry point: localclaw <command> [options]
 
 Commands:
@@ -194,7 +194,7 @@ def cmd_models(args):
         print(yellow("No models found. Pull one with: ollama pull llama3.2:3b"))
         return
 
-    print(bold("\n🦞 LocalClaw R01 Models") + dim(" · Written by VTSTech · https://www.vts-tech.org · https://github.com/VTSTech/LocalClaw"))
+    print(bold("\n🦞 LocalClaw R02 Models") + dim(" · Written by VTSTech · https://www.vts-tech.org · https://github.com/VTSTech/LocalClaw"))
     print(bold(f"{'Model':<40} {'Tool support':>12}"))
     print(dim("─" * 54))
     for m in sorted(models):
@@ -205,7 +205,7 @@ def cmd_models(args):
 
 def cmd_tools(args):
     tools = BUILTIN_REGISTRY.all()
-    print(bold("\n🦞 LocalClaw R01 Tools") + dim(" · Written by VTSTech · https://www.vts-tech.org · https://github.com/VTSTech/LocalClaw"))
+    print(bold("\n🦞 LocalClaw R02 Tools") + dim(" · Written by VTSTech · https://www.vts-tech.org · https://github.com/VTSTech/LocalClaw"))
     print(bold(f"{'Tool':<20} Description"))
     print(dim("─" * 70))
     for t in tools:
@@ -225,7 +225,7 @@ def cmd_skills(args):
     loader = SkillLoader()
     skills = loader.list_skills()
     
-    print(bold("\n🦞 LocalClaw R01 Skills") + dim(" · Written by VTSTech · https://www.vts-tech.org · https://github.com/VTSTech/LocalClaw"))
+    print(bold("\n🦞 LocalClaw R02 Skills") + dim(" · Written by VTSTech · https://www.vts-tech.org · https://github.com/VTSTech/LocalClaw"))
     
     if not skills:
         print(yellow("  No skills found."))
@@ -271,19 +271,30 @@ def cmd_run(args):
 
     agent, skill_registry = _build_agent(args, client)
     
-    print(bold("🦞 LocalClaw R01") + dim(" · Written by VTSTech · https://www.vts-tech.org · https://github.com/VTSTech/LocalClaw"))
+    print(bold("🦞 LocalClaw R02") + dim(" · Written by VTSTech · https://www.vts-tech.org · https://github.com/VTSTech/LocalClaw"))
     print(f"Prompt: {args.prompt}")
     
-    run = agent.run(args.prompt)
+    # Use streaming if requested
+    if getattr(args, "stream", False):
+        if getattr(args, "verbose", False):
+            print()
+        print(bold("Agent: "), end="", flush=True)
+        for token in agent.stream(args.prompt):
+            print(token, end="", flush=True)
+        print()  # newline after streaming
+        if getattr(args, "verbose", False):
+            print(dim(f"\n  [streaming mode]"))
+    else:
+        run = agent.run(args.prompt)
 
-    if getattr(args, "verbose", False):
-        print()
+        if getattr(args, "verbose", False):
+            print()
 
-    print(run.final_answer)
+        print(run.final_answer)
 
-    if getattr(args, "verbose", False):
-        tool_steps = [s for s in run.steps if s.type == "tool_call"]
-        print(dim(f"\n  {len(run.steps)} steps · {len(tool_steps)} tool calls · {run.total_ms:.0f}ms"))
+        if getattr(args, "verbose", False):
+            tool_steps = [s for s in run.steps if s.type == "tool_call"]
+            print(dim(f"\n  {len(run.steps)} steps · {len(tool_steps)} tool calls · {run.total_ms:.0f}ms"))
 
 
 def cmd_chat(args):
@@ -320,7 +331,7 @@ def cmd_chat(args):
     parts.append("]")
     status = " ".join(parts)
     
-    print(bold(f"\n🦞 LocalClaw R01 chat") + dim(f"  {status} · Written by VTSTech · https://www.vts-tech.org · https://github.com/VTSTech/LocalClaw"))
+    print(bold(f"\n🦞 LocalClaw R02 chat") + dim(f"  {status} · Written by VTSTech · https://www.vts-tech.org · https://github.com/VTSTech/LocalClaw"))
     print(dim("  Type 'exit', 'quit', or Ctrl+C to quit."))
     print(dim("  Type '/reset' to clear conversation history."))
     print(dim("  Type '/tools' to list available tools."))
@@ -689,12 +700,22 @@ def cmd_chat(args):
                 print(green(f"  ✓ Loaded from {filename} ({len(agent.memory._history)} messages)"))
                 continue
 
-            run = agent.run(user_input)
-            print(f"{bold('Agent')}: {run.final_answer}")
-            if getattr(args, "verbose", False) and run.steps:
-                tool_steps = [s for s in run.steps if s.type == "tool_call"]
-                print(dim(f"         [{len(tool_steps)} tool calls · {run.total_ms:.0f}ms]"))
-            print()
+            # Use streaming if requested
+            if getattr(args, "stream", False):
+                print(bold("Agent: "), end="", flush=True)
+                for token in agent.stream(user_input):
+                    print(token, end="", flush=True)
+                print()  # newline after streaming
+                if getattr(args, "verbose", False):
+                    print(dim("         [streaming mode]"))
+                print()
+            else:
+                run = agent.run(user_input)
+                print(f"{bold('Agent')}: {run.final_answer}")
+                if getattr(args, "verbose", False) and run.steps:
+                    tool_steps = [s for s in run.steps if s.type == "tool_call"]
+                    print(dim(f"         [{len(tool_steps)} tool calls · {run.total_ms:.0f}ms]"))
+                print()
 
     except KeyboardInterrupt:
         print(f"\n{dim('Interrupted.')}")
@@ -721,15 +742,32 @@ def build_parser() -> argparse.ArgumentParser:
 
     parser = argparse.ArgumentParser(
         prog="localclaw",
-        description="🦞 LocalClaw R01 — local agentic AI powered by Ollama · Written by VTSTech · https://www.vts-tech.org · https://github.com/VTSTech/LocalClaw",
+        description="🦞 LocalClaw R02 — local agentic AI powered by Ollama · Written by VTSTech · https://www.vts-tech.org · https://github.com/VTSTech/LocalClaw",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=textwrap.dedent("""
+        options (for 'run' and 'chat' commands):
+          -m, --model MODEL      Ollama model to use (default: auto-detect)
+          -t, --tools TOOLS      Comma-separated tools: calculator,shell,python_repl,read_file,write_file,http_get
+          -k, --skills SKILLS    Comma-separated skills: skill-creator,datetime,web_search
+          -s, --system PROMPT    Override system prompt
+          -v, --verbose          Show tool calls, timing, and detailed output
+          --debug                Show debug info: parsed tool calls, fuzzy matching
+          --fast                 Fast mode: num_ctx=2048, num_predict=256
+          --stream               Stream output token-by-token (better UX for slow connections)
+          --warmup               Warm up model before chat (useful for remote Ollama)
+          --num-ctx N            Context window size (smaller = faster)
+          --num-predict N        Max tokens to generate (smaller = faster)
+          --temperature TEMP     Temperature (default: 0.7)
+          --force-react          Force ReAct text-based tool calling
+
         examples:
           localclaw run "What is the capital of France?"
           localclaw run "What is sqrt(144)?" --tools calculator
+          localclaw run "Tell me a story" --stream --verbose
           localclaw chat --model llama3.1:8b
           localclaw chat --tools calculator,shell,python_repl
           localclaw chat --skills skill-creator --tools write_file,shell
+          localclaw chat --fast --stream --verbose
           localclaw models
           localclaw tools
           localclaw skills

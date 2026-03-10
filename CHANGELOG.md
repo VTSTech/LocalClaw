@@ -6,7 +6,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
-## [R01] - 2026-03-09 to Present
+## [R02] - 2026-03-10
+
+### Added
+- **`--stream` flag** for CLI - enables token-by-token streaming output for better UX on slow connections
+  - Works in both `run` and `chat` commands
+  - Shows output as it's generated instead of waiting for complete response
+- **Comprehensive CLI help** - main `-h` now shows all available options for run/chat commands
+
+### Changed
+- Version tags updated from R01 to R02 across all files
+- Improved skill creator test prompt with explicit tool argument examples for small models
+
+---
+
+## [R01] - 2026-03-09 to 2026-03-10
 
 ### Added
 - **Fuzzy argument name matching** for tool invocation - handles small model hallucinations of argument names (e.g., `filepath` → `path`, `data` → `content`)

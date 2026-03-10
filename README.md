@@ -1,4 +1,4 @@
-# 🦞 LocalClaw R01
+# 🦞 LocalClaw R02
 
 A minimal, hackable agentic framework engineered to run **entirely locally** with [Ollama](https://ollama.com).
 
@@ -348,7 +348,7 @@ The following models have been tested with a **15-test benchmark** (3 tests per 
 
 ## Skills (Agent Skills Specification)
 
-🦞 LocalClaw R01 supports the **[Agent Skills](https://agentskills.io/)** specification for reusable instruction bundles.
+🦞 LocalClaw R02 supports the **[Agent Skills](https://agentskills.io/)** specification for reusable instruction bundles.
 
 ### Skill Structure
 
@@ -628,7 +628,7 @@ python cli.py chat --model qwen2.5-coder:0.5b --debug --verbose --tools python_r
 
 ### Zero Dependencies
 
-🦞 LocalClaw R01 now uses **only Python stdlib** — no pip install required! The HTTP client uses `urllib` instead of `httpx`.
+🦞 LocalClaw R02 now uses **only Python stdlib** — no pip install required! The HTTP client uses `urllib` instead of `httpx`.
 
 ### Automatic Error Recovery
 
@@ -638,7 +638,7 @@ python cli.py chat --model qwen2.5-coder:0.5b --debug --verbose --tools python_r
 
 ### Small Model Support
 
-🦞 LocalClaw R01 handles quirks of small models (≤1.5B parameters):
+🦞 LocalClaw R02 handles quirks of small models (≤1.5B parameters):
 
 - **Fuzzy tool name matching**: Hallucinated tool names like `calculate_expression` are automatically mapped to `calculator`
 - **Argument auto-fixing**: Common wrong argument patterns are corrected (e.g., `{"base": 2, "exponent": 10}` → `{"expression": "2 ** 10"}`)
@@ -680,7 +680,7 @@ Key insights for small model prompt engineering:
 
 ## About
 
-**🦞 LocalClaw R01** is written and maintained by **VTSTech**.
+**🦞 LocalClaw R02** is written and maintained by **VTSTech**.
 
 - 🌐 Website: [https://www.vts-tech.org](https://www.vts-tech.org)
 - 📦 GitHub: [https://github.com/VTSTech/LocalClaw](https://github.com/VTSTech/LocalClaw)
