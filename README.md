@@ -584,7 +584,20 @@ python cli.py chat --model qwen2.5-coder:0.5b --fast --warmup
 
 # Fine-tune context and output limits
 python cli.py chat --model llama3.2:1b --num-ctx 4096 --num-predict 512
+
+# Debug mode - shows tool parsing, fuzzy matching, etc.
+python cli.py chat --model qwen2.5-coder:0.5b --debug --verbose --tools python_repl
 ```
+
+| Flag | Description |
+|------|-------------|
+| `--verbose`, `-v` | Show tool calls and timing |
+| `--debug` | Show detailed debug info (tool parsing, fuzzy matching) |
+| `--fast` | Preset for faster responses (reduced context/output) |
+| `--warmup` | Pre-load model before chat |
+| `--num-ctx N` | Set context window size |
+| `--num-predict N` | Set max output tokens |
+| `--force-react` | Force text-based ReAct format |
 
 ---
 
