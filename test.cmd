@@ -1,16 +1,54 @@
-python cli.py run "What is 17 to the power of 4?" --stream --verbose
-python cli.py run "Write a Python one-liner that reverses a string" --model qwen2.5-coder:0.5b-instruct-q4_k_m --stream --verbose
-python cli.py run "Give me 5 variable naming conventions with examples" --verbose
-python cli.py run "What is sqrt(1764)?" --tools calculator --verbose
-python cli.py run "How many seconds are in a year?" --tools calculator --verbose
-python cli.py run "What is 2 to the power of 32?" --tools calculator --verbose
-python cli.py run "How many Python files are in the current directory?" --tools shell --verbose
-python cli.py run "What is my current working directory and username?" --tools shell --verbose
-python cli.py run "How much disk space is free?" --tools shell --verbose
-python cli.py run "List the files in the examples/ folder" --tools list_directory --verbose
-python cli.py run "Read the file examples/01_basic_agent.py and summarize what it does" --tools read_file --verbose
-python cli.py run "Write a file called hello.txt with the content 'Hello from LocalClaw!'" --tools write_file --verbose
-python cli.py run "Generate the first 10 Fibonacci numbers" --tools python_repl --verbose
-python cli.py run "What is the md5 hash of the string 'localclaw'?" --tools python_repl --verbose
-python cli.py run "Write a fibonacci function to hello.txt then read it back" --tools write_file,read_file --verbose
-python cli.py run "Calculate compound interest: $1000 at 5% for 20 years compounded monthly" --tools calculator --verbose
+@echo off
+setlocal enabledelayedexpansion
+
+echo ============================================================
+echo              LocalClaw R01 - Running All Examples
+echo ============================================================
+echo.
+
+set "COUNT=0"
+set "PASSED=0"
+set "FAILED=0"
+
+for %%f in (01_basic_agent.py 02_tool_agent.py 03_orchestrator.py 04_comprehensive_test.py 05_tool_tests.py 06_interactive_chat.py 07_model_comparison.py 08_robust_comparison.py 09_expanded_benchmark.py 10_skills_demo.py 11_skill_creator_test.py) do (
+    set /a COUNT+=1
+    
+    echo ============================================================
+    echo [!COUNT!/11] Running: examples\%%f
+    echo ============================================================
+    echo.
+    
+    python examples\%%f
+    set "EXITCODE=!ERRORLEVEL!"
+    
+    if !EXITCODE! EQU 0 (
+        set /a PASSED+=1
+        echo.
+        echo [SUCCESS] %%f completed with exit code 0
+    ) else (
+        set /a FAILED+=1
+        echo.
+        echo [ERROR] %%f failed with exit code !EXITCODE!
+    )
+    
+    echo.
+    echo ------------------------------------------------------------
+    echo.
+)
+
+echo ============================================================
+echo                      SUMMARY
+echo ============================================================
+echo  Total:  %COUNT% examples
+echo  Passed: %PASSED%
+echo  Failed: %FAILED%
+echo ============================================================
+echo.
+
+if %FAILED% GTR 0 (
+    echo Some tests failed. Please review the output above.
+    exit /b 1
+) else (
+    echo All examples completed successfully!
+    exit /b 0
+)

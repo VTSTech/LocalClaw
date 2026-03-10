@@ -399,6 +399,7 @@ class AgentRun:
 _THOUGHT_RE = re.compile(r"Thought:\s*(.*?)(?=Action:|Final Answer:|$)", re.DOTALL | re.IGNORECASE)
 _ACTION_RE  = re.compile(r"Action:\s*(\w+)\s*\nAction Input:\s*(.*?)(?=Observation:|Thought:|Final Answer:|$)", re.DOTALL | re.IGNORECASE)
 _FINAL_RE   = re.compile(r"Final Answer:\s*(.*?)$", re.DOTALL | re.IGNORECASE)
+_PYTHON_CODE_RE = re.compile(r"```(?:python)?\s*\n(.*?)```", re.DOTALL | re.IGNORECASE)
 
 REACT_SYSTEM_SUFFIX = """
 You have access to tools. Use the following format EXACTLY:
@@ -470,9 +471,7 @@ def _extract_python_code(text: str) -> str | None:
     Extract Python code from markdown code blocks.
     Returns the code content or None if no code block found.
     """
-    # Match ```python ... ``` or ``` ... ```
-    pattern = r"```(?:python)?\s*\n(.*?)```"
-    match = re.search(pattern, text, re.DOTALL | re.IGNORECASE)
+    match = _PYTHON_CODE_RE.search(text)
     if match:
         return match.group(1).strip()
     return None
