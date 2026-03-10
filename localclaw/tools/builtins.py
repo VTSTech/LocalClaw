@@ -1,5 +1,5 @@
 """
-🦞 LocalClaw R00 — Built-in Tools
+🦞 LocalClaw R01 — Built-in Tools
 A curated set of safe, practical tools for local agents.
 Import whichever you need and add them to a ToolRegistry.
 
@@ -21,16 +21,19 @@ import ast
 import io
 import math
 import os
+import re
 import subprocess
 import sys
 import textwrap
 import traceback
 from contextlib import redirect_stdout, redirect_stderr
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 import urllib.request
 import urllib.error
+import urllib.parse
 
 from ..core.tools import ToolRegistry, Tool, ToolParam
 
@@ -46,16 +49,9 @@ def make_builtin_registry() -> ToolRegistry:
     so multiple agents will never share REPL globals or note stores.
     """
     registry = ToolRegistry()
-    _register_stateless_tools(registry)
-    _register_stateful_tools(registry)
-    return registry
-
-
-def _register_stateless_tools(registry: ToolRegistry):
-    """Register all tools that carry no mutable module-level state."""
 
     # ================================================================== #
-    #  Calculator                                                           #
+    #  Calculator                                                          #
     # ================================================================== #
 
     @registry.tool(
@@ -172,23 +168,70 @@ def _register_stateless_tools(registry: ToolRegistry):
     def http_get(url: str, max_chars: int = 3000) -> str:
         """Retrieve the text content of a web page or API endpoint."""
         try:
-            req = urllib.request.Request(url, headers={"User-Agent": "LocalClaw-R00/1.0"})
+            req = urllib.request.Request(url, headers={"User-Agent": "LocalClaw-R01/1.0"})
             with urllib.request.urlopen(req, timeout=15) as resp:
                 text = resp.read().decode("utf-8", errors="replace")
             return text[:max_chars] + ("..." if len(text) > max_chars else "")
         except Exception as e:
             return f"[HTTP error] {e}"
 
+    # ================================================================== #
+    #  Web Search                                                          #
+    # ================================================================== #
 
-def _register_stateful_tools(registry: ToolRegistry):
-    """
-    Register tools that require isolated mutable state (REPL session,
-    note store). Each call to this function creates fresh state, so
-    agents using different registries never share data.
-    """
+    @registry.tool(
+        description="Search the web using DuckDuckGo and return top results. Use for finding current information, news, or answers to questions.",
+        param_descriptions={
+            "query": "Search query (what to search for)",
+            "num_results": "Number of results to return (default 5, max 10)",
+        },
+    )
+    def web_search(query: str, num_results: int = 5) -> str:
+        """Search the web via DuckDuckGo HTML (no API key required)."""
+        try:
+            num_results = min(max(1, num_results), 10)  # Clamp to 1-10
+            # DuckDuckGo HTML search endpoint
+            search_url = f"https://html.duckduckgo.com/html/?q={urllib.parse.quote(query)}"
+            req = urllib.request.Request(
+                search_url,
+                headers={
+                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+                    "Accept": "text/html",
+                }
+            )
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                html = resp.read().decode("utf-8", errors="replace")
+            
+            # Parse results from HTML
+            results = []
+            # DuckDuckGo HTML results are in <a class="result__a"> tags
+            pattern = r'<a[^>]*class="result__a"[^>]*href="([^"]+)"[^>]*>([^<]+)</a>'
+            matches = re.findall(pattern, html)
+            
+            for url, title in matches[:num_results]:
+                # Clean up the URL (DuckDuckGo uses redirects)
+                if url.startswith("//"):
+                    url = "https:" + url
+                # Extract actual URL from DuckDuckGo redirect if present
+                if "uddg=" in url:
+                    parsed = urllib.parse.urlparse(url)
+                    params = urllib.parse.parse_qs(parsed.query)
+                    if "uddg" in params:
+                        url = params["uddg"][0]
+                
+                title = re.sub(r'<[^>]+>', '', title).strip()
+                results.append(f"• {title}\n  {url}")
+            
+            if not results:
+                return f"[No results found for: {query}]"
+            
+            return f"Search results for '{query}':\n\n" + "\n\n".join(results)
+        except Exception as e:
+            return f"[Search error] {e}"
+
 
     # ================================================================== #
-    #  Python REPL                                                         #
+    #  Python REPL  (stateful — isolated per registry instance)           #
     # ================================================================== #
 
     _repl_globals: dict = {}  # isolated per registry instance
@@ -219,7 +262,7 @@ def _register_stateful_tools(registry: ToolRegistry):
         return "REPL session reset."
 
     # ================================================================== #
-    #  Memory / notes                                                      #
+    #  Memory / notes  (stateful — isolated per registry instance)        #
     # ================================================================== #
 
     _notes: dict[str, str] = {}  # isolated per registry instance
@@ -250,6 +293,8 @@ def _register_stateful_tools(registry: ToolRegistry):
         if not _notes:
             return "[No notes saved yet]"
         return "\n".join(f"- {k}" for k in _notes)
+
+    return registry
 
 
 # ================================================================== #

@@ -161,24 +161,23 @@ class SkillLoader:
         frontmatter: Dict[str, Any] = {}
         current_key = None
         current_value: Any = None
-        in_multiline = False
-        
+
         for line in frontmatter_text.split('\n'):
             stripped = line.strip()
-            
+
             if not stripped:
                 continue
-            
+
             # Check for key: value
             if ':' in line and not line.startswith(' '):
                 # Save previous key
                 if current_key:
                     frontmatter[current_key] = current_value
-                
+
                 key, _, value = line.partition(':')
                 current_key = key.strip()
                 value = value.strip()
-                
+
                 # Handle different value types
                 if value.startswith('"') and value.endswith('"'):
                     current_value = value[1:-1]
@@ -186,10 +185,8 @@ class SkillLoader:
                     current_value = value[1:-1]
                 elif value == '':
                     current_value = None
-                    in_multiline = True
                 else:
                     current_value = value
-                    in_multiline = False
             elif line.startswith('  ') and current_key:
                 # Multiline value (like metadata)
                 if current_key not in frontmatter:
@@ -299,29 +296,27 @@ class SkillLoader:
     
     def get_skill_descriptions(self) -> Dict[str, str]:
         """
-        Get name and description for all skills.
-        
-        This is useful for showing available skills without loading full instructions.
-        
+        Get name and description for all skills without loading full instructions.
+        Reads only the YAML frontmatter from each SKILL.md for efficiency.
+
         Returns:
             Dict mapping skill names to their descriptions
         """
         descriptions = {}
         for name in self.list_skills():
+            skill_md = self.skills_dir / name / "SKILL.md"
+            if not skill_md.exists():
+                continue
+            # Return from cache if already loaded
+            if name in self._cache:
+                descriptions[name] = self._cache[name].description
+                continue
             try:
-                skill = self.load(name)
-                descriptions[name] = skill.description
+                content = skill_md.read_text(encoding='utf-8')
+                frontmatter, _ = self._parse_frontmatter(content)
+                descriptions[name] = frontmatter.get('description', 'No description')
             except Exception:
-                # Try to read just frontmatter for description
-                skill_md = self.skills_dir / name / "SKILL.md"
-                if skill_md.exists():
-                    try:
-                        content = skill_md.read_text(encoding='utf-8')
-                        frontmatter, _ = self._parse_frontmatter(content)
-                        descriptions[name] = frontmatter.get('description', 'No description')
-                    except Exception:
-                        pass
-        
+                pass
         return descriptions
 
 
