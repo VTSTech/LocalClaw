@@ -109,6 +109,15 @@ def _build_agent(args, client: OllamaClient):
                 print(red(f"Failed to load skill '{name}': {e}"))
                 print(f"Run {bold('localclaw skills')} to see available skills.")
                 sys.exit(1)
+    
+    # Add datetime skill by default if no skills specified
+    if len(skill_registry) == 0:
+        loader = SkillLoader()
+        try:
+            datetime_skill = loader.load("datetime")
+            skill_registry.add(datetime_skill)
+        except Exception:
+            pass  # No datetime skill available
 
     # Build system prompt
     system_prompt = getattr(args, "system", None) or "You are a helpful assistant. Answer concisely and directly."
@@ -120,13 +129,29 @@ def _build_agent(args, client: OllamaClient):
     # Get temperature
     temperature = getattr(args, "temperature", 0.7)
     
+    # Build model options for performance tuning
+    model_options = {"temperature": temperature} if temperature else {}
+    
+    # Apply --fast preset if specified
+    if getattr(args, "fast", False):
+        model_options["num_ctx"] = 2048
+        model_options["num_predict"] = 256
+        if getattr(args, "verbose", False):
+            print(dim("  🚀 Fast mode: num_ctx=2048, num_predict=256"))
+    
+    # Apply individual options (override --fast if specified)
+    if getattr(args, "num_ctx", None):
+        model_options["num_ctx"] = args.num_ctx
+    if getattr(args, "num_predict", None):
+        model_options["num_predict"] = args.num_predict
+    
     agent = Agent(
         model=args.model,
         tools=tools_registry,
         system_prompt=system_prompt,
         client=client,
         on_step=_make_step_printer(getattr(args, "verbose", False)),
-        model_options={"temperature": temperature} if temperature else {},
+        model_options=model_options,
         force_react=getattr(args, "force_react", False),
     )
     
@@ -213,6 +238,7 @@ def cmd_skills(args):
     print()
     print(dim(f"  Use with: --skills {','.join(skills[:2])}"))
     print(dim("  Skills provide knowledge/instructions to the agent."))
+    print(dim("  Tip: The 'datetime' skill is loaded by default."))
     print()
 
 
@@ -244,6 +270,24 @@ def cmd_chat(args):
     if not client.is_running():
         print(red("✗  Ollama is not running. Start it with: ollama serve"))
         sys.exit(1)
+
+    # Warm up model if requested (useful for remote Ollama with cold starts)
+    if getattr(args, "warmup", False):
+        print(dim("  🔥 Warming up model..."), end=" ", flush=True)
+        import time
+        t0 = time.perf_counter()
+        try:
+            # Simple warmup request - just generate 1 token
+            warmup_response = client.chat(
+                model=args.model,
+                messages=[{"role": "user", "content": "Hi"}],
+                options={"num_predict": 1}
+            )
+            elapsed = (time.perf_counter() - t0) * 1000
+            print(green(f"✓ {elapsed:.0f}ms"))
+        except Exception as e:
+            print(yellow(f"(warmup failed: {e})"))
+        print()
 
     agent, skill_registry = _build_agent(args, client)
     
@@ -322,6 +366,20 @@ def cmd_chat(args):
                 print(f"  Ollama:    {agent.client.base_url}")
                 print(f"  Timeout:   {agent.client.timeout}s")
                 print(f"  ReAct:     {'forced' if getattr(args, 'force_react', False) else 'auto-detect'}")
+                
+                # Show performance options
+                model_opts = agent.model_options
+                if model_opts:
+                    perf_opts = []
+                    if "num_ctx" in model_opts:
+                        perf_opts.append(f"ctx={model_opts['num_ctx']}")
+                    if "num_predict" in model_opts:
+                        perf_opts.append(f"predict={model_opts['num_predict']}")
+                    if "temperature" in model_opts:
+                        perf_opts.append(f"temp={model_opts['temperature']}")
+                    if perf_opts:
+                        print(f"  Perf:      {', '.join(perf_opts)}")
+                
                 print()
                 print(f"  Tools:     {len(agent.tools.all())} active")
                 if agent.tools.all():
@@ -333,6 +391,9 @@ def cmd_chat(args):
                 print()
                 print(f"  Memory:    {len(agent.memory._history)} messages")
                 print(f"  Max steps: {agent.max_steps}")
+                print()
+                if "num_ctx" not in model_opts:
+                    print(dim("  💡 Tip: Use --fast for quicker responses, or --num-ctx 2048"))
                 print()
                 continue
 
@@ -360,17 +421,17 @@ def cmd_chat(args):
                 history = agent.memory._history
                 print(f"  Conversation history: {len(history)} messages")
                 
-                # Count message types
-                user_msgs = sum(1 for m in history if m.get('role') == 'user')
-                assistant_msgs = sum(1 for m in history if m.get('role') == 'assistant')
-                tool_msgs = sum(1 for m in history if m.get('role') == 'tool')
+                # Count message types (Message objects have .role attribute, not .get())
+                user_msgs = sum(1 for m in history if m.role == 'user')
+                assistant_msgs = sum(1 for m in history if m.role == 'assistant')
+                tool_msgs = sum(1 for m in history if m.role == 'tool')
                 
                 print(dim(f"    • User messages: {user_msgs}"))
                 print(dim(f"    • Assistant messages: {assistant_msgs}"))
                 print(dim(f"    • Tool results: {tool_msgs}"))
                 
                 # Estimate token usage (rough: ~4 chars per token)
-                total_chars = sum(len(m.get('content', '')) for m in history)
+                total_chars = sum(len(m.content or '') for m in history)
                 total_chars += len(sys_prompt)
                 est_tokens = total_chars // 4
                 print()
@@ -438,8 +499,8 @@ def cmd_chat(args):
                 history = agent.memory._history
                 last_user_msg = None
                 for msg in reversed(history):
-                    if msg.get('role') == 'user':
-                        last_user_msg = msg.get('content', '')
+                    if msg.role == 'user':
+                        last_user_msg = msg.content or ''
                         break
                 
                 if last_user_msg:
@@ -447,7 +508,7 @@ def cmd_chat(args):
                     removed = 0
                     while len(history) > 0:
                         last = history[-1]
-                        if last.get('role') == 'user' and removed > 0:
+                        if last.role == 'user' and removed > 0:
                             break
                         history.pop()
                         removed += 1
@@ -470,9 +531,9 @@ def cmd_chat(args):
                 
                 # Message counts
                 history = agent.memory._history
-                user_msgs = sum(1 for m in history if m.get('role') == 'user')
-                assistant_msgs = sum(1 for m in history if m.get('role') == 'assistant')
-                tool_msgs = sum(1 for m in history if m.get('role') == 'tool')
+                user_msgs = sum(1 for m in history if m.role == 'user')
+                assistant_msgs = sum(1 for m in history if m.role == 'assistant')
+                tool_msgs = sum(1 for m in history if m.role == 'tool')
                 
                 print(f"  Messages: {len(history)} total")
                 print(dim(f"    • User: {user_msgs}"))
@@ -482,7 +543,7 @@ def cmd_chat(args):
                 
                 # Token estimation
                 sys_prompt = agent.memory.system_prompt or ""
-                total_chars = sum(len(m.get('content', '')) for m in history)
+                total_chars = sum(len(m.content or '') for m in history)
                 total_chars += len(sys_prompt)
                 est_tokens = total_chars // 4
                 print(f"  Estimated tokens: ~{est_tokens:,}")
@@ -506,8 +567,8 @@ def cmd_chat(args):
                     continue
                 
                 for i, msg in enumerate(history, 1):
-                    role = msg.get('role', 'unknown')
-                    content = msg.get('content', '')
+                    role = msg.role
+                    content = msg.content or ''
                     
                     # Truncate long content
                     if len(content) > 100:
@@ -538,8 +599,8 @@ def cmd_chat(args):
                 
                 history = agent.memory._history
                 for msg in history:
-                    role = msg.get('role', 'unknown')
-                    content = msg.get('content', '')
+                    role = msg.role
+                    content = msg.content or ''
                     
                     if role == 'user':
                         lines.append(f"## User")
@@ -597,7 +658,7 @@ def cmd_chat(args):
                 data = {
                     "model": args.model,
                     "temperature": getattr(args, 'temperature', 0.7),
-                    "history": agent.memory._history,
+                    "history": [m.to_dict() for m in agent.memory._history],
                     "system_prompt": agent.memory.system_prompt,
                 }
                 filepath.write_text(json.dumps(data, indent=2), encoding='utf-8')
@@ -714,6 +775,31 @@ def build_parser() -> argparse.ArgumentParser:
         "--force-react",
         action="store_true",
         help="Force ReAct text-based tool calling (for models without native tool support)",
+    )
+    # Performance optimization options
+    shared.add_argument(
+        "--num-ctx",
+        type=int,
+        default=None,
+        metavar="N",
+        help="Context window size (default: model default, try 2048 for speed)",
+    )
+    shared.add_argument(
+        "--num-predict",
+        type=int,
+        default=None,
+        metavar="N",
+        help="Max tokens to generate (default: -1 for model default, try 128-256 for speed)",
+    )
+    shared.add_argument(
+        "--fast",
+        action="store_true",
+        help="Fast mode: reduce context (2048) and output (256) for quicker responses",
+    )
+    shared.add_argument(
+        "--warmup",
+        action="store_true",
+        help="Warm up model with a dummy request before chat (useful for remote Ollama)",
     )
 
     # ── run ─────────────────────────────────────────────────────────

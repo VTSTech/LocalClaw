@@ -482,6 +482,75 @@ LocalClaw automatically retries on transient errors with exponential backoff:
 
 ---
 
+## Performance Optimization
+
+### CLI Options for Speed
+
+```bash
+# Fast mode - reduces context and output for quicker responses
+python cli.py chat -m qwen2.5-coder:0.5b --fast --verbose
+
+# Fine-tuned control
+python cli.py chat -m qwen2.5-coder:0.5b --num-ctx 2048 --num-predict 128
+
+# Warm up model before chat (useful for remote Ollama with cold starts)
+python cli.py chat -m qwen2.5-coder:0.5b --warmup --fast
+```
+
+| Option | Description | Speed Impact |
+|--------|-------------|--------------|
+| `--fast` | Preset: `num_ctx=2048`, `num_predict=256` | 🚀 Significant |
+| `--num-ctx N` | Reduce context window (default varies by model) | 🚀 Significant |
+| `--num-predict N` | Limit max output tokens | ⚡ Moderate |
+| `--warmup` | Pre-load model before first chat | ⚡ Faster first response |
+
+### Ollama Model Options
+
+You can pass any Ollama option via `model_options`:
+
+```python
+agent = Agent(
+    model="qwen2.5-coder:0.5b",
+    model_options={
+        "temperature": 0.1,      # Lower = more deterministic
+        "num_ctx": 2048,         # Smaller context = faster
+        "num_predict": 128,      # Limit output length
+        "top_p": 0.9,            # Nucleus sampling
+        "top_k": 40,             # Top-k sampling
+        "repeat_penalty": 1.1,   # Reduce repetition
+    },
+)
+```
+
+### Remote Ollama Tips
+
+When using a **remote Ollama via Cloudflare tunnel**:
+
+1. **Use `--fast` flag** - Reduces inference time significantly
+2. **Use smaller models** - `qwen2.5-coder:0.5b` is fastest
+3. **Warm up the model** - First request is slowest due to model loading
+4. **Increase timeout if needed**: `export OLLAMA_TIMEOUT=120`
+
+```bash
+# Recommended for remote Ollama
+python cli.py chat -m qwen2.5-coder:0.5b-instruct-q4_k_m \
+    --fast --warmup --verbose \
+    --tools python_repl
+```
+
+### Why Inference is Slow
+
+| Factor | Impact | Solution |
+|--------|--------|----------|
+| **Model size** | Larger models = slower | Use smaller quantized models |
+| **Context window** | More context = slower | Use `--num-ctx 2048` or smaller |
+| **Output length** | More tokens = slower | Use `--num-predict 128` |
+| **Remote connection** | Network latency | Use local Ollama if possible |
+| **Cold start** | First load is slowest | Use `--warmup` flag |
+| **GPU unavailable** | CPU inference is slow | Ensure GPU is configured |
+
+---
+
 ## CLI Commands (Interactive Chat)
 
 When using `examples/06_interactive_chat.py`, the following commands are available:
@@ -505,10 +574,16 @@ When using `examples/06_interactive_chat.py`, the following commands are availab
 ### CLI Flags
 
 ```bash
-python examples/06_interactive_chat.py --model llama3.2:1b --verbose
+python cli.py chat --model llama3.2:1b --verbose
 
 # Use --force-react for models without native tool support
-python examples/06_interactive_chat.py --model phi3.5:3.8b --force-react
+python cli.py chat --model phi3.5:3.8b --force-react
+
+# Performance optimization
+python cli.py chat --model qwen2.5-coder:0.5b --fast --warmup
+
+# Fine-tune context and output limits
+python cli.py chat --model llama3.2:1b --num-ctx 4096 --num-predict 512
 ```
 
 ---
