@@ -1,5 +1,5 @@
 """
-🦞 LocalClaw R00 — Memory
+🦞 LocalClaw R01 — Memory
 Manages conversation history with a configurable sliding window and
 optional LLM-based summarization to compress older turns.
 
@@ -7,7 +7,7 @@ Written by VTSTech — https://www.vts-tech.org — https://github.com/VTSTech/L
 """
 
 from __future__ import annotations
-import copy
+
 from dataclasses import dataclass, field
 from typing import Literal
 

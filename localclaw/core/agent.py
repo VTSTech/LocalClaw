@@ -25,6 +25,15 @@ from .tools import ToolRegistry
 
 
 # ------------------------------------------------------------------ #
+#  Shared tiny helpers                                                 #
+# ------------------------------------------------------------------ #
+
+def _strip_tool_prefix(result: str) -> str:
+    """Strip the 'tool_name → ' prefix added to _successful_results entries."""
+    return result.split("→")[-1].strip() if "→" in result else result.strip()
+
+
+# ------------------------------------------------------------------ #
 #  Argument key normalizer                                             #
 # ------------------------------------------------------------------ #
 
@@ -124,7 +133,7 @@ def _fix_calculator_args(t_name: str, t_args: dict, user_input: str, prior_resul
     # This means the model is just re-calling with the result it already got
     for result in prior_results:
         # Match patterns like "calculator → 120" or just "120"
-        result_clean = result.split("→")[-1].strip() if "→" in result else result.strip()
+        result_clean = _strip_tool_prefix(result)
         try:
             result_num = float(result_clean)
             # Check if this is the same number (or close for floats)
@@ -305,6 +314,11 @@ def _looks_like_tool_schema_dump(text: str) -> bool:
         # Contains schema definition keywords
         '"required":',
         '"properties":',
+        # Tool description in name field
+        'Search the web using DuckDuckGo',
+        'Evaluate a mathematical expression',
+        'Execute Python code',
+        '{object <nil>',
     ]
     
     text_lower = text.lower()
@@ -332,7 +346,7 @@ def _is_greeting_or_simple(text: str) -> bool:
     if lower in greetings:
         return True
     for g in greetings:
-        if lower.startswith(g + " ") or lower == g:
+        if lower.startswith(g + " "):
             return True
     
     # Very short messages (< 10 chars) are likely simple
@@ -440,15 +454,13 @@ def _parse_json_tool_call(text: str) -> tuple[str | None, dict | None]:
     if not name or not isinstance(args, dict):
         return None, None
 
-    # Detect if the 'name' field contains code instead of a tool name
-    # Models sometimes put the code/operation in 'name' instead of the tool name
+    # Detect if the 'name' field contains code instead of a tool name.
+    # Models sometimes put the expression/code in 'name' instead of the tool name.
+    # Rather than discarding, return name+args so callers with a registry can
+    # fuzzy-match the name to a real tool (e.g. "sqrt(144)" -> calculator).
     code_indicators = ["(", ")", "+", "-", "*", "/", "=", "[", "]", "print", "def ", "return"]
     if any(indicator in name for indicator in code_indicators):
-        # This looks like code, not a tool name
-        # The 'name' field might be the actual code to execute
-        # We can't determine the tool name from this, so return None
-        # The caller should handle this case
-        return None, None
+        return name, args
 
     return name, args
 
@@ -464,6 +476,56 @@ def _extract_python_code(text: str) -> str | None:
     if match:
         return match.group(1).strip()
     return None
+
+
+def _try_extract_tool_from_malformed(text: str, available_tools: list[str]) -> tuple[str | None, dict | None]:
+    """
+    Try to extract a tool call from malformed model output.
+    
+    Handles cases like:
+    - Model puts code in "name" field: {"name": "datetime.now()..."}
+    - Model puts schema description in "name" field: {"name": "web_search.Search the web..."}
+    - Model outputs partial JSON
+    """
+    text_lower = text.lower()
+    
+    # Try to find any available tool name in the text
+    for tool_name in available_tools:
+        if tool_name.lower() in text_lower:
+            # Found a tool name, try to extract arguments
+            # Look for common argument patterns
+            args = {}
+            
+            # For python_repl, try to extract code
+            if tool_name == "python_repl":
+                code = _extract_python_code(text)
+                if code:
+                    return tool_name, {"code": code}
+                # Try to find Python code patterns
+                if "datetime" in text_lower or "strftime" in text_lower:
+                    # It's a datetime query
+                    return tool_name, {}
+            
+            # For web_search, try to extract query
+            if tool_name == "web_search":
+                # Look for quoted strings that might be a query
+                query_match = re.search(r'"query":\s*"([^"]+)"', text)
+                if query_match:
+                    return tool_name, {"query": query_match.group(1)}
+                # Or just return with empty args - agent will synthesize
+                return tool_name, {}
+            
+            # For calculator, try to extract expression
+            if tool_name == "calculator":
+                expr_match = re.search(r'"expression":\s*"([^"]+)"', text)
+                if expr_match:
+                    return tool_name, {"expression": expr_match.group(1)}
+                return tool_name, {}
+            
+            # Default: return with empty args
+            return tool_name, args
+    
+    return None, None
 
 
 def _parse_react(text: str) -> tuple[str | None, str | None, dict | None, str | None]:
@@ -580,6 +642,7 @@ class Agent:
         _tool_call_counts: dict[str, int] = {}  # per-tool call counter
         _successful_results: list[str] = []      # accumulate good results for synthesis
         _successful_tools: set[str] = set()      # track which tools have returned good results
+        _last_tool_args: dict[str, dict] = {}    # last args per tool to detect identical repeat calls
         _max_calls_per_tool = 2
         _max_total_tool_calls = 4               # hard ceiling across all tools
 
@@ -605,21 +668,23 @@ class Agent:
                 print(f"    tool_calls_raw={tool_calls_raw!r}")
                 print(f"    content[:100]={content[:100]!r}")
 
-            # ---- Native tool calling --------------------------------- #
-            # Skip tool calls for simple greetings
-            if self._native_tools and tool_calls_raw:
-                # Check if this is a simple greeting that shouldn't trigger tools
-                if _is_greeting_or_simple(user_input):
-                    # Model incorrectly tried to use tools - just respond normally
-                    final_step = StepResult(type="final", content="Hello! How can I help you today?", elapsed_ms=elapsed)
-                    run.steps.append(final_step)
-                    self._emit(final_step)
-                    run.final_answer = "Hello! How can I help you today?"
-                    self.memory.add_assistant(content or "Hello!")
-                    break
-                
-                self.memory.add_assistant(content or "", tool_calls=tool_calls_raw)
+            # ---- Greeting short-circuit (shared by both tool paths) ------- #
+            # If the user sent a simple greeting and tools are registered, the model
+            # may still try to invoke tools. Intercept early and return clean text.
+            if self._native_tools and self.tools.all() and _is_greeting_or_simple(user_input):
+                greeting_reply = content if content and not _looks_like_tool_schema(content) \
+                    else "Hello! How can I help you today?"
+                final_step = StepResult(type="final", content=greeting_reply, elapsed_ms=elapsed)
+                run.steps.append(final_step)
+                self._emit(final_step)
+                run.final_answer = greeting_reply
+                self.memory.add_assistant(greeting_reply)
+                break
 
+            # ---- Native tool calling --------------------------------- #
+            if self._native_tools and tool_calls_raw:
+
+                # Process each tool call, applying intercepts before writing to memory
                 for tc in tool_calls_raw:
                     fn = tc.get("function", {})
                     t_name = fn.get("name", "")
@@ -630,14 +695,118 @@ class Agent:
                         except json.JSONDecodeError:
                             t_args = {}
 
+                    # Detect code-in-name hallucination: model puts an expression
+                    # like "sqrt(144)" or "print(...)" in the name field instead of
+                    # a real tool name. Try to recover the intended tool via fuzzy match.
+                    code_indicators = ["(", ")", "+", "-", "*", "/", "=", "[", "]", " "]
+                    if t_name and any(c in t_name for c in code_indicators):
+                        if self.debug:
+                            print(f"    code-in-name detected: {t_name!r}, attempting recovery")
+                        fuzzy = _fuzzy_match_tool_name(t_name, self.tools)
+                        if fuzzy:
+                            # If the name looks like a math expression (e.g. "sqrt(144)"),
+                            # use it directly as the calculator expression — it's more
+                            # complete than whatever the model put in the arguments.
+                            if fuzzy == "calculator":
+                                t_args = {"expression": t_name}
+                            elif fuzzy == "python_repl" and not t_args.get("code"):
+                                t_args = {"code": t_name}
+                            t_name = fuzzy
+                        else:
+                            if self.debug:
+                                print(f"    could not recover tool name, skipping")
+                            continue
+
+                    # If the tool name isn't in the registry, try fuzzy matching
+                    if t_name and not self.tools.get(t_name):
+                        fuzzy = _fuzzy_match_tool_name(t_name, self.tools)
+                        if self.debug:
+                            print(f"    native fuzzy_match({t_name!r}) -> {fuzzy!r}")
+                        if fuzzy:
+                            t_name = fuzzy
+                        else:
+                            if self.debug:
+                                print(f"    unknown tool {t_name!r}, skipping")
+                            continue
+
                     t_args = _normalize_args(t_args, self.tools.get(t_name))
+
+                    # If the tool resolved to python_repl but 'code' arg is missing,
+                    # try to reconstruct it from common alternative arg names the model
+                    # may have used (value, expression, script, command, query).
+                    if t_name == "python_repl" and not t_args.get("code"):
+                        candidate = (
+                            t_args.get("value") or t_args.get("expression") or
+                            t_args.get("script") or t_args.get("command") or
+                            t_args.get("query") or ""
+                        )
+                        if candidate:
+                            # Wrap bare expressions so they produce visible output
+                            code = candidate if "\n" in candidate or candidate.strip().startswith("print") \
+                                else f"print({candidate})"
+                            t_args = {"code": code}
+                            if self.debug:
+                                print(f"    python_repl code reconstructed: {code!r}")
+                        else:
+                            if self.debug:
+                                print(f"    python_repl with no recoverable code, skipping")
+                            continue
+
                     t_args = _fix_calculator_args(t_name, t_args, user_input, _successful_results)
-                    
+                    # Redirect to calculator with the correct expression.
+                    if (
+                        t_name != "calculator"
+                        and self.tools.get("calculator")
+                        and _successful_results
+                    ):
+                        q_lower = user_input.lower()
+                        last_result = _strip_tool_prefix(_successful_results[-1])
+                        try:
+                            last_num = float(last_result)
+                            redirect_expr = None
+                            if "sqrt" in q_lower or "square root" in q_lower:
+                                redirect_expr = f"sqrt({last_num:.0f})"
+                            if redirect_expr:
+                                if self.debug:
+                                    print(f"    redirecting wrong tool {t_name!r} → calculator({redirect_expr!r})")
+                                t_name = "calculator"
+                                t_args = {"expression": redirect_expr}
+                        except (ValueError, TypeError):
+                            pass
+
+                    # If _fix_calculator_args flagged this as redundant, skip the call
+                    if t_args.pop("_redundant", False):
+                        prior = t_args.pop("_prior_result", "")
+                        if self.debug:
+                            print(f"    skipping redundant {t_name} call (prior={prior!r})")
+                        # Record the assistant turn with the original raw calls before feeding result
+                        self.memory.add_assistant(content or "", tool_calls=tool_calls_raw)
+                        self.memory.add_tool_result(t_name, prior)
+                        _successful_results.append(f"{t_name} → {prior}")
+                        continue
+
+                    # Strip any internal bookkeeping keys before invoking
+                    t_args.pop("_prior_result", None)
+
                     # Skip if tool name is empty or whitespace only
                     if not t_name or not t_name.strip():
                         continue
-                    
+
                     _tool_call_counts[t_name] = _tool_call_counts.get(t_name, 0) + 1
+
+                    # Enforce the same hard ceilings as the JSON-fallback path
+                    total_calls = sum(_tool_call_counts.values())
+                    if _tool_call_counts[t_name] > _max_calls_per_tool or total_calls > _max_total_tool_calls:
+                        final_answer = self._synthesize(user_input, _successful_results)
+                        final_step = StepResult(type="final", content=final_answer, elapsed_ms=elapsed)
+                        run.steps.append(final_step)
+                        self._emit(final_step)
+                        run.final_answer = final_answer
+                        break
+
+                    # Build a corrected tool_calls entry reflecting the (possibly redirected) tool
+                    corrected_tc = {"function": {"name": t_name, "arguments": t_args}}
+                    self.memory.add_assistant(content or "", tool_calls=[corrected_tc])
 
                     call_step = StepResult(
                         type="tool_call",
@@ -659,10 +828,11 @@ class Agent:
 
                     if not result_str.startswith("[Tool error]"):
                         _successful_results.append(f"{t_name} → {result_str}")
+                        _successful_tools.add(t_name)
 
-                continue
+                continue  # back to top of while loop after processing all tool calls
 
-            # ---- JSON-in-text fallback (small models that ignore tool API) -- #
+
             # Some models (e.g. llama3.2:1b) output JSON in the message body
             # instead of using the tool_calls field.
             # Skip tool parsing for simple greetings to avoid false positives
@@ -672,22 +842,24 @@ class Agent:
                     print(f"\n  🔍 DEBUG: JSON fallback triggered")
                     print(f"    content[:100]: {content[:100]!r}")
                 
-                # Don't try to parse tool calls for simple greetings/messages
-                if _is_greeting_or_simple(user_input):
-                    # Just return the content as-is, possibly cleaned
-                    if _looks_like_tool_schema(content):
-                        content = "Hello! How can I help you today?"
-                    final_step = StepResult(type="final", content=content, elapsed_ms=elapsed)
-                    run.steps.append(final_step)
-                    self._emit(final_step)
-                    run.final_answer = content
-                    self.memory.add_assistant(content)
-                    break
-                
                 t_name, t_args = _parse_json_tool_call(content)
                 
                 if self.debug:
                     print(f"    parsed JSON: name={t_name!r}, args={t_args!r}")
+                
+                # If JSON parsing failed or gave malformed output, try to extract from malformed content
+                if t_name is None or not self.tools.get(t_name):
+                    # Check if this looks like a schema dump
+                    if _looks_like_tool_schema_dump(content):
+                        if self.debug:
+                            print(f"    detected schema dump, trying to extract tool...")
+                        available_tools = [t.name for t in self.tools.all()]
+                        extracted_name, extracted_args = _try_extract_tool_from_malformed(content, available_tools)
+                        if extracted_name:
+                            t_name = extracted_name
+                            t_args = extracted_args or {}
+                            if self.debug:
+                                print(f"    extracted from malformed: name={t_name!r}")
                 
                 # If no JSON tool call found, check for Python code block
                 # This handles when model outputs code directly instead of JSON
@@ -705,11 +877,37 @@ class Agent:
                     
                 # Try fuzzy matching if exact tool name doesn't exist
                 if t_name and t_args is not None and not self.tools.get(t_name):
+                    original_t_name = t_name
                     fuzzy_name = _fuzzy_match_tool_name(t_name, self.tools)
                     if self.debug:
                         print(f"    fuzzy_match({t_name!r}) -> {fuzzy_name!r}")
                     if fuzzy_name:
+                        # If the original name looked like a math expression (e.g. "sqrt(144)"),
+                        # use it directly as the calculator expression — it's more complete
+                        # than whatever the model placed in the arguments field.
+                        code_indicators = ["(", ")", "+", "-", "*", "/"]
+                        if fuzzy_name == "calculator" and any(c in original_t_name for c in code_indicators):
+                            t_args = {"expression": original_t_name}
+                        elif fuzzy_name == "python_repl" and any(c in original_t_name for c in code_indicators):
+                            if not t_args.get("code"):
+                                code = original_t_name if original_t_name.strip().startswith("print") \
+                                    else f"print({original_t_name})"
+                                t_args = {"code": code}
                         t_name = fuzzy_name
+
+                # If python_repl was resolved but 'code' is missing, recover from alt arg names
+                if t_name == "python_repl" and t_args is not None and not t_args.get("code"):
+                    candidate = (
+                        t_args.get("value") or t_args.get("expression") or
+                        t_args.get("script") or t_args.get("command") or
+                        t_args.get("query") or ""
+                    )
+                    if candidate:
+                        code = candidate if "\n" in candidate or candidate.strip().startswith("print") \
+                            else f"print({candidate})"
+                        t_args = {"code": code}
+                        if self.debug:
+                            print(f"    python_repl code reconstructed from alt arg: {code!r}")
                 
                 if self.debug:
                     print(f"    final: name={t_name!r}, tool_exists={self.tools.get(t_name) is not None}")
@@ -736,10 +934,8 @@ class Agent:
 
                     # Intercept repeat calls only when args are identical — the model is
                     # truly stuck. Different args = legitimate chained call (e.g. sqrt after **).
-                    if not hasattr(run, '_last_tool_args'):
-                        run._last_tool_args = {}
                     already_succeeded = t_name in _successful_tools
-                    same_args = run._last_tool_args.get(t_name) == t_args
+                    same_args = _last_tool_args.get(t_name) == t_args
                     if already_succeeded and same_args:
                         pending = [
                             t.name for t in self.tools.all()
@@ -760,9 +956,23 @@ class Agent:
                             break
                         continue
 
-                    run._last_tool_args[t_name] = t_args
+                    _last_tool_args[t_name] = t_args
 
                     t_args = _fix_calculator_args(t_name, t_args, user_input, _successful_results)
+
+                    # If _fix_calculator_args flagged this as redundant, skip the call
+                    if t_args.pop("_redundant", False):
+                        prior = t_args.pop("_prior_result", "")
+                        if self.debug:
+                            print(f"    skipping redundant {t_name} call (prior={prior!r})")
+                        self.memory.add_tool_result(t_name, prior)
+                        _successful_results.append(f"{t_name} → {prior}")
+                        _successful_tools.add(t_name)
+                        continue
+
+                    # Strip any internal bookkeeping keys before invoking
+                    t_args.pop("_prior_result", None)
+
                     _tool_call_counts[t_name] = _tool_call_counts.get(t_name, 0) + 1
 
                     # Hard ceiling — synthesize from what we already have
@@ -897,14 +1107,32 @@ class Agent:
                 and not tool_calls_raw
             ):
                 results_so_far = "\n".join(f"- {r}" for r in _successful_results)
+
+                # Build a more specific hint when the prior result is a number and
+                # the user question implies a chained calculation (e.g. sqrt after **).
+                extra_hint = ""
+                q_lower = user_input.lower()
+                last_result = _strip_tool_prefix(_successful_results[-1])
+                try:
+                    last_num = float(last_result)
+                    if "sqrt" in q_lower or "square root" in q_lower:
+                        extra_hint = (
+                            f"\nThe user asked for the square root of the previous result. "
+                            f"Call calculator with expression=\"sqrt({last_num:.0f if last_num == int(last_num) else last_num})\". "
+                            f"Do NOT call any other tool."
+                        )
+                except (ValueError, TypeError):
+                    pass
+
                 self.memory.add_assistant(content)
                 self.memory.add_user(
                     f"You have gathered so far:\n{results_so_far}\n\n"
                     f"The original question was: {user_input}\n\n"
-                    "If the question requires further calculation, call the tool with the "
+                    "If the question requires further calculation, call the correct tool with the "
                     "correct next expression using the result above as input (do NOT pass "
                     "the raw result as the expression — compute something new with it). "
                     "Otherwise give your final answer in plain text."
+                    + extra_hint
                 )
                 continue
 
@@ -914,11 +1142,7 @@ class Agent:
             if _looks_like_tool_schema(content):
                 if _successful_results:
                     # We have tool results - use them instead of the JSON
-                    # Extract clean answer from tool results
-                    clean_results = []
-                    for r in _successful_results:
-                        clean = r.split("→")[-1].strip() if "→" in r else r.strip()
-                        clean_results.append(clean)
+                    clean_results = [_strip_tool_prefix(r) for r in _successful_results]
                     content = clean_results[0] if len(clean_results) == 1 else "\n".join(f"- {r}" for r in clean_results)
                     if self.debug:
                         print(f"    using tool result as final answer: {content[:50]}...")
@@ -940,12 +1164,7 @@ class Agent:
             # Clean JSON from final answer if needed
             # Use successful tool results as fallback if available
             if _successful_results:
-                # Extract clean answer from tool results
-                clean_results = []
-                for r in _successful_results:
-                    # Strip the "tool_name → " prefix if present
-                    clean = r.split("→")[-1].strip() if "→" in r else r.strip()
-                    clean_results.append(clean)
+                clean_results = [_strip_tool_prefix(r) for r in _successful_results]
                 fallback_text = clean_results[0] if len(clean_results) == 1 else "\n".join(f"- {r}" for r in clean_results)
             else:
                 fallback_text = content
@@ -981,7 +1200,7 @@ class Agent:
         # Check if any result already looks like a complete answer
         # (starts with common answer patterns and is reasonably short)
         for r in results:
-            r_clean = r.split("→")[-1].strip() if "→" in r else r.strip()
+            r_clean = _strip_tool_prefix(r)
             answer_patterns = (
                 r_clean.startswith("Today is ") or
                 r_clean.startswith("The current time is ") or
@@ -1065,7 +1284,15 @@ class Agent:
         """
         Yield text tokens as they arrive (no tool use in streaming mode).
         Suitable for simple Q&A agents where you want live output.
+
+        Note: Tools registered on this agent are NOT invoked during streaming.
+        Use agent.run() for full tool-calling support.
         """
+        if self.tools.all() and self.debug:
+            print(
+                f"  ⚠ stream() called but {len(self.tools.all())} tool(s) are registered. "
+                "Tools are not invoked in streaming mode — use agent.run() instead."
+            )
         self.memory.add_user(user_input)
         chunks = self.client.chat(
             model=self.model,

@@ -19,15 +19,18 @@ Examples:
   localclaw tools
   localclaw skills
 
-Written by VTSTech — https://www.vts-tech.org — https://github.com/VTSTech/LocalClaw
+Written by VTSTech · https://www.vts-tech.org · https://github.com/VTSTech/LocalClaw — https://www.vts-tech.org — https://github.com/VTSTech/LocalClaw
 """
 
 from __future__ import annotations
 
 import argparse
+import datetime
+import json
 import os
 import sys
 import textwrap
+import time
 from pathlib import Path
 
 # Allow running as `python cli.py` or as installed entry point
@@ -37,8 +40,23 @@ if _root not in sys.path:
     sys.path.insert(0, _root)
 
 from localclaw import Agent, OllamaClient, StepResult
+from localclaw.core.memory import Message
 from localclaw.tools.builtins import BUILTIN_REGISTRY
 from localclaw.skills import SkillLoader, SkillRegistry
+
+
+# ------------------------------------------------------------------ #
+#  Helper functions                                                    #
+# ------------------------------------------------------------------ #
+
+def _count_messages(history) -> dict:
+    """Count messages by role in history."""
+    return {
+        'user': sum(1 for m in history if m.role == 'user'),
+        'assistant': sum(1 for m in history if m.role == 'assistant'),
+        'tool': sum(1 for m in history if m.role == 'tool'),
+        'total': len(history),
+    }
 
 
 # ------------------------------------------------------------------ #
@@ -59,7 +77,6 @@ def yellow(t): return _c("33", t)
 def cyan(t):   return _c("36", t)
 def red(t):    return _c("31", t)
 def blue(t):   return _c("34", t)
-def mag(t):    return _c("35", t)
 def magenta(t): return _c("35", t)
 
 
@@ -177,7 +194,7 @@ def cmd_models(args):
         print(yellow("No models found. Pull one with: ollama pull llama3.2:3b"))
         return
 
-    print(bold("\n🦞 LocalClaw R01 Models") + dim(" · VTSTech"))
+    print(bold("\n🦞 LocalClaw R01 Models") + dim(" · Written by VTSTech · https://www.vts-tech.org · https://github.com/VTSTech/LocalClaw"))
     print(bold(f"{'Model':<40} {'Tool support':>12}"))
     print(dim("─" * 54))
     for m in sorted(models):
@@ -188,7 +205,7 @@ def cmd_models(args):
 
 def cmd_tools(args):
     tools = BUILTIN_REGISTRY.all()
-    print(bold("\n🦞 LocalClaw R01 Tools") + dim(" · VTSTech"))
+    print(bold("\n🦞 LocalClaw R01 Tools") + dim(" · Written by VTSTech · https://www.vts-tech.org · https://github.com/VTSTech/LocalClaw"))
     print(bold(f"{'Tool':<20} Description"))
     print(dim("─" * 70))
     for t in tools:
@@ -208,7 +225,7 @@ def cmd_skills(args):
     loader = SkillLoader()
     skills = loader.list_skills()
     
-    print(bold("\n🦞 LocalClaw R01 Skills") + dim(" · VTSTech"))
+    print(bold("\n🦞 LocalClaw R01 Skills") + dim(" · Written by VTSTech · https://www.vts-tech.org · https://github.com/VTSTech/LocalClaw"))
     
     if not skills:
         print(yellow("  No skills found."))
@@ -222,7 +239,7 @@ def cmd_skills(args):
         try:
             skill = loader.load(name)
             desc = skill.description[:60] + "..." if len(skill.description) > 60 else skill.description
-            print(f"  {mag(name):<26} {desc}")
+            print(f"  {magenta(name):<26} {desc}")
             
             # Show resources
             resources = []
@@ -237,7 +254,7 @@ def cmd_skills(args):
             if resources:
                 print(f"  {'':<26} {dim('Has: ' + ', '.join(resources))}")
         except Exception as e:
-            print(f"  {mag(name):<26} {red(f'Error: {e}')}")
+            print(f"  {magenta(name):<26} {red(f'Error: {e}')}")
     
     print()
     print(dim(f"  Use with: --skills {','.join(skills[:2])}"))
@@ -254,7 +271,7 @@ def cmd_run(args):
 
     agent, skill_registry = _build_agent(args, client)
     
-    print(bold("🦞 LocalClaw R01") + dim(" · VTSTech"))
+    print(bold("🦞 LocalClaw R01") + dim(" · Written by VTSTech · https://www.vts-tech.org · https://github.com/VTSTech/LocalClaw"))
     print(f"Prompt: {args.prompt}")
     
     run = agent.run(args.prompt)
@@ -278,7 +295,6 @@ def cmd_chat(args):
     # Warm up model if requested (useful for remote Ollama with cold starts)
     if getattr(args, "warmup", False):
         print(dim("  🔥 Warming up model..."), end=" ", flush=True)
-        import time
         t0 = time.perf_counter()
         try:
             # Simple warmup request - just generate 1 token
@@ -304,7 +320,7 @@ def cmd_chat(args):
     parts.append("]")
     status = " ".join(parts)
     
-    print(bold(f"\n🦞 LocalClaw R01 chat") + dim(f"  {status} · VTSTech"))
+    print(bold(f"\n🦞 LocalClaw R01 chat") + dim(f"  {status} · Written by VTSTech · https://www.vts-tech.org · https://github.com/VTSTech/LocalClaw"))
     print(dim("  Type 'exit', 'quit', or Ctrl+C to quit."))
     print(dim("  Type '/reset' to clear conversation history."))
     print(dim("  Type '/tools' to list available tools."))
@@ -423,16 +439,11 @@ def cmd_chat(args):
                 
                 # Memory history
                 history = agent.memory._history
-                print(f"  Conversation history: {len(history)} messages")
-                
-                # Count message types (Message objects have .role attribute, not .get())
-                user_msgs = sum(1 for m in history if m.role == 'user')
-                assistant_msgs = sum(1 for m in history if m.role == 'assistant')
-                tool_msgs = sum(1 for m in history if m.role == 'tool')
-                
-                print(dim(f"    • User messages: {user_msgs}"))
-                print(dim(f"    • Assistant messages: {assistant_msgs}"))
-                print(dim(f"    • Tool results: {tool_msgs}"))
+                counts = _count_messages(history)
+                print(f"  Conversation history: {counts['total']} messages")
+                print(dim(f"    • User messages: {counts['user']}"))
+                print(dim(f"    • Assistant messages: {counts['assistant']}"))
+                print(dim(f"    • Tool results: {counts['tool']}"))
                 
                 # Estimate token usage (rough: ~4 chars per token)
                 total_chars = sum(len(m.content or '') for m in history)
@@ -535,14 +546,12 @@ def cmd_chat(args):
                 
                 # Message counts
                 history = agent.memory._history
-                user_msgs = sum(1 for m in history if m.role == 'user')
-                assistant_msgs = sum(1 for m in history if m.role == 'assistant')
-                tool_msgs = sum(1 for m in history if m.role == 'tool')
+                counts = _count_messages(history)
                 
-                print(f"  Messages: {len(history)} total")
-                print(dim(f"    • User: {user_msgs}"))
-                print(dim(f"    • Assistant: {assistant_msgs}"))
-                print(dim(f"    • Tool results: {tool_msgs}"))
+                print(f"  Messages: {counts['total']} total")
+                print(dim(f"    • User: {counts['user']}"))
+                print(dim(f"    • Assistant: {counts['assistant']}"))
+                print(dim(f"    • Tool results: {counts['tool']}"))
                 print()
                 
                 # Token estimation
@@ -585,7 +594,6 @@ def cmd_chat(args):
                 continue
 
             if user_input == "/export":
-                import datetime
                 timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
                 filename = f"conversation_{timestamp}.md"
                 filepath = Path(filename)
@@ -657,14 +665,9 @@ def cmd_chat(args):
                 name = user_input.split()[1]
                 filename = f"{name}.json"
                 filepath = Path(filename)
-                
-                import json
-                data = {
-                    "model": args.model,
-                    "temperature": getattr(args, 'temperature', 0.7),
-                    "history": [m.to_dict() for m in agent.memory._history],
-                    "system_prompt": agent.memory.system_prompt,
-                }
+                data = agent.memory.snapshot()
+                data["model"] = args.model
+                data["temperature"] = getattr(args, 'temperature', 0.7)
                 filepath.write_text(json.dumps(data, indent=2), encoding='utf-8')
                 print(green(f"  ✓ Saved to {filename}"))
                 continue
@@ -678,10 +681,11 @@ def cmd_chat(args):
                     print(red(f"  ✗ File not found: {filename}"))
                     continue
                 
-                import json
                 data = json.loads(filepath.read_text(encoding='utf-8'))
-                agent.memory._history = data.get("history", [])
+                # Properly deserialize Message objects from dicts
+                agent.memory._history = [Message.from_dict(m) for m in data.get("history", [])]
                 agent.memory.system_prompt = data.get("system_prompt", agent.memory.system_prompt)
+                agent.memory._archived_summary = data.get("archived_summary", "")
                 print(green(f"  ✓ Loaded from {filename} ({len(agent.memory._history)} messages)"))
                 continue
 
@@ -717,7 +721,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     parser = argparse.ArgumentParser(
         prog="localclaw",
-        description="🦞 LocalClaw R01 — local agentic AI powered by Ollama · VTSTech",
+        description="🦞 LocalClaw R01 — local agentic AI powered by Ollama · Written by VTSTech · https://www.vts-tech.org · https://github.com/VTSTech/LocalClaw",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=textwrap.dedent("""
         examples:
@@ -730,7 +734,6 @@ def build_parser() -> argparse.ArgumentParser:
           localclaw tools
           localclaw skills
 
-        Written by VTSTech — https://www.vts-tech.org — https://github.com/VTSTech/LocalClaw
         """),
     )
 
@@ -809,6 +812,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--debug",
         action="store_true",
         help="Show debug info: parsed tool calls, fuzzy matching, etc.",
+    )
+    shared.add_argument(
+        "--stream",
+        action="store_true",
+        help="Stream output token-by-token (better UX for slow connections)",
     )
 
     # ── run ─────────────────────────────────────────────────────────

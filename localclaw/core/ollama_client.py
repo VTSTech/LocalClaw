@@ -25,8 +25,9 @@ from typing import Any, Iterator
 # LOCAL OLLAMA (default):
 DEFAULT_BASE_URL = "http://localhost:11434"
 #
-# REMOTE OLLAMA (cloudflare tunnel):
-#DEFAULT_BASE_URL = "https://your-tunnel.trycloudflare.com"#
+# REMOTE OLLAMA (cloudflare tunnel) — uncomment and comment out the line above:
+#DEFAULT_BASE_URL = "https://your-tunnel.trycloudflare.com"
+#
 # ═══════════════════════════════════════════════════════════════════════════════
 
 # Default timeout: configurable via environment variable
@@ -67,47 +68,38 @@ class OllamaClient:
     #  Low-level helpers                                                   #
     # ------------------------------------------------------------------ #
 
-    def _post(self, endpoint: str, payload: dict, _retry_count: int = 0) -> dict:
-        url = f"{self.base_url}{endpoint}"
-        data = json.dumps(payload).encode("utf-8")
-        req = urllib.request.Request(
-            url, data=data,
-            headers={"Content-Type": "application/json"},
-            method="POST",
-        )
+    def _request(self, req: urllib.request.Request, _retry_count: int = 0) -> bytes:
+        """
+        Execute an HTTP request with exponential-backoff retry on transient errors.
+        Returns the raw response bytes. Raises OllamaError on failure.
+        """
         try:
             with urllib.request.urlopen(req, timeout=self.timeout) as resp:
-                return json.loads(resp.read().decode("utf-8"))
+                return resp.read()
         except urllib.error.HTTPError as e:
             body = e.read().decode("utf-8", errors="replace")
-            # HTTP 524 is Cloudflare timeout - retryable
+            retryable_codes = {502, 503, 504, 524}
+            if e.code in retryable_codes and _retry_count < MAX_RETRIES:
+                delay = RETRY_DELAY * (2 ** _retry_count)
+                label = "Cloudflare tunnel timeout" if e.code == 524 else f"HTTP {e.code}"
+                print(f"  ⚠ {label}, retrying in {delay:.1f}s (attempt {_retry_count + 1}/{MAX_RETRIES})...")
+                time.sleep(delay)
+                return self._request(req, _retry_count + 1)
             if e.code == 524:
-                if _retry_count < MAX_RETRIES:
-                    delay = RETRY_DELAY * (2 ** _retry_count)  # exponential backoff
-                    print(f"  ⚠ HTTP 524 timeout, retrying in {delay:.1f}s (attempt {_retry_count + 1}/{MAX_RETRIES})...")
-                    time.sleep(delay)
-                    return self._post(endpoint, payload, _retry_count + 1)
                 raise OllamaError(
                     f"HTTP 524: Cloudflare tunnel timeout after {MAX_RETRIES} retries. "
                     f"Try: 1) Use a local Ollama instance, 2) Increase OLLAMA_TIMEOUT env var, "
                     f"3) Use a smaller model, or 4) Check your cloudflare tunnel connection.",
                     is_timeout=True, can_retry=True
                 ) from e
-            # HTTP 502/503/504 are often temporary - retryable
-            if e.code in (502, 503, 504) and _retry_count < MAX_RETRIES:
-                delay = RETRY_DELAY * (2 ** _retry_count)
-                print(f"  ⚠ HTTP {e.code}, retrying in {delay:.1f}s (attempt {_retry_count + 1}/{MAX_RETRIES})...")
-                time.sleep(delay)
-                return self._post(endpoint, payload, _retry_count + 1)
             raise OllamaError(f"HTTP {e.code}: {body}") from e
         except urllib.error.URLError as e:
-            # Timeout errors
+            if "timed out" in str(e.reason).lower() and _retry_count < MAX_RETRIES:
+                delay = RETRY_DELAY * (2 ** _retry_count)
+                print(f"  ⚠ Connection timeout, retrying in {delay:.1f}s (attempt {_retry_count + 1}/{MAX_RETRIES})...")
+                time.sleep(delay)
+                return self._request(req, _retry_count + 1)
             if "timed out" in str(e.reason).lower():
-                if _retry_count < MAX_RETRIES:
-                    delay = RETRY_DELAY * (2 ** _retry_count)
-                    print(f"  ⚠ Connection timeout, retrying in {delay:.1f}s (attempt {_retry_count + 1}/{MAX_RETRIES})...")
-                    time.sleep(delay)
-                    return self._post(endpoint, payload, _retry_count + 1)
                 raise OllamaError(
                     f"Connection timeout after {MAX_RETRIES} retries. "
                     f"Try increasing OLLAMA_TIMEOUT environment variable (current: {self.timeout}s).",
@@ -115,12 +107,11 @@ class OllamaClient:
                 ) from e
             raise OllamaError(f"Connection error: {e.reason}") from e
         except (TimeoutError, socket.timeout) as e:
-            # Socket-level timeout (distinct from URLError)
             if _retry_count < MAX_RETRIES:
                 delay = RETRY_DELAY * (2 ** _retry_count)
                 print(f"  ⚠ Socket timeout, retrying in {delay:.1f}s (attempt {_retry_count + 1}/{MAX_RETRIES})...")
                 time.sleep(delay)
-                return self._post(endpoint, payload, _retry_count + 1)
+                return self._request(req, _retry_count + 1)
             raise OllamaError(
                 f"Socket timeout after {MAX_RETRIES} retries. "
                 f"The model may be too slow or the connection unstable. "
@@ -129,26 +120,20 @@ class OllamaClient:
                 is_timeout=True, can_retry=True
             ) from e
 
-    def _get(self, endpoint: str, _retry_count: int = 0) -> dict:
+    def _post(self, endpoint: str, payload: dict) -> dict:
+        url = f"{self.base_url}{endpoint}"
+        data = json.dumps(payload).encode("utf-8")
+        req = urllib.request.Request(
+            url, data=data,
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        return json.loads(self._request(req).decode("utf-8"))
+
+    def _get(self, endpoint: str) -> dict:
         url = f"{self.base_url}{endpoint}"
         req = urllib.request.Request(url, method="GET")
-        try:
-            with urllib.request.urlopen(req, timeout=self.timeout) as resp:
-                return json.loads(resp.read().decode("utf-8"))
-        except urllib.error.HTTPError as e:
-            if e.code == 524 and _retry_count < MAX_RETRIES:
-                delay = RETRY_DELAY * (2 ** _retry_count)
-                print(f"  ⚠ HTTP 524 timeout, retrying in {delay:.1f}s...")
-                time.sleep(delay)
-                return self._get(endpoint, _retry_count + 1)
-            raise OllamaError(f"HTTP {e.code}") from e
-        except urllib.error.URLError as e:
-            if "timed out" in str(e.reason).lower() and _retry_count < MAX_RETRIES:
-                delay = RETRY_DELAY * (2 ** _retry_count)
-                print(f"  ⚠ Connection timeout, retrying in {delay:.1f}s...")
-                time.sleep(delay)
-                return self._get(endpoint, _retry_count + 1)
-            raise OllamaError(f"Connection error: {e.reason}") from e
+        return json.loads(self._request(req).decode("utf-8"))
 
     def _stream(self, endpoint: str, payload: dict) -> Iterator[dict]:
         """Yield JSON objects from a streaming Ollama response."""

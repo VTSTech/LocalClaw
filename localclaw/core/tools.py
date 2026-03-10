@@ -1,5 +1,5 @@
 """
-🦞 LocalClaw R00 — Tool System
+🦞 LocalClaw R01 — Tool System
 Decorator-based tool registry that auto-generates Ollama-compatible JSON schemas
 from Python type hints and docstrings.
 
@@ -167,6 +167,13 @@ class ToolRegistry:
             # Filter args to only include valid parameters for this tool
             valid_params = {p.name for p in tool.params}
             filtered_args = {k: v for k, v in args.items() if k in valid_params}
+            dropped = set(args) - valid_params
+            if dropped:
+                import warnings
+                warnings.warn(
+                    f"Tool '{name}' received unknown argument(s) {dropped!r} — they will be ignored.",
+                    stacklevel=2,
+                )
             return tool(**filtered_args)
         except Exception as e:
             return f"[Tool error] {type(e).__name__}: {e}"
@@ -181,11 +188,3 @@ class ToolRegistry:
 
     def __repr__(self):
         return f"ToolRegistry({list(self._tools.keys())})"
-
-
-# ------------------------------------------------------------------ #
-#  Module-level default registry (optional convenience)               #
-# ------------------------------------------------------------------ #
-
-default_registry = ToolRegistry()
-tool = default_registry.tool   # shorthand decorator

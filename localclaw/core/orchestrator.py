@@ -1,5 +1,5 @@
 """
-🦞 LocalClaw R00 — Orchestrator
+🦞 LocalClaw R01 — Orchestrator
 Coordinates multiple agents via a router agent or explicit hand-off rules.
 
 Two modes:
@@ -12,7 +12,6 @@ Written by VTSTech — https://www.vts-tech.org — https://github.com/VTSTech/L
 
 from __future__ import annotations
 
-import asyncio
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
@@ -118,14 +117,20 @@ class Orchestrator:
         names_list = list(self.agents.keys())
 
         prompt = (
-            f"You are a routing assistant. Your only job is to output one agent name.\n\n"
+            f"You are a routing assistant. Your only job is to pick the best agent for a task.\n\n"
             f"Agents:\n{descriptions}\n\n"
-            f"User message: {user_input}\n\n"
-            f"Which agent should handle this? Choose exactly one from: {names_list}\n"
-            f"Output only the agent name, nothing else."
+            f"IMPORTANT disambiguation rules:\n"
+            f"- Tasks involving Python, code, functions, classes, algorithms, or programming → pick the code/programming agent\n"
+            f"- Tasks involving numbers, calculations, finance, or math → pick the math/analyst agent\n"
+            f"- Tasks involving emails, essays, stories, or prose (non-code) → pick the writing agent\n\n"
+            f"Task: {user_input}\n\n"
+            f"Which agent should handle this? Choose exactly one name from this list: {names_list}\n"
+            f"Respond with ONLY the agent name and nothing else. Do not explain."
         )
-        # Use a short timeout — routing should be fast; fall back on failure
-        router_client = OllamaClient(base_url=self.client.base_url, timeout=30.0)
+        # Use a separate client with a capped timeout for routing — routing
+        # should be fast, but we still respect the configured base_url and
+        # allow up to 600 s for slow remote instances.
+        router_client = OllamaClient(base_url=self.client.base_url, timeout=min(self.client.timeout, 600.0))
         try:
             response = router_client.chat(
                 model=self.router_model,
@@ -176,7 +181,6 @@ class Orchestrator:
                 try:
                     result.runs[name] = fut.result()
                 except Exception as e:
-                    from .agent import AgentRun
                     result.runs[name] = AgentRun(success=False, error=str(e))
 
         # Merge: concatenate all answers with attribution
