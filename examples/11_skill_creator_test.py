@@ -200,12 +200,17 @@ def test_model(client: OllamaClient, model: str, skills_dir: str) -> dict:
         on_step=lambda s: print_step(s, "    ") if VERBOSE else None,
     )
     
-    # Clear, explicit prompt with example
+    # Clear, explicit prompt with example - optimized for small models
     prompt = f"""Create a new skill called '{SKILL_NAME}' for converting files between formats.
 
-Use the write_file tool to create: {skill_path}
+Call the write_file tool with these arguments:
+- path: {skill_path}
+- content: the SKILL.md content
 
-The SKILL.md file MUST have this exact structure:
+Example tool call:
+write_file(path="{skill_path}", content="---\\nname: file-converter\\n---")
+
+The SKILL.md content MUST have this exact structure:
 
 ---
 name: file-converter
@@ -227,7 +232,7 @@ Instructions for converting files between formats.
 2. Parse and transform
 3. Write output file
 
-Write the complete file now with ALL sections included."""
+Call write_file now with path="{skill_path}" and the content above."""
 
     start = time.time()
     steps_info = []
@@ -298,7 +303,7 @@ Write the complete file now with ALL sections included."""
 
 
 def main():
-    print("🦞 LocalClaw R01 - Skill Creator Test")
+    print("🦞 LocalClaw R02 - Skill Creator Test")
     print("=" * 60)
     print(f"Goal: Create '{SKILL_NAME}' skill with valid YAML frontmatter")
     print(f"Testing models from smallest to largest...")
