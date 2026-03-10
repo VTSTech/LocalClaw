@@ -88,6 +88,15 @@ def _normalize_args(args: dict, tool) -> dict:
         else:
             normalized[key] = val  # collision — pass through
 
+    # Handle nested 'tool_args' that contains actual arguments
+    # Models sometimes output: {"tool": "write_file", "tool_args": {"path": "x", "content": "y"}}
+    if "tool_args" in normalized and isinstance(normalized["tool_args"], dict):
+        nested = normalized.pop("tool_args")
+        if isinstance(nested, dict):
+            for k, v in nested.items():
+                if k in param_map and k not in normalized:
+                    normalized[k] = v
+
     return normalized
 
 

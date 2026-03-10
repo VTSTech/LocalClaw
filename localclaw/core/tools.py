@@ -168,6 +168,14 @@ class ToolRegistry:
             valid_params = {p.name for p in tool.params}
             filtered_args = {k: v for k, v in args.items() if k in valid_params}
             dropped = set(args) - valid_params
+            
+            # Fuzzy argument name matching for small models
+            if dropped and len(filtered_args) < len(valid_params):
+                fuzzy_mappings = self._fuzzy_match_args(dropped, valid_params, name)
+                for wrong_name, correct_name in fuzzy_mappings.items():
+                    filtered_args[correct_name] = args[wrong_name]
+                    dropped.discard(wrong_name)
+            
             if dropped:
                 import warnings
                 warnings.warn(
@@ -177,6 +185,59 @@ class ToolRegistry:
             return tool(**filtered_args)
         except Exception as e:
             return f"[Tool error] {type(e).__name__}: {e}"
+    
+    def _fuzzy_match_args(self, wrong_names: set, valid_names: set, tool_name: str) -> dict:
+        """Map incorrectly named args to correct ones using common patterns."""
+        mappings = {}
+        
+        # Common argument name aliases/mappings
+        arg_aliases = {
+            # path variants
+            "filepath": "path", "file_path": "path", "filename": "path", "file": "path",
+            "output_path": "path", "outputfile": "path", "dest": "path", "destination": "path",
+            # content variants
+            "data": "content", "text": "content", "body": "content", "output": "content",
+            "string": "content", "value": "content", "input": "content", "code": "content",
+            "result": "content",
+            # query variants
+            "search": "query", "q": "query", "term": "query", "search_query": "query",
+            # command variants
+            "cmd": "command", "shell": "command", "exec": "command",
+            # expression variants
+            "expr": "expression", "formula": "expression", "math": "expression",
+            # url variants
+            "uri": "url", "link": "url", "endpoint": "url",
+            # key variants  
+            "name": "key", "id": "key", "identifier": "key",
+            # timeout variants
+            "time": "timeout", "seconds": "timeout", "max_time": "timeout",
+        }
+        
+        for wrong in wrong_names:
+            wrong_lower = wrong.lower().replace("-", "_")
+            
+            # Direct alias match
+            if wrong_lower in arg_aliases:
+                target = arg_aliases[wrong_lower]
+                if target in valid_names:
+                    mappings[wrong] = target
+                    continue
+            
+            # Substring match (e.g., "filePath" contains "path")
+            for valid in valid_names:
+                if valid in wrong_lower or wrong_lower in valid:
+                    mappings[wrong] = valid
+                    break
+            
+            # Handle tool_* patterns (e.g., "tool_args" -> look for first required param)
+            if wrong_lower.startswith("tool_") or wrong_lower == "args":
+                # Find first required param that's not yet mapped
+                for p in self.get(tool_name).params:
+                    if p.required and p.name not in mappings.values():
+                        mappings[wrong] = p.name
+                        break
+        
+        return mappings
 
     def subset(self, names: list[str]) -> "ToolRegistry":
         """Return a new registry containing only the named tools."""
