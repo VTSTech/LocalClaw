@@ -26,8 +26,7 @@ from typing import Any, Iterator
 DEFAULT_BASE_URL = "http://localhost:11434"
 #
 # REMOTE OLLAMA (cloudflare tunnel):
-#DEFAULT_BASE_URL = "https://your-tunnel.trycloudflare.com"
-#
+#DEFAULT_BASE_URL = "https://your-tunnel.trycloudflare.com"#
 # ═══════════════════════════════════════════════════════════════════════════════
 
 # Default timeout: configurable via environment variable

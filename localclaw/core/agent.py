@@ -453,6 +453,19 @@ def _parse_json_tool_call(text: str) -> tuple[str | None, dict | None]:
     return name, args
 
 
+def _extract_python_code(text: str) -> str | None:
+    """
+    Extract Python code from markdown code blocks.
+    Returns the code content or None if no code block found.
+    """
+    # Match ```python ... ``` or ``` ... ```
+    pattern = r"```(?:python)?\s*\n(.*?)```"
+    match = re.search(pattern, text, re.DOTALL | re.IGNORECASE)
+    if match:
+        return match.group(1).strip()
+    return None
+
+
 def _parse_react(text: str) -> tuple[str | None, str | None, dict | None, str | None]:
     """
     Returns (thought, tool_name, tool_args, final_answer).
@@ -674,7 +687,17 @@ class Agent:
                 t_name, t_args = _parse_json_tool_call(content)
                 
                 if self.debug:
-                    print(f"    parsed: name={t_name!r}, args={t_args!r}")
+                    print(f"    parsed JSON: name={t_name!r}, args={t_args!r}")
+                
+                # If no JSON tool call found, check for Python code block
+                # This handles when model outputs code directly instead of JSON
+                if t_name is None and "python_repl" in [t.name for t in self.tools.all()]:
+                    extracted_code = _extract_python_code(content)
+                    if extracted_code:
+                        if self.debug:
+                            print(f"    extracted Python code block ({len(extracted_code)} chars)")
+                        t_name = "python_repl"
+                        t_args = {"code": extracted_code}
                 
                 # Skip if tool name is empty or whitespace only
                 if not t_name or not t_name.strip():
@@ -887,24 +910,45 @@ class Agent:
 
             # Detect: model output looks like a JSON tool schema even though
             # no tools are defined. Re-prompt once asking for plain text.
-            if _looks_like_tool_schema(content) and not self.tools.all():
-                self.memory.add_assistant(content)
-                self.memory.add_user(
-                    "Please answer in plain text only. "
-                    "Do not output JSON or function call syntax."
-                )
-                retry = self.client.chat(
-                    model=self.model,
-                    messages=self.memory.to_messages(),
-                    options=self.model_options,
-                )
-                content = retry.get("message", {}).get("content", "").strip() or content
-                self.memory._history.pop()   # remove the nudge from memory
-                self.memory._history.pop()   # remove the bad assistant turn
+            # Also handle case where we have successful results but model output JSON.
+            if _looks_like_tool_schema(content):
+                if _successful_results:
+                    # We have tool results - use them instead of the JSON
+                    # Extract clean answer from tool results
+                    clean_results = []
+                    for r in _successful_results:
+                        clean = r.split("→")[-1].strip() if "→" in r else r.strip()
+                        clean_results.append(clean)
+                    content = clean_results[0] if len(clean_results) == 1 else "\n".join(f"- {r}" for r in clean_results)
+                    if self.debug:
+                        print(f"    using tool result as final answer: {content[:50]}...")
+                elif not self.tools.all():
+                    self.memory.add_assistant(content)
+                    self.memory.add_user(
+                        "Please answer in plain text only. "
+                        "Do not output JSON or function call syntax."
+                    )
+                    retry = self.client.chat(
+                        model=self.model,
+                        messages=self.memory.to_messages(),
+                        options=self.model_options,
+                    )
+                    content = retry.get("message", {}).get("content", "").strip() or content
+                    self.memory._history.pop()   # remove the nudge from memory
+                    self.memory._history.pop()   # remove the bad assistant turn
 
             # Clean JSON from final answer if needed
             # Use successful tool results as fallback if available
-            fallback_text = "\n".join(_successful_results) if _successful_results else content
+            if _successful_results:
+                # Extract clean answer from tool results
+                clean_results = []
+                for r in _successful_results:
+                    # Strip the "tool_name → " prefix if present
+                    clean = r.split("→")[-1].strip() if "→" in r else r.strip()
+                    clean_results.append(clean)
+                fallback_text = clean_results[0] if len(clean_results) == 1 else "\n".join(f"- {r}" for r in clean_results)
+            else:
+                fallback_text = content
             content = self._clean_json_from_response(content, fallback_text)
 
             final_step = StepResult(type="final", content=content, elapsed_ms=elapsed)
@@ -933,6 +977,26 @@ class Agent:
             return "I was unable to complete this task with the available tools."
 
         results_text = "\n".join(f"- {r}" for r in results)
+        
+        # Check if any result already looks like a complete answer
+        # (starts with common answer patterns and is reasonably short)
+        for r in results:
+            r_clean = r.split("→")[-1].strip() if "→" in r else r.strip()
+            answer_patterns = (
+                r_clean.startswith("Today is ") or
+                r_clean.startswith("The current time is ") or
+                r_clean.startswith("The answer is ") or
+                r_clean.startswith("Result: ")
+            )
+            if answer_patterns and len(r_clean) < 200:
+                # This result is already a good answer, use it directly
+                if self.debug:
+                    print(f"    synthesize: using direct result: {r_clean[:50]}...")
+                return r_clean
+
+        if self.debug:
+            print(f"    synthesize: making LLM call to summarize {len(results)} results...")
+        
         synthesis_messages = self.memory.to_messages() + [{
             "role": "user",
             "content": (
