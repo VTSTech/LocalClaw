@@ -199,11 +199,18 @@ def main():
     print(f"🦞 LocalClaw Robust Model Comparison")
     print(f"   Available: {', '.join(available)}")
 
-    # Clear old results - start fresh each run
+    # Load existing results for resumability (don't delete!)
     results = {}
-    # Also delete the old results file
     if os.path.exists(RESULTS_FILE):
-        os.remove(RESULTS_FILE)
+        try:
+            with open(RESULTS_FILE) as f:
+                results = json.load(f)
+            completed_models = list(results.keys())
+            print(f"   📁 Loaded existing results: {len(completed_models)} models already tested")
+            print(f"   Resuming from where we left off...")
+        except Exception as e:
+            print(f"   ⚠️ Could not load existing results: {e}")
+            results = {}
 
     # Filter to available models
     models_to_test = [m for m in MODELS if any(m.split(':')[0] in a or m.split('-')[0] in a for a in available)]
