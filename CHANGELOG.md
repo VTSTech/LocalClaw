@@ -1,0 +1,187 @@
+# Changelog
+
+All notable changes to LocalClaw will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
+
+---
+
+## [R01] - 2026-03-09 to Present
+
+### Added
+- **Fuzzy argument name matching** for tool invocation - handles small model hallucinations of argument names (e.g., `filepath` → `path`, `data` → `content`)
+- **Nested tool_args extraction** - handles when models output `{"tool": "name", "tool_args": {...}}` format
+- **Test scripts for all platforms**:
+  - `test.sh` / `test.cmd` - Run all 11 examples
+  - `test-quick.sh` / `test-quick.cmd` - Run 7 quick tests (skips benchmarks)
+  - `run.sh` / `run.cmd` - Interactive menu for single example selection
+- **Environment variables for test configuration**:
+  - `LOCALCLAW_VERBOSE=1` - Show detailed tool calls
+  - `LOCALCLAW_TIMEOUT=120` - Timeout per test in seconds
+  - `LOCALCLAW_MODEL=<model>` - Override default model
+- **Proper exit codes** for all test scripts (0=success, 1=failure)
+- **Tool verification** in tests - detects when models hallucinate answers without calling tools
+- **YAML validation** for skill files with partial credit for incomplete skills
+- **datetime skill** - Date and time utilities
+- **web_search skill** - Web search capabilities
+- **Example 11**: `11_skill_creator_test.py` - Benchmark skill creation across models
+
+### Changed
+- **Trimmed skill-creator SKILL.md** from 373 lines to 111 lines (70% reduction) - made framework-agnostic
+- **Improved test verbosity** with detailed step output showing tool calls and results
+- **Fixed 08_robust_comparison.py** - no longer deletes results file on startup (proper resumability)
+- **Rewrote 05_tool_tests.py** with tool verification and proper expected values for all tests
+- **Rewrote 11_skill_creator_test.py** with YAML validation, timeout handling, and detailed error reporting
+
+### Fixed
+- **Tool invocation failures** when small models pass wrong argument names
+- **False positive test results** when models hallucinate without using tools
+- **Resumability bug** in 08_robust_comparison.py that deleted progress on restart
+
+### Technical Details
+- Added `_fuzzy_match_args()` method in `localclaw/core/tools.py` with alias dictionary for common argument variants
+- Added nested argument extraction in `_normalize_args()` in `localclaw/core/agent.py`
+- Argument aliases: `filepath→path`, `data→content`, `expr→expression`, `search→query`, `cmd→command`, `uri→url`
+
+---
+
+## [R00] - 2026-03-09
+
+### Added
+- **Skills system** following Agent Skills specification
+- **skill-creator skill** - OpenClaw's platform-agnostic skill generator
+- **Progressive disclosure** - three-level loading (metadata, instructions, resources)
+- **SkillLoader** and **SkillRegistry** for skill management
+- **Example 10**: `10_skills_demo.py` - Skills system demonstration
+- **CLI improvements** with `/save` and `/load` commands for conversation persistence
+- **Remote Ollama support** via environment variables:
+  - `OLLAMA_TIMEOUT` - Request timeout
+  - `OLLAMA_MAX_RETRIES` - Max retry attempts
+  - `OLLAMA_RETRY_DELAY` - Initial retry delay
+
+### Changed
+- Renamed from earlier development versions to R00 as first tagged release
+- Improved error messages and validation
+
+---
+
+## [R0] - 2026-02-06 to 2026-03-09
+
+### Added
+- **Core framework** with zero external dependencies (stdlib only)
+- **Agent class** with ReAct loop supporting:
+  - Native Ollama tool-calling protocol
+  - Text-based ReAct fallback for non-tool models
+  - Streaming responses via generator interface
+  - Multi-step reasoning with configurable max steps
+- **OllamaClient** - Zero-dependency HTTP wrapper using urllib
+- **ToolRegistry** - Decorator-based tool registration with:
+  - Auto-generated JSON schemas from Python type hints
+  - Tool subset selection for different agents
+  - Fuzzy tool name matching for small model hallucinations
+- **Memory system** - Sliding-window conversation memory with:
+  - Optional LLM-based summarization
+  - Turn archiving when window fills
+- **Orchestrator** - Multi-agent routing with:
+  - Router mode (LLM picks best agent)
+  - Pipeline mode (sequential chain)
+  - Parallel mode (concurrent execution with merge)
+- **Built-in tools**:
+  - `calculator` - Safe math expression evaluator
+  - `shell` - Shell command execution with timeout
+  - `read_file` / `write_file` - File I/O
+  - `list_directory` - Directory listing
+  - `http_get` - HTTP GET requests
+  - `web_search` - DuckDuckGo search (no API key)
+  - `python_repl` - Python code execution
+  - `save_note` / `get_note` / `list_notes` - Note storage
+- **Small model support** (≤1.5B parameters):
+  - Fuzzy tool name matching
+  - Argument auto-fixing
+  - JSON response cleaning
+  - Unicode normalization
+  - ReAct text parsing fallback
+- **Examples**:
+  - `01_basic_agent.py` - Simple Q&A demo
+  - `02_tool_agent.py` - Tool calling demo
+  - `03_orchestrator.py` - Multi-agent routing demo
+  - `04_comprehensive_test.py` - Full test suite
+  - `05_tool_tests.py` - Tool-specific tests
+  - `06_interactive_chat.py` - Interactive CLI chat
+  - `07_model_comparison.py` - Model benchmark (15 tests)
+  - `08_robust_comparison.py` - Progress-saving comparison
+  - `09_expanded_benchmark.py` - Expanded benchmark (25 tests)
+- **CLI interface** (`cli.py`) with:
+  - Chat mode with tool support
+  - Model listing
+  - Tool listing
+  - Skill listing
+  - Debug and verbose modes
+  - Fast mode for quicker responses
+
+### Supported Models (Tool-calling)
+- Meta Llama: llama3, llama3.1, llama3.2, llama3.3
+- Mistral AI: mistral, mixtral, mistral-nemo, codestral
+- Alibaba Qwen: qwen2, qwen2.5, qwen3, qwen2.5-coder
+- Cohere: command-r, command-r7b
+- DeepSeek: deepseek, deepseek-coder, deepseek-v2/v3
+- Microsoft Phi: phi-3, phi-4
+- Google Gemma: functiongemma
+- Others: yi, internlm2, solar, glm4, hermes, nemotron
+
+### Tested Small Models (≤1.5B)
+| Rank | Model | Score | Notes |
+|------|-------|-------|-------|
+| 🥇 | qwen2.5-coder:0.5b | 93% | Best overall |
+| 🥈 | granite3.1-moe:1b | 80% | Strong knowledge |
+| 🥉 | llama3.2:1b | 80% | 128k context |
+
+---
+
+## [R1-R7] - 2026-02-08 to 2026-02-17
+
+Early development iterations building the core framework.
+
+### R7 (2026-02-16 to 2026-02-17)
+- 11 commits
+- Further refinements and testing
+
+### R6 (2026-02-16)
+- 1 commit
+- Minor update
+
+### R4 (2026-02-09)
+- 8 commits
+- Bug fixes and improvements
+
+### R3 (2026-02-09)
+- 4 commits
+- Feature additions
+
+### R2 (2026-02-08 to 2026-02-09)
+- 6 commits
+- Core functionality expansion
+
+### R1 (2026-02-08)
+- 4 commits
+- Initial agent implementation
+
+---
+
+## Version Naming Convention
+
+- **R0, R1, R2...** - Development iterations
+- **R00, R01, R02...** - Tagged releases
+- Each tagged release includes all changes from development iterations since the previous release
+
+---
+
+## Links
+
+- **Repository**: https://github.com/VTSTech/LocalClaw
+- **Author**: [VTSTech](https://www.vts-tech.org)
+- **Inspiration**: OpenClaw
+
+---
+
+*This changelog is maintained by VTSTech. For the full commit history, see [GitHub Commits](https://github.com/VTSTech/LocalClaw/commits/main/).*
