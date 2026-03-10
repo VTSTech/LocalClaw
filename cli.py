@@ -60,13 +60,14 @@ def cyan(t):   return _c("36", t)
 def red(t):    return _c("31", t)
 def blue(t):   return _c("34", t)
 def mag(t):    return _c("35", t)
+def magenta(t): return _c("35", t)
 
 
 # ------------------------------------------------------------------ #
 #  Step callback for --verbose                                        #
 # ------------------------------------------------------------------ #
 
-def _make_step_printer(verbose: bool):
+def _make_step_printer(verbose: bool, debug: bool = False):
     def on_step(step: StepResult):
         if step.type == "tool_call":
             args_str = ", ".join(f"{k}={repr(v)}" for k, v in (step.tool_args or {}).items())
@@ -77,6 +78,8 @@ def _make_step_printer(verbose: bool):
         elif step.type == "thought" and verbose:
             wrapped = textwrap.fill(step.content, width=80, initial_indent="     ", subsequent_indent="     ")
             print(f"  {dim('💭')} {dim(wrapped.strip())}")
+        if debug and hasattr(step, 'debug_info') and step.debug_info:
+            print(f"  {magenta('🔍')} {dim(step.debug_info)}")
     return on_step
 
 
@@ -150,9 +153,10 @@ def _build_agent(args, client: OllamaClient):
         tools=tools_registry,
         system_prompt=system_prompt,
         client=client,
-        on_step=_make_step_printer(getattr(args, "verbose", False)),
+        on_step=_make_step_printer(getattr(args, "verbose", False), getattr(args, "debug", False)),
         model_options=model_options,
         force_react=getattr(args, "force_react", False),
+        debug=getattr(args, "debug", False),
     )
     
     return agent, skill_registry
@@ -800,6 +804,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--warmup",
         action="store_true",
         help="Warm up model with a dummy request before chat (useful for remote Ollama)",
+    )
+    shared.add_argument(
+        "--debug",
+        action="store_true",
+        help="Show debug info: parsed tool calls, fuzzy matching, etc.",
     )
 
     # ── run ─────────────────────────────────────────────────────────

@@ -1,5 +1,5 @@
 """
-🦞 LocalClaw R00 — Agent
+🦞 LocalClaw R01 — Agent
 Core ReAct agent that drives the think → act → observe loop.
 
 Supports:
@@ -196,6 +196,14 @@ def _fuzzy_match_tool_name(hallucinated_name: str, tools_registry) -> str | None
         "execute": "python_repl",
         "run": "python_repl",
         "exec": "python_repl",
+        "today": "python_repl",      # Model hallucinates "today" for date questions
+        "date": "python_repl",       # Model hallucinates "date" for date questions
+        "time": "python_repl",       # Model hallucinates "time" for time questions
+        "datetime": "python_repl",   # Model hallucinates "datetime"
+        "now": "python_repl",        # Model hallucinates "now"
+        "current": "python_repl",    # "current_date", "current_time"
+        "get_date": "python_repl",   # Common hallucination
+        "get_time": "python_repl",   # Common hallucination
         
         # Shell - EXPANDED
         "shell": "shell",
@@ -515,6 +523,7 @@ class Agent:
         on_step: Callable[[StepResult], None] | None = None,
         model_options: dict | None = None,
         memory_max_turns: int = 20,
+        debug: bool = False,
     ):
         self.model = model
         self.tools = tools or ToolRegistry()
@@ -523,6 +532,7 @@ class Agent:
         self.force_react = force_react
         self.on_step = on_step
         self.model_options = model_options or {}
+        self.debug = debug
 
         self._native_tools = (
             not force_react and self.client.model_supports_tools(model)
@@ -575,6 +585,13 @@ class Agent:
             content = msg.get("content", "")
             tool_calls_raw = msg.get("tool_calls", [])
 
+            # Debug output
+            if self.debug:
+                print(f"\n  🔍 DEBUG: Response received")
+                print(f"    _native_tools={self._native_tools}")
+                print(f"    tool_calls_raw={tool_calls_raw!r}")
+                print(f"    content[:100]={content[:100]!r}")
+
             # ---- Native tool calling --------------------------------- #
             # Skip tool calls for simple greetings
             if self._native_tools and tool_calls_raw:
@@ -603,14 +620,8 @@ class Agent:
                     t_args = _normalize_args(t_args, self.tools.get(t_name))
                     t_args = _fix_calculator_args(t_name, t_args, user_input, _successful_results)
                     
-                    # Skip redundant calculator calls (model re-calling with prior result)
-                    if t_args.get("_redundant"):
-                        # Don't execute - just use the prior result
-                        prior = t_args.get("_prior_result", "")
-                        result_step = StepResult(type="tool_result", content=f"[Skipped redundant call] {prior}", tool_name=t_name)
-                        run.steps.append(result_step)
-                        self._emit(result_step)
-                        self.memory.add_tool_result(t_name, prior)
+                    # Skip if tool name is empty or whitespace only
+                    if not t_name or not t_name.strip():
                         continue
                     
                     _tool_call_counts[t_name] = _tool_call_counts.get(t_name, 0) + 1
@@ -643,6 +654,11 @@ class Agent:
             # instead of using the tool_calls field.
             # Skip tool parsing for simple greetings to avoid false positives
             if self._native_tools and not tool_calls_raw and self.tools.all() and content:
+                # Debug output
+                if self.debug:
+                    print(f"\n  🔍 DEBUG: JSON fallback triggered")
+                    print(f"    content[:100]: {content[:100]!r}")
+                
                 # Don't try to parse tool calls for simple greetings/messages
                 if _is_greeting_or_simple(user_input):
                     # Just return the content as-is, possibly cleaned
@@ -657,14 +673,43 @@ class Agent:
                 
                 t_name, t_args = _parse_json_tool_call(content)
                 
+                if self.debug:
+                    print(f"    parsed: name={t_name!r}, args={t_args!r}")
+                
+                # Skip if tool name is empty or whitespace only
+                if not t_name or not t_name.strip():
+                    t_name = None
+                    
                 # Try fuzzy matching if exact tool name doesn't exist
                 if t_name and t_args is not None and not self.tools.get(t_name):
                     fuzzy_name = _fuzzy_match_tool_name(t_name, self.tools)
+                    if self.debug:
+                        print(f"    fuzzy_match({t_name!r}) -> {fuzzy_name!r}")
                     if fuzzy_name:
                         t_name = fuzzy_name
                 
+                if self.debug:
+                    print(f"    final: name={t_name!r}, tool_exists={self.tools.get(t_name) is not None}")
+                
                 if t_name and t_args is not None and self.tools.get(t_name):
                     t_args = _normalize_args(t_args, self.tools.get(t_name))
+                    
+                    # Handle empty args for python_repl - provide default code for date/time queries
+                    if t_name == "python_repl" and not t_args.get("code"):
+                        if self.debug:
+                            print(f"    python_repl with empty code, synthesizing...")
+                        # Synthesize code based on user query
+                        q_lower = user_input.lower()
+                        if "date" in q_lower and "time" in q_lower:
+                            t_args["code"] = "from datetime import datetime\nnow = datetime.now()\nprint(f\"Today is {now.strftime('%A, %B %d, %Y')} and the time is {now.strftime('%I:%M %p')}.\")"
+                        elif "date" in q_lower:
+                            t_args["code"] = "from datetime import datetime\nprint(datetime.now().strftime('Today is %A, %B %d, %Y.'))"
+                        elif "time" in q_lower:
+                            t_args["code"] = "from datetime import datetime\nprint(datetime.now().strftime('The current time is %I:%M %p.'))"
+                        else:
+                            t_args["code"] = "from datetime import datetime\nprint(datetime.now())"
+                        if self.debug:
+                            print(f"    synthesized code: {t_args['code'][:50]}...")
 
                     # Intercept repeat calls only when args are identical — the model is
                     # truly stuck. Different args = legitimate chained call (e.g. sqrt after **).
@@ -780,7 +825,7 @@ class Agent:
                     run.steps.append(step)
                     self._emit(step)
 
-                if t_name and t_args is not None:
+                if t_name and t_name.strip() and t_args is not None:
                     t_args = _normalize_args(t_args, self.tools.get(t_name))
                     _tool_call_counts[t_name] = _tool_call_counts.get(t_name, 0) + 1
 
