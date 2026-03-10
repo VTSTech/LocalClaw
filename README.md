@@ -20,7 +20,9 @@ localclaw/
 │   └── orchestrator.py    # Multi-agent routing (router / pipeline / parallel)
 ├── skills/
 │   ├── loader.py          # Agent Skills specification loader (progressive disclosure)
-│   └── skill-creator/     # OpenClaw skill-creator for generating new skills
+│   ├── skill-creator/     # OpenClaw skill-creator for generating new skills
+│   ├── datetime/          # Datetime utilities skill
+│   └── web_search/        # Web search skill
 ├── tools/
 │   └── builtins.py        # Ready-to-use tools: calculator, shell, file I/O, HTTP, REPL
 └── examples/
@@ -33,7 +35,19 @@ localclaw/
     ├── 07_model_comparison.py # Compare models on 15 tests (3 per category)
     ├── 08_robust_comparison.py # Progress-saving comparison for unstable connections
     ├── 09_expanded_benchmark.py # 25 tests across 8 categories
-    └── 10_skills_demo.py      # Agent Skills system demo
+    ├── 10_skills_demo.py      # Agent Skills system demo
+    └── 11_skill_creator_test.py # Skill creation benchmark across models
+```
+
+### Test Scripts
+
+```
+test.sh          # Bash: Run all 11 examples (Linux/macOS/Colab)
+test-quick.sh    # Bash: Run 7 quick tests (skips benchmarks)
+run.sh           # Bash: Interactive menu for single example
+test.cmd         # Batch: Run all 11 examples (Windows)
+test-quick.cmd   # Batch: Run 7 quick tests (Windows)
+run.cmd          # Batch: Interactive menu for single example (Windows)
 ```
 
 ### Core design decisions
@@ -400,6 +414,8 @@ Skills follow a three-level loading system:
 | Skill | Description |
 |-------|-------------|
 | `skill-creator` | OpenClaw's platform-agnostic skill generator. Creates new skills from user requests. |
+| `datetime` | Date and time utilities for formatting, parsing, and calculations. |
+| `web_search` | Web search capabilities for retrieving information from the internet. |
 
 ---
 
@@ -421,23 +437,30 @@ ollama pull qwen2.5-coder:0.5b-instruct-q4_k_m
 
 # Or use a remote Ollama instance by editing localclaw/core/ollama_client.py
 
-# Run examples
+# Quick test suite (recommended first run)
+bash test-quick.sh      # Linux/macOS/Colab
+test-quick.cmd          # Windows
+
+# Full test suite (all 11 examples)
+bash test.sh            # Linux/macOS/Colab
+test.cmd                # Windows
+
+# Interactive menu
+bash run.sh             # Linux/macOS/Colab
+run.cmd                 # Windows
+
+# Run individual examples
 python examples/01_basic_agent.py
 python examples/02_tool_agent.py
 python examples/03_orchestrator.py
-
-# Test suite
 python examples/04_comprehensive_test.py
 python examples/05_tool_tests.py
-
-# Interactive chat
 python examples/06_interactive_chat.py
-
-# Model comparison (15 tests per model)
 python examples/07_model_comparison.py
-
-# Robust comparison (saves progress, good for unstable connections)
 python examples/08_robust_comparison.py
+python examples/09_expanded_benchmark.py
+python examples/10_skills_demo.py
+python examples/11_skill_creator_test.py
 ```
 
 ---
@@ -641,6 +664,7 @@ Key insights for small model prompt engineering:
 | `08_robust_comparison.py` | Progress-saving comparison for unstable connections |
 | `09_expanded_benchmark.py` | 25 tests across 8 categories including tool chaining |
 | `10_skills_demo.py` | Demonstrate Agent Skills system with skill-creator |
+| `11_skill_creator_test.py` | Benchmark skill creation across multiple small models |
 
 ### Test Categories (15 tests)
 
