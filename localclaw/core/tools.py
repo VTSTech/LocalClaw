@@ -1,7 +1,13 @@
 """
-🦞 LocalClaw R01 — Tool System
+🦞 LocalClaw R02 — Tool System
 Decorator-based tool registry that auto-generates Ollama-compatible JSON schemas
 from Python type hints and docstrings.
+
+Features:
+  • Auto-generation of tool schemas from type hints
+  • Enhanced fuzzy argument matching for small models
+  • Helpful error messages with usage examples
+  • Support for argument aliases and normalization
 
 Written by VTSTech — https://www.vts-tech.org — https://github.com/VTSTech/LocalClaw
 """
@@ -190,27 +196,45 @@ class ToolRegistry:
         """Map incorrectly named args to correct ones using common patterns."""
         mappings = {}
         
-        # Common argument name aliases/mappings
+        # Common argument name aliases/mappings - expanded for small models
         arg_aliases = {
             # path variants
             "filepath": "path", "file_path": "path", "filename": "path", "file": "path",
             "output_path": "path", "outputfile": "path", "dest": "path", "destination": "path",
+            "location": "path", "source": "path", "input": "path",
             # content variants
             "data": "content", "text": "content", "body": "content", "output": "content",
-            "string": "content", "value": "content", "input": "content", "code": "content",
-            "result": "content",
+            "string": "content", "value": "content", "input": "content", 
+            "result": "content", "write": "content", "output_data": "content",
             # query variants
             "search": "query", "q": "query", "term": "query", "search_query": "query",
+            "keywords": "query", "text": "query",
             # command variants
             "cmd": "command", "shell": "command", "exec": "command",
-            # expression variants
+            "bash": "command", "script": "command", "run": "command",
+            "instruction": "command", "execute": "command", "op": "command",
+            # expression variants (for calculator)
             "expr": "expression", "formula": "expression", "math": "expression",
+            "calc": "expression", "input": "expression", "value": "expression",
+            "a": "expression", "b": "expression", "x": "expression", "y": "expression",
+            "num": "expression", "number": "expression",
+            # code variants (for python_repl)
+            "script": "code", "python": "code", "py": "code",
+            "exec": "code", "execute": "code", "program": "code", "source": "code",
+            "statement": "code",
             # url variants
             "uri": "url", "link": "url", "endpoint": "url",
             # key variants  
             "name": "key", "id": "key", "identifier": "key",
             # timeout variants
             "time": "timeout", "seconds": "timeout", "max_time": "timeout",
+            # city variants
+            "location": "city", "place": "city", "town": "city",
+            "where": "city", "area": "city", "region": "city",
+            # currency variants
+            "from": "from_currency", "to": "to_currency",
+            "source_currency": "from_currency", "target_currency": "to_currency",
+            "money": "amount", "price": "amount",
         }
         
         for wrong in wrong_names:

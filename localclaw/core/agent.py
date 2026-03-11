@@ -1,5 +1,5 @@
 """
-🦞 LocalClaw R01 — Agent
+🦞 LocalClaw R02 — Agent
 Core ReAct agent that drives the think → act → observe loop.
 
 Supports:
@@ -7,6 +7,9 @@ Supports:
   • Text-based ReAct fallback (for models without native tool support)
   • Streaming output
   • Hooks for custom logging / UI
+  • Enhanced argument normalization for small models
+  • Few-shot prompting for improved accuracy
+  • Pre-call argument synthesis
 
 Written by VTSTech — https://www.vts-tech.org — https://github.com/VTSTech/LocalClaw
 """
@@ -25,6 +28,112 @@ from .tools import ToolRegistry
 
 
 # ------------------------------------------------------------------ #
+#  Tool-specific argument aliases (for small model hallucinations)    #
+# ------------------------------------------------------------------ #
+# Small models often hallucinate argument names. This mapping helps
+# convert common hallucinations to the correct argument names.
+
+TOOL_ARG_ALIASES = {
+    "calculator": {
+        # Common hallucinations for expression
+        "a": "expression", "b": "expression", "x": "expression", "y": "expression",
+        "num": "expression", "number": "expression", "value": "expression",
+        "input": "expression", "formula": "expression", "math": "expression",
+        "expr": "expression", "calc": "expression", "result": "expression",
+        # Power operations - combine into expression
+        "base": "_combine_power", "exponent": "_combine_power", "power": "_combine_power",
+        "n": "_combine_power", "p": "_combine_power", "exp": "_combine_power",
+    },
+    "python_repl": {
+        "code": "code",  # correct
+        "script": "code", "cmd": "code", "command": "code",
+        "python": "code", "py": "code", "exec": "code", "execute": "code",
+        "expression": "code", "expr": "code", "statement": "code",
+        "program": "code", "source": "code", "input": "code",
+    },
+    "write_file": {
+        "path": "path",  # correct
+        "filepath": "path", "file_path": "path", "filename": "path",
+        "file": "path", "dest": "path", "destination": "path",
+        "output_path": "path", "outputfile": "path", "location": "path",
+        "content": "content",  # correct
+        "data": "content", "text": "content", "body": "content",
+        "output": "content", "string": "content", "value": "content",
+        "write": "content", "output_data": "content",
+    },
+    "read_file": {
+        "path": "path",  # correct
+        "filepath": "path", "file_path": "path", "filename": "path",
+        "file": "path", "input": "path", "source": "path", "location": "path",
+    },
+    "shell": {
+        "command": "command",  # correct
+        "cmd": "command", "exec": "command", "shell_cmd": "command",
+        "bash": "command", "script": "command", "instruction": "command",
+        "run": "command", "execute": "command", "op": "command",
+    },
+    "web_search": {
+        "query": "query",  # correct
+        "search": "query", "q": "query", "term": "query", "search_query": "query",
+        "keywords": "query", "text": "query", "input": "query",
+    },
+    "get_weather": {
+        "city": "city",  # correct
+        "location": "city", "place": "city", "town": "city",
+        "where": "city", "area": "city", "region": "city",
+    },
+    "convert_currency": {
+        "amount": "amount",  # correct
+        "from_currency": "from_currency",  # correct
+        "to_currency": "to_currency",  # correct
+        # Common variations
+        "from": "from_currency", "to": "to_currency",
+        "source_currency": "from_currency", "target_currency": "to_currency",
+        "money": "amount", "value": "amount", "price": "amount",
+    },
+}
+
+# ------------------------------------------------------------------ #
+#  Few-shot prompting suffix for small models                         #
+# ------------------------------------------------------------------ #
+# Added to system prompt when using models < 2B parameters
+
+FEW_SHOT_SUFFIX = """
+
+═══════════════════════════════════════════════════════════════
+TOOL USAGE EXAMPLES - Use these EXACT argument names:
+═══════════════════════════════════════════════════════════════
+
+✓ CORRECT: calculator(expression="15 * 8")
+✗ WRONG:   calculator(a=15, b=8)
+
+✓ CORRECT: write_file(path="/tmp/test.txt", content="Hello")
+✗ WRONG:   write_file(file="/tmp/test.txt", data="Hello")
+
+✓ CORRECT: python_repl(code="print(2**10)")
+✗ WRONG:   python_repl(script="print(2**10)")
+
+✓ CORRECT: shell(command="date")
+✗ WRONG:   shell(cmd="date")
+
+✓ CORRECT: web_search(query="capital of France")
+✗ WRONG:   web_search(search="capital of France")
+
+IMPORTANT: Always use the EXACT argument names shown above.
+Do NOT invent your own argument names.
+═══════════════════════════════════════════════════════════════
+"""
+
+# Compact version for models that need minimal prompting
+FEW_SHOT_COMPACT = """
+TOOL EXAMPLES (use EXACT arg names):
+- calculator(expression="2+2") NOT calculator(a=2, b=2)
+- write_file(path="x", content="y") NOT write_file(file="x", data="y")
+- python_repl(code="print(x)") NOT python_repl(script="print(x)")
+"""
+
+
+# ------------------------------------------------------------------ #
 #  Shared tiny helpers                                                 #
 # ------------------------------------------------------------------ #
 
@@ -37,15 +146,18 @@ def _strip_tool_prefix(result: str) -> str:
 #  Argument key normalizer                                             #
 # ------------------------------------------------------------------ #
 
-def _normalize_args(args: dict, tool) -> dict:
+def _normalize_args(args: dict, tool, tool_name: str = None) -> dict:
     """
-    Small models sometimes hallucinate argument keys, e.g. merging
-    the param name with its description: 'amount from_currency' instead
-    of 'amount'. This attempts to match each incoming key to a real
-    parameter name via exact → prefix → substring matching.
-
-    Also coerces string values to the correct type when the schema
-    declares integer or number (e.g. '500' → 500.0).
+    Small models often hallucinate argument keys. This function normalizes
+    them using multiple strategies:
+    
+    1. Tool-specific alias mapping (TOOL_ARG_ALIASES)
+    2. Exact match to real params
+    3. Prefix/substring matching
+    4. Type coercion (string -> int/float)
+    
+    Also handles special cases like power operations where multiple args
+    (base, exponent) need to be combined into a single expression.
     """
     if tool is None:
         return args
@@ -55,21 +167,45 @@ def _normalize_args(args: dict, tool) -> dict:
         return args
 
     param_map = {p.name: p for p in real_params}
-
     normalized = {}
+    power_parts = {}  # For combining base/exponent into expression
+    
+    # Get tool-specific aliases
+    tool_aliases = TOOL_ARG_ALIASES.get(tool_name, {}) if tool_name else {}
+    
     for key, val in args.items():
-        # Resolve key → real param name
-        if key in param_map:
+        key_lower = key.lower().replace("-", "_")
+        target_param = None
+        target_pname = None
+        
+        # Strategy 1: Tool-specific alias lookup
+        if key_lower in tool_aliases:
+            alias_target = tool_aliases[key_lower]
+            if alias_target == "_combine_power":
+                # Special handling for power operations
+                power_parts[key_lower] = val
+                continue  # Don't add to normalized yet
+            elif alias_target in param_map:
+                target_param = param_map[alias_target]
+                target_pname = alias_target
+        
+        # Strategy 2: Exact match
+        if target_param is None and key in param_map:
             target_param = param_map[key]
-        else:
-            target_param = None
+            target_pname = key
+        
+        # Strategy 3: Prefix/substring matching
+        if target_param is None:
             for p in real_params:
-                if p.name in key or key.startswith(p.name):
+                if p.name in key_lower or key_lower.startswith(p.name):
                     target_param = p
+                    target_pname = p.name
                     break
-
-        pname = target_param.name if target_param else key
-
+        
+        # If still no match, keep original key
+        if target_pname is None:
+            target_pname = key
+        
         # Coerce string numbers to the declared type
         if target_param and isinstance(val, str):
             if target_param.type in ("number", "float"):
@@ -82,14 +218,25 @@ def _normalize_args(args: dict, tool) -> dict:
                     val = int(val)
                 except ValueError:
                     pass
-
-        if pname not in normalized:
-            normalized[pname] = val
-        else:
-            normalized[key] = val  # collision — pass through
-
+        
+        if target_pname not in normalized:
+            normalized[target_pname] = val
+        elif target_pname in normalized and isinstance(normalized[target_pname], str):
+            # Collision with existing value - try to combine intelligently
+            # For expressions, we might want to concatenate
+            pass
+    
+    # Handle power operation combination
+    if power_parts and "expression" in param_map:
+        base = power_parts.get("base") or power_parts.get("value") or power_parts.get("x")
+        exp = power_parts.get("exponent") or power_parts.get("power") or power_parts.get("n") or power_parts.get("p") or power_parts.get("exp")
+        
+        if base is not None and exp is not None:
+            normalized["expression"] = f"{base} ** {exp}"
+        elif base is not None:
+            normalized["expression"] = str(base)
+    
     # Handle nested 'tool_args' that contains actual arguments
-    # Models sometimes output: {"tool": "write_file", "tool_args": {"path": "x", "content": "y"}}
     if "tool_args" in normalized and isinstance(normalized["tool_args"], dict):
         nested = normalized.pop("tool_args")
         if isinstance(nested, dict):
@@ -365,6 +512,167 @@ def _is_greeting_or_simple(text: str) -> bool:
     return False
 
 
+def _generate_helpful_error_message(tool_name: str, tool, provided_args: dict, error_msg: str) -> str:
+    """
+    Generate a helpful error message that shows the correct usage format
+    when a tool call fails due to incorrect arguments.
+    """
+    if tool is None:
+        return f"[Tool error] {error_msg}"
+    
+    # Get expected parameters
+    params_desc = []
+    for p in tool.params:
+        req_marker = "*" if p.required else ""
+        params_desc.append(f"{p.name}{req_marker}: {p.type}")
+    
+    # Get usage examples based on tool name
+    examples = {
+        "calculator": 'calculator(expression="15 * 8")',
+        "write_file": 'write_file(path="/tmp/file.txt", content="Hello")',
+        "read_file": 'read_file(path="/tmp/file.txt")',
+        "python_repl": 'python_repl(code="print(2**10)")',
+        "shell": 'shell(command="date")',
+        "web_search": 'web_search(query="capital of France")',
+        "get_weather": 'get_weather(city="Tokyo")',
+        "convert_currency": 'convert_currency(amount=100, from_currency="USD", to_currency="EUR")',
+    }
+    
+    example = examples.get(tool_name, f"{tool_name}(appropriate_arguments)")
+    
+    # Show what was provided vs expected
+    provided_str = ", ".join(f"{k}={v!r}" for k, v in provided_args.items()) if provided_args else "nothing"
+    expected_str = ", ".join(params_desc)
+    
+    return (
+        f"[Tool error] Incorrect arguments for {tool_name}.\n"
+        f"  Expected: {expected_str}\n"
+        f"  You provided: {provided_str}\n"
+        f"  Correct example: {example}\n"
+        f"  Please retry with the correct argument names."
+    )
+
+
+def _synthesize_missing_args(tool_name: str, args: dict, user_input: str, prior_results: list[str], tools_registry) -> dict:
+    """
+    Try to fill in missing required arguments from context.
+    This helps small models that call tools with incomplete arguments.
+    """
+    tool = tools_registry.get(tool_name) if tools_registry else None
+    if tool is None:
+        return args
+    
+    args = dict(args)  # Make a copy
+    required_params = {p.name for p in tool.params if p.required}
+    missing = required_params - set(args.keys())
+    
+    if not missing:
+        return args  # Nothing to synthesize
+    
+    q_lower = user_input.lower()
+    
+    # Tool-specific synthesis
+    if tool_name == "calculator" and "expression" in missing:
+        # Try to extract numbers and operators from user input
+        numbers = re.findall(r'\d+\.?\d*', user_input)
+        operators = re.findall(r'[+\-*/^]', user_input)
+        
+        # Check for specific operation types
+        if "sqrt" in q_lower or "square root" in q_lower:
+            if numbers:
+                args["expression"] = f"sqrt({numbers[-1]})"
+        elif "power" in q_lower or "^" in user_input:
+            if len(numbers) >= 2:
+                args["expression"] = f"{numbers[0]} ** {numbers[1]}"
+        elif "times" in q_lower or "multiply" in q_lower or "multiplied" in q_lower:
+            if len(numbers) >= 2:
+                args["expression"] = f"{numbers[0]} * {numbers[1]}"
+        elif "divided" in q_lower or "divide" in q_lower:
+            if len(numbers) >= 2:
+                args["expression"] = f"{numbers[0]} / {numbers[1]}"
+        elif "plus" in q_lower or "add" in q_lower or "sum" in q_lower:
+            if len(numbers) >= 2:
+                args["expression"] = f"{numbers[0]} + {numbers[1]}"
+        elif "minus" in q_lower or "subtract" in q_lower:
+            if len(numbers) >= 2:
+                args["expression"] = f"{numbers[0]} - {numbers[1]}"
+        elif numbers and operators:
+            # Construct expression from found elements
+            expr_parts = []
+            for i, num in enumerate(numbers):
+                expr_parts.append(num)
+                if i < len(operators):
+                    expr_parts.append(operators[i])
+            args["expression"] = " ".join(expr_parts)
+        elif numbers:
+            # Just numbers, default to the first one
+            args["expression"] = numbers[0]
+    
+    elif tool_name == "python_repl" and "code" in missing:
+        # Synthesize Python code for common queries
+        if "date" in q_lower and "time" in q_lower:
+            args["code"] = "from datetime import datetime\nprint(datetime.now().strftime('Today is %A, %B %d, %Y and the time is %I:%M %p.'))"
+        elif "date" in q_lower:
+            args["code"] = "from datetime import datetime\nprint(datetime.now().strftime('Today is %A, %B %d, %Y.'))"
+        elif "time" in q_lower:
+            args["code"] = "from datetime import datetime\nprint(datetime.now().strftime('The current time is %I:%M %p.'))"
+    
+    elif tool_name == "shell" and "command" in missing:
+        # Synthesize shell commands for common queries
+        if "date" in q_lower:
+            args["command"] = "date"
+        elif "time" in q_lower:
+            args["command"] = "date +%T"
+        elif "directory" in q_lower or "folder" in q_lower:
+            args["command"] = "pwd"
+        elif "files" in q_lower and "list" in q_lower:
+            args["command"] = "ls -la"
+    
+    elif tool_name == "write_file" and prior_results:
+        # If we have prior results, maybe the model wants to write them
+        if "content" in missing and "path" in args:
+            # Use the last tool result as content
+            args["content"] = _strip_tool_prefix(prior_results[-1])
+    
+    return args
+
+
+def _is_small_model(model: str) -> bool:
+    """
+    Heuristic to detect if a model is small (< 2B parameters).
+    Small models benefit from few-shot prompting.
+    """
+    model_lower = model.lower()
+    
+    # Check for size indicators in model name
+    small_indicators = [
+        ":0.5b", ":0.6b", ":1b", ":1.5b", ":1.8b",
+        "0.5b", "0.6b", "1b", "1.5b",
+        "270m", "135m", "350m", "500m", "800m",
+        "tiny", "mini", "micro", "small"
+    ]
+    
+    for indicator in small_indicators:
+        if indicator in model_lower:
+            return True
+    
+    # Check parameter count after common model names
+    import re
+    param_match = re.search(r'(\d+(?:\.\d+)?)[bm]', model_lower)
+    if param_match:
+        size_str = param_match.group(1)
+        try:
+            size = float(size_str)
+            if 'm' in model_lower[param_match.end()-1:param_match.end()]:
+                return True  # Any million-parameter model is small
+            if size < 2:
+                return True  # Less than 2 billion
+        except ValueError:
+            pass
+    
+    return False
+
+
 # ------------------------------------------------------------------ #
 #  Agent result                                                         #
 # ------------------------------------------------------------------ #
@@ -593,6 +901,10 @@ class Agent:
         Called after each step — useful for live UI updates.
     model_options : dict | None
         Passed through to Ollama (temperature, num_ctx, etc.).
+    few_shot : bool | None
+        If True, add few-shot examples for small models. If None, auto-detect based on model size.
+    use_compact_prompt : bool
+        If True, use compact few-shot prompt (less tokens).
     """
 
     def __init__(
@@ -607,6 +919,8 @@ class Agent:
         model_options: dict | None = None,
         memory_max_turns: int = 20,
         debug: bool = False,
+        few_shot: bool | None = None,
+        use_compact_prompt: bool = False,
     ):
         self.model = model
         self.tools = tools or ToolRegistry()
@@ -616,18 +930,30 @@ class Agent:
         self.on_step = on_step
         self.model_options = model_options or {}
         self.debug = debug
+        self.use_compact_prompt = use_compact_prompt
 
         self._native_tools = (
             not force_react and self.client.model_supports_tools(model)
         )
+        
+        # Determine if we should use few-shot prompting
+        self._is_small_model = _is_small_model(model)
+        self._use_few_shot = few_shot if few_shot is not None else self._is_small_model
 
-        # Build system prompt
+        # Build system prompt with optional few-shot
         base_sys = system_prompt
+        
+        # Add tool descriptions for ReAct fallback
         if not self._native_tools and self.tools.all():
             tool_descriptions = "\n".join(
                 f"- {t.name}: {t.description}" for t in self.tools.all()
             )
             base_sys = base_sys + f"\n\nAvailable tools:\n{tool_descriptions}" + REACT_SYSTEM_SUFFIX
+        
+        # Add few-shot examples for small models with tools
+        if self._use_few_shot and self.tools.all():
+            few_shot_suffix = FEW_SHOT_COMPACT if use_compact_prompt else FEW_SHOT_SUFFIX
+            base_sys = base_sys + few_shot_suffix
 
         self.memory = Memory(
             system_prompt=base_sys,
@@ -737,7 +1063,11 @@ class Agent:
                                 print(f"    unknown tool {t_name!r}, skipping")
                             continue
 
-                    t_args = _normalize_args(t_args, self.tools.get(t_name))
+                    # Normalize arguments with tool-specific aliases
+                    t_args = _normalize_args(t_args, self.tools.get(t_name), t_name)
+                    
+                    # Try to synthesize missing required arguments
+                    t_args = _synthesize_missing_args(t_name, t_args, user_input, _successful_results, self.tools)
 
                     # If the tool resolved to python_repl but 'code' arg is missing,
                     # try to reconstruct it from common alternative arg names the model
@@ -921,7 +1251,11 @@ class Agent:
                     print(f"    final: name={t_name!r}, tool_exists={self.tools.get(t_name) is not None}")
                 
                 if t_name and t_args is not None and self.tools.get(t_name):
-                    t_args = _normalize_args(t_args, self.tools.get(t_name))
+                    # Normalize arguments with tool-specific aliases
+                    t_args = _normalize_args(t_args, self.tools.get(t_name), t_name)
+                    
+                    # Try to synthesize missing required arguments
+                    t_args = _synthesize_missing_args(t_name, t_args, user_input, _successful_results, self.tools)
                     
                     # Handle empty args for python_repl - provide default code for date/time queries
                     if t_name == "python_repl" and not t_args.get("code"):
@@ -1015,13 +1349,8 @@ class Agent:
                     if result_str.startswith("[Tool error]"):
                         # Feed rich error back so the model can self-correct
                         tool_obj = self.tools.get(t_name)
-                        param_hint = ", ".join(
-                            f"{p.name}: {p.type}" for p in tool_obj.params
-                        )
-                        self.memory.add_tool_result(
-                            t_name,
-                            f"Error: {result_str}\nExpected arguments: {param_hint}",
-                        )
+                        helpful_error = _generate_helpful_error_message(t_name, tool_obj, t_args, result_str)
+                        self.memory.add_tool_result(t_name, helpful_error)
                     else:
                         _successful_results.append(f"{t_name} → {result_str}")
                         _successful_tools.add(t_name)

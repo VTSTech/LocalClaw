@@ -1,7 +1,12 @@
 """
-🦞 LocalClaw R01 — Ollama Client
+🦞 LocalClaw R02 — Ollama Client
 Zero-dependency wrapper around the local Ollama HTTP API.
 Uses only Python stdlib (urllib + json) — no pip install required.
+
+Features:
+  • Automatic retry with exponential backoff
+  • Native tool-calling support detection
+  • Cloudflare tunnel timeout handling
 
 Written by VTSTech — https://www.vts-tech.org — https://github.com/VTSTech/LocalClaw
 """
