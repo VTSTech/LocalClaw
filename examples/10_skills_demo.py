@@ -254,7 +254,11 @@ Use write_file to create the file."""
         system_prompt="You help with demos." + test_registry.to_system_prompt_addition(),
         max_steps=2,
         client=client,
-        model_options={"num_ctx": 512},
+        model_options={
+            "temperature": 0.3,     # Some creativity for demo
+            "num_ctx": 512,         # Small context
+            "num_predict": 256,     # Moderate response
+        },
     )
     
     question = "What can the demo-skill help me with?"
