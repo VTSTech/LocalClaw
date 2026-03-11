@@ -86,7 +86,11 @@ agent = Agent(
         "Call tools when needed. Give brief final answers after getting results."
     ),
     on_step=print_step,
-    model_options={"temperature": 0.2},
+    model_options={
+        "temperature": 0.0,     # Deterministic for tool usage
+        "num_ctx": 1024,        # Enough for tool definitions
+        "num_predict": 256,     # Reasonable response length
+    },
 )
 
 print(f"=== Multi-tool agent demo ({agent.model}) ===\n")

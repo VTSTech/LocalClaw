@@ -52,7 +52,11 @@ def main():
         ),
         max_steps=8,
         on_step=print_step,
-        model_options={"temperature": 0.3},
+        model_options={
+            "temperature": 0.3,     # Some creativity for chat
+            "num_ctx": 2048,        # Larger context for conversation
+            "num_predict": 512,     # Longer responses for chat
+        },
     )
     
     print(f"\n{'='*60}")

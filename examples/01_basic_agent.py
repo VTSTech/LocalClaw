@@ -36,7 +36,11 @@ MODEL = os.environ.get("LOCALCLAW_MODEL", "qwen2.5:0.5b")
 agent = Agent(
     model=MODEL,
     system_prompt="You are a concise and helpful assistant. Keep answers brief.",
-    model_options={"temperature": 0.7},
+    model_options={
+        "temperature": 0.7,     # Some creativity for chat
+        "num_ctx": 1024,        # Moderate context
+        "num_predict": 256,     # Reasonable response length
+    },
 )
 print(f"   Using model: {agent.model}\n")
 # ── 3. Single-turn chat ────────────────────────────────────────────

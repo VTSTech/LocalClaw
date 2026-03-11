@@ -115,7 +115,11 @@ def run_tests():
             system_prompt="You are a helpful assistant. Be concise and accurate.",
             max_steps=6,
             on_step=print_step,
-            model_options={"temperature": 0.1},
+            model_options={
+                "temperature": 0.0,     # Deterministic for tests
+                "num_ctx": 1024,        # Moderate context
+                "num_predict": 128,     # Short test answers
+            },
         )
         
         for test in tests:
