@@ -6,7 +6,9 @@ Demonstrate the Agent Skills system.
 This demo shows:
 1. Discovering skills (loading metadata)
 2. Disclosing available skills as catalog (tier 1)
-3. Agent using write_file tool to CREATE a new skill
+3. Agent using write_file tool to CREATE a new skill AUTONOMOUSLY
+
+The skill content is NOT provided - the agent generates it!
 
 Run: python examples/10_skills_demo.py
 
@@ -25,7 +27,7 @@ from localclaw.tools.builtins import make_builtin_registry
 
 
 def main():
-    print("🦞 LocalClaw R01 - Skills Demo")
+    print("🦞 LocalClaw R02 - Skills Demo")
     print("=" * 60)
     
     base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -86,12 +88,17 @@ def main():
     models = client.list_models()
     print(f"   Models: {len(models)} available")
     
-    # Find best model
+    # Find best model - prefer larger models for creative tasks
     model = None
-    for m in models:
-        if "qwen2.5-coder" in m:
-            model = m
+    preferred = ["llama3.2:3b", "qwen2.5:3b", "qwen2.5-coder:1.5b", "llama3.2:1b", "qwen2.5:1.5b"]
+    for pref in preferred:
+        for m in models:
+            if pref in m:
+                model = m
+                break
+        if model:
             break
+    
     if not model:
         model = models[0] if models else None
     
@@ -101,26 +108,41 @@ def main():
     
     print(f"   Using: {model}")
     
-    tools = make_builtin_registry()
+    tools = make_builtin_registry().subset(["write_file"])
     tool_names = [t.name for t in tools.all()]
-    print(f"   Tools: {tool_names[:5]}...")
+    print(f"   Tools: {tool_names}")
     
-    # Create agent with catalog (tier 1)
+    # Create agent with skill-creator instructions in system prompt
+    skill_creator_brief = """
+## Creating Skills
+
+Skills are markdown files with YAML frontmatter:
+
+---
+name: skill-name
+description: What the skill does and when to use it
+---
+
+# Skill Title
+
+Instructions for using the skill.
+"""
+    
     agent = Agent(
         model=model,
         tools=tools,
-        system_prompt="You create files using the write_file tool.",
+        system_prompt="You create skill files using the write_file tool.\n\n" + skill_creator_brief,
         max_steps=5,
         client=client,
-        model_options={"num_ctx": 512},
+        model_options={"num_ctx": 1024, "num_predict": 512},
     )
     
     # ========================================
-    # STEP 4: AGENT CREATES SKILL
+    # STEP 4: AGENT CREATES SKILL AUTONOMOUSLY
     # ========================================
     print("\n" + "=" * 60)
-    print("🔨 Step 4: Agent creates a skill file")
-    print("   (Agent ACTUALLY uses write_file tool!)")
+    print("🔨 Step 4: Agent creates a skill file AUTONOMOUSLY")
+    print("   (Agent generates the content - NOT provided in prompt!)")
     print("=" * 60)
     
     skill_dir = os.path.join(skills_dir, "demo-skill")
@@ -132,24 +154,22 @@ def main():
     
     os.makedirs(skill_dir, exist_ok=True)
     
-    # Simple content
-    skill_content = """---
-name: demo-skill
-description: A demo skill created by an agent.
----
+    # PROMPT: Ask for a skill, but don't provide the content!
+    prompt = f"""Create a skill named 'demo-skill' at: {skill_path}
 
-# Demo Skill
+The skill should help with basic text operations like:
+- Counting words and characters
+- Converting case (uppercase, lowercase)
+- Finding and replacing text
 
-This skill was created by an AI agent using the write_file tool.
-"""
-    
-    # Escape for prompt
-    escaped = skill_content.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
-    
-    # Short prompt
-    prompt = f'write_file(path="{skill_path}", content="{escaped}")'
+Write a complete SKILL.md file with:
+1. YAML frontmatter (name and description)
+2. Markdown instructions
+
+Use write_file to create the file."""
     
     print(f"   Target: {skill_path}")
+    print(f"   Prompt: Create a demo-skill for text operations")
     print("   Running agent...")
     
     start = time.time()
@@ -167,15 +187,12 @@ This skill was created by an AI agent using the write_file tool.
                     p = s.tool_args.get("path", "?")
                     print(f"         path: {p}")
             elif s.type == "tool_result":
-                content = str(s.content)[:60]
-                print(f"         → {content}")
+                content = str(s.content)
+                print(f"         → {content[:80]}...")
     except Exception as e:
         elapsed = time.time() - start
         print(f"   ⚠️ Error after {elapsed:.1f}s: {type(e).__name__}")
-        print("   (Remote connection may have timed out)")
-        print("\n   Creating skill directly for demo...")
-        with open(skill_path, "w") as f:
-            f.write(skill_content)
+        print(f"   Error: {e}")
     
     # ========================================
     # STEP 5: VERIFY FILE
@@ -189,11 +206,13 @@ This skill was created by an AI agent using the write_file tool.
         with open(skill_path) as f:
             content = f.read()
         print(f"   Size: {len(content)} chars")
-        print("   Content preview:")
-        for line in content.split("\n")[:8]:
-            print(f"      {line}")
+        print("   Content:")
+        print("   " + "-" * 50)
+        for line in content.split("\n"):
+            print(f"   {line}")
+        print("   " + "-" * 50)
     else:
-        print("   ❌ File not found")
+        print("   ❌ File not found - agent may have failed to create it")
         return
     
     # ========================================
@@ -208,8 +227,12 @@ This skill was created by an AI agent using the write_file tool.
     print(f"   Available skills: {skills}")
     
     demo_skill = loader.load("demo-skill")
-    print(f"   ✓ Loaded: {demo_skill.name}")
-    print(f"   ✓ Description: {demo_skill.description}")
+    if demo_skill:
+        print(f"   ✓ Loaded: {demo_skill.name}")
+        print(f"   ✓ Description: {demo_skill.description}")
+    else:
+        print("   ⚠️ Could not load demo-skill")
+        return
     
     # ========================================
     # STEP 7: TEST SKILL
@@ -227,15 +250,15 @@ This skill was created by an AI agent using the write_file tool.
         system_prompt="You help with demos." + test_registry.to_system_prompt_addition(),
         max_steps=2,
         client=client,
-        model_options={"num_ctx": 256},
+        model_options={"num_ctx": 512},
     )
     
-    question = "Tell me about the demo skill."
+    question = "What can the demo-skill help me with?"
     print(f"   Question: {question}")
     
     try:
         response = test_agent.chat(question)
-        print(f"\n   Response: {response[:200]}...")
+        print(f"\n   Response: {response}")
     except Exception as e:
         print(f"   ⚠️ Error: {type(e).__name__}")
     
@@ -259,12 +282,12 @@ This skill was created by an AI agent using the write_file tool.
    Skills = Knowledge (markdown documents)
    Tools  = Execution (Python functions)
 
-   skill-creator:
+   What Happened:
    ──────────────
-   - Full skill from Anthropic's repository
-   - Teaches how to create new skills
-   - Includes scripts for evaluation
-   - Includes references for schemas
+   - Agent received a request to create a skill
+   - Agent autonomously generated the skill content
+   - Agent used write_file tool to save it
+   - Skill was loaded and tested successfully
     """)
 
 

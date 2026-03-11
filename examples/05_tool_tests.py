@@ -3,9 +3,8 @@ examples/05_tool_tests.py
 -------------------------
 Test suite focused on tool usage with calculator, shell, and Python REPL.
 
-Note: For small models, prompts include explicit instructions:
-- Calculator: Full expressions in parentheses
-- Python REPL: print() statements required for output
+The prompts ask questions - models must figure out which tools to use
+and how to call them. Content is NOT provided in prompts.
 
 Run from the project root:   python examples/05_tool_tests.py
 Or from the examples folder: python 05_tool_tests.py
@@ -83,7 +82,7 @@ def run_test(agent, prompt: str, timeout: int = TIMEOUT):
 
 
 def test_calculator():
-    """Test calculator tool with various expressions."""
+    """Test calculator tool - models must figure out how to use it."""
     client = OllamaClient()
     
     print(f"\n{'='*60}")
@@ -94,25 +93,26 @@ def test_calculator():
     
     tools = make_builtin_registry().subset(["calculator"])
     
+    # Ask questions - model must use calculator tool
     tests = [
-        ("Basic multiplication", "Use the calculator to compute 15 * 8", "120"),
-        ("Power", "Use the calculator to compute 2 ** 10", "1024"),
-        ("Square root", "Use the calculator to compute sqrt(144)", "12"),
-        ("Complex expression", "Use the calculator to compute (10 + 5) * 3. Pass the ENTIRE expression: '(10 + 5) * 3'", "45"),
-        ("Division", "Use the calculator to compute 100 / 4", "25"),
+        ("Basic multiplication", "What is 15 times 8?", "120"),
+        ("Power", "What is 2 to the power of 10?", "1024"),
+        ("Square root", "What is the square root of 144?", "12"),
+        ("Complex expression", "What is (10 + 5) times 3?", "45"),
+        ("Division", "What is 100 divided by 4?", "25"),
     ]
     
     results = []
     
     for name, prompt, expected in tests:
         print(f"\n📋 {name}")
-        print(f"   Prompt: {prompt[:60]}...")
+        print(f"   Prompt: {prompt}")
         
         agent = Agent(
             model=MODEL,
             client=client,
             tools=tools,
-            system_prompt="Use the calculator tool for math. Then explain the result briefly.",
+            system_prompt="Answer math questions using the calculator tool. Call the calculator with the expression.",
             max_steps=5,
             on_step=print_step if VERBOSE else None,
             model_options={"temperature": 0.1},
@@ -157,34 +157,34 @@ def test_calculator():
 
 
 def test_shell():
-    """Test shell tool with proper expected values."""
+    """Test shell tool - models must figure out how to use it."""
     client = OllamaClient()
     
     print(f"\n{'='*60}")
     print(f"🖥️  Shell Tool Tests")
     print(f"   Model: {MODEL}")
-    print(f"   Note: Tests adapted for both Unix and Windows")
     print(f"{'='*60}")
     
     tools = make_builtin_registry().subset(["shell"])
     
+    # Ask questions - model must use shell tool
     tests = [
-        ("Echo test", "Use shell to run: echo 'Hello LocalClaw'", "Hello LocalClaw", "shell"),
-        ("Current directory", "Use shell to print working directory with pwd or cd", None, "shell"),  # Just check tool used
-        ("Environment", "Use shell to echo the HOME or USERPROFILE variable", None, "shell"),  # Just check tool used
+        ("Echo test", "Use shell to echo the text 'Hello LocalClaw'", "Hello LocalClaw", "shell"),
+        ("Current directory", "What is the current working directory?", None, "shell"),
+        ("Date", "What is today's date? Use shell to find out.", None, "shell"),
     ]
     
     results = []
     
     for name, prompt, expected, required_tool in tests:
         print(f"\n📋 {name}")
-        print(f"   Prompt: {prompt[:60]}...")
+        print(f"   Prompt: {prompt}")
         
         agent = Agent(
             model=MODEL,
             client=client,
             tools=tools,
-            system_prompt="Use shell tool when asked. Report the output briefly.",
+            system_prompt="Use the shell tool to run commands when asked.",
             max_steps=5,
             on_step=print_step if VERBOSE else None,
             model_options={"temperature": 0.1},
@@ -229,7 +229,7 @@ def test_shell():
 
 
 def test_python_repl():
-    """Test Python REPL tool."""
+    """Test Python REPL tool - models must figure out how to use it."""
     client = OllamaClient()
     
     print(f"\n{'='*60}")
@@ -239,23 +239,24 @@ def test_python_repl():
     
     tools = make_builtin_registry().subset(["python_repl"])
     
+    # Ask questions - model must use Python REPL
     tests = [
-        ("Simple calculation", "Use Python to calculate and print 2 ** 20. Use: print(2 ** 20)", "1048576", "python_repl"),
-        ("List comprehension", "Use Python to create and print a list of squares from 1 to 5. Use: print([i**2 for i in range(1,6)])", "1, 4, 9, 16, 25", "python_repl"),
-        ("String manipulation", "Use Python to print 'Hello' repeated 3 times. Use: print('Hello' * 3)", "HelloHelloHello", "python_repl"),
+        ("Power calculation", "What is 2 to the power of 20?", "1048576", "python_repl"),
+        ("List squares", "Generate a list of squares from 1 to 5. What are they?", "1, 4, 9, 16, 25", "python_repl"),
+        ("String repeat", "What is 'Hello' repeated 3 times?", "HelloHelloHello", "python_repl"),
     ]
     
     results = []
     
     for name, prompt, expected, required_tool in tests:
         print(f"\n📋 {name}")
-        print(f"   Prompt: {prompt[:60]}...")
+        print(f"   Prompt: {prompt}")
         
         agent = Agent(
             model=MODEL,
             client=client,
             tools=tools,
-            system_prompt="Use Python REPL for calculations. Always use print() to show results.",
+            system_prompt="Use Python REPL for calculations. Use print() to show results in your code.",
             max_steps=5,
             on_step=print_step if VERBOSE else None,
             model_options={"temperature": 0.1},
@@ -279,12 +280,12 @@ def test_python_repl():
             print(f"  📝 Answer: {run.final_answer[:100].replace(chr(10), ' ')}...")
             continue
         
-        # Check answer with flexible matching (handles different list formats)
+        # Check answer with flexible matching
         passed = False
         if expected in run.final_answer:
             passed = True
         else:
-            # Normalize and compare (handles [1, 4, 9, 16, 25] vs 1, 4, 9, 16, 25)
+            # Normalize and compare (handles different list formats)
             expected_clean = expected.replace("[", "").replace("]", "").replace(" ", "")
             answer_clean = run.final_answer.replace("[", "").replace("]", "").replace(" ", "")
             if expected_clean in answer_clean:

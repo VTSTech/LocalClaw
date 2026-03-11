@@ -16,7 +16,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Changed
 - Version tags updated from R01 to R02 across all files
-- Improved skill creator test prompt with explicit tool argument examples for small models
+- **Test output verbosity** - no more truncation, shows full content for debugging
+
+### Fixed
+- **Small model tool calling** - Identified working models and optimal settings:
+  - `functiongemma:270m` (270M params) - ✅ Works, ~5s response
+  - `qwen2.5:0.5b` (494M params) - ✅ Works, ~7s response
+  - `granite4:350m` (352M params) - ✅ Works, ~10s response
+- **Test integrity issues** - Fixed examples that were providing answers in prompts:
+  - `05_tool_tests.py` - Now asks questions without providing expressions/code
+  - `10_skills_demo.py` - Agent generates skill content autonomously
+  - `11_skill_creator_test.py` - Tests actual skill creation, not copying
+
+### Known Issues
+- `smollm:135m` and `gemma3:270m` don't support tools (HTTP 400)
+- `qwen2.5-coder:0.5b` and `qwen3:0.6b` output tool calls as text instead of executing
 
 ---
 
@@ -187,6 +201,32 @@ Early development iterations building the core framework.
 - **R0, R1, R2...** - Development iterations
 - **R00, R01, R02...** - Tagged releases
 - Each tagged release includes all changes from development iterations since the previous release
+
+---
+
+## Small Model Tool Calling Guide
+
+### Models that WORK (≤600M params)
+| Model | Size | Tool Support | Speed |
+|-------|------|--------------|-------|
+| `functiongemma:270m` | 270M | ✅ Native | ~5s |
+| `qwen2.5:0.5b` | 494M | ✅ Native | ~7s |
+| `granite4:350m` | 352M | ✅ Native | ~10s |
+
+### Optimal Settings for Small Models
+```python
+model_options={
+    "temperature": 0.0,    # Deterministic
+    "num_ctx": 1024,       # Smaller context
+    "num_predict": 512,    # Limit output
+}
+```
+
+### Models that DON'T work
+- `smollm:135m` - No tool support (HTTP 400)
+- `gemma3:270m` - No tool support (HTTP 400)
+- `qwen2.5-coder:0.5b` - Outputs tool calls as text
+- `qwen3:0.6b` - Outputs tool calls as text
 
 ---
 
