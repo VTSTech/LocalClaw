@@ -1257,22 +1257,28 @@ class Agent:
                     # Try to synthesize missing required arguments
                     t_args = _synthesize_missing_args(t_name, t_args, user_input, _successful_results, self.tools)
                     
-                    # Handle empty args for python_repl - provide default code for date/time queries
+                    # Handle empty args for python_repl - provide default code for date/time queries ONLY
                     if t_name == "python_repl" and not t_args.get("code"):
-                        if self.debug:
-                            print(f"    python_repl with empty code, synthesizing...")
-                        # Synthesize code based on user query
                         q_lower = user_input.lower()
-                        if "date" in q_lower and "time" in q_lower:
-                            t_args["code"] = "from datetime import datetime\nnow = datetime.now()\nprint(f\"Today is {now.strftime('%A, %B %d, %Y')} and the time is {now.strftime('%I:%M %p')}.\")"
-                        elif "date" in q_lower:
-                            t_args["code"] = "from datetime import datetime\nprint(datetime.now().strftime('Today is %A, %B %d, %Y.'))"
-                        elif "time" in q_lower:
-                            t_args["code"] = "from datetime import datetime\nprint(datetime.now().strftime('The current time is %I:%M %p.'))"
+                        # Only synthesize for actual date/time queries
+                        if "date" in q_lower or "time" in q_lower or "today" in q_lower or "now" in q_lower:
+                            if self.debug:
+                                print(f"    python_repl with empty code for date/time query, synthesizing...")
+                            if "date" in q_lower and "time" in q_lower:
+                                t_args["code"] = "from datetime import datetime\nnow = datetime.now()\nprint(f\"Today is {now.strftime('%A, %B %d, %Y')} and the time is {now.strftime('%I:%M %p')}.\")"
+                            elif "date" in q_lower or "today" in q_lower:
+                                t_args["code"] = "from datetime import datetime\nprint(datetime.now().strftime('Today is %A, %B %d, %Y.'))"
+                            elif "time" in q_lower:
+                                t_args["code"] = "from datetime import datetime\nprint(datetime.now().strftime('The current time is %I:%M %p.'))"
+                            else:
+                                t_args["code"] = "from datetime import datetime\nprint(datetime.now())"
+                            if self.debug:
+                                print(f"    synthesized code: {t_args['code'][:50]}...")
                         else:
-                            t_args["code"] = "from datetime import datetime\nprint(datetime.now())"
-                        if self.debug:
-                            print(f"    synthesized code: {t_args['code'][:50]}...")
+                            # For non-datetime queries, skip this tool call - let model provide proper args
+                            if self.debug:
+                                print(f"    python_repl with empty code but not a date/time query, skipping...")
+                            continue
 
                     # Intercept repeat calls only when args are identical — the model is
                     # truly stuck. Different args = legitimate chained call (e.g. sqrt after **).
