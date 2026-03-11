@@ -131,7 +131,11 @@ def test_model(client: OllamaClient, model: str) -> dict:
                 system_prompt=system_prompt,
                 max_steps=5,
                 client=client,
-                model_options={"temperature": 0.1},
+                model_options={
+                    "temperature": 0.0,      # Deterministic
+                    "num_ctx": 512,        # Small context for short answers
+                    "num_predict": 64,     # Most answers are 1-10 tokens
+                },
             )
             
             t0 = time.time()

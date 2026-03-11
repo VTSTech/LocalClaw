@@ -134,7 +134,11 @@ Instructions for using the skill.
         system_prompt="You create skill files using the write_file tool.\n\n" + skill_creator_brief,
         max_steps=5,
         client=client,
-        model_options={"num_ctx": 1024, "num_predict": 512},
+        model_options={
+            "temperature": 0.0,      # Deterministic
+            "num_ctx": 2048,        # Enough for skill creation
+            "num_predict": 1024,    # Enough for skill content
+        },
     )
     
     # ========================================

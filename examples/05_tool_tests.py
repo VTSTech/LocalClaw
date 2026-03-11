@@ -115,7 +115,11 @@ def test_calculator():
             system_prompt="Answer math questions using the calculator tool. Call the calculator with the expression.",
             max_steps=5,
             on_step=print_step if VERBOSE else None,
-            model_options={"temperature": 0.1},
+            model_options={
+                "temperature": 0.0,      # Deterministic
+                "num_ctx": 1024,         # Enough for tool definitions + prompt
+                "num_predict": 128,      # Short answers
+            },
         )
         
         t0 = time.time()
@@ -187,7 +191,11 @@ def test_shell():
             system_prompt="Use the shell tool to run commands when asked.",
             max_steps=5,
             on_step=print_step if VERBOSE else None,
-            model_options={"temperature": 0.1},
+            model_options={
+                "temperature": 0.0,      # Deterministic
+                "num_ctx": 1024,         # Enough for tool definitions + prompt
+                "num_predict": 128,      # Short answers
+            },
         )
         
         t0 = time.time()
@@ -259,7 +267,11 @@ def test_python_repl():
             system_prompt="Use Python REPL for calculations. Use print() to show results in your code.",
             max_steps=5,
             on_step=print_step if VERBOSE else None,
-            model_options={"temperature": 0.1},
+            model_options={
+                "temperature": 0.0,      # Deterministic
+                "num_ctx": 1024,         # Enough for tool definitions + prompt
+                "num_predict": 128,      # Short answers
+            },
         )
         
         t0 = time.time()
