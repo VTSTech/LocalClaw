@@ -62,12 +62,18 @@ class ACPPlugin:
         ACP username (default: "admin")
     password : str
         ACP password (default: "changeme")
+    base_url : str | None
+        Full ACP URL (overrides host/port). Use for HTTPS tunnels.
+        Example: "https://your-tunnel.trycloudflare.com"
     enabled : bool
         Whether plugin is active (default: True)
     on_stop : Callable[[str], None] | None
         Callback when STOP is detected (receives reason)
     debug : bool
         Print debug info (default: False)
+    agent_name : str
+        Name to use for activity attribution (default: "LocalClaw")
+        v1.0.3: Helps identify which agent performed each action in multi-agent scenarios
     """
 
     def __init__(
@@ -76,15 +82,18 @@ class ACPPlugin:
         port: int = 8766,
         user: str = "admin",
         password: str = "changeme",
+        base_url: str | None = None,
         enabled: bool = True,
         on_stop: Callable[[str], None] | None = None,
         debug: bool = False,
+        agent_name: str = "LocalClaw",
     ):
-        self.base_url = f"http://{host}:{port}"
+        self.base_url = base_url if base_url else f"http://{host}:{port}"
         self.auth = base64.b64encode(f"{user}:{password}".encode()).decode()
         self.enabled = enabled
         self.on_stop = on_stop
         self.debug = debug
+        self.agent_name = agent_name  # v1.0.3: Agent identity for attribution
 
         self._csrf_token: str | None = None
         self._csrf_expiry: float = 0
@@ -251,8 +260,9 @@ class ACPPlugin:
             "details": f"LocalClaw tool: {tool_name}",
             "priority": "medium",
             "metadata": {
+                "agent_name": self.agent_name,  # v1.0.3: Agent attribution
                 "source": "localclaw",
-                "tool_name": tool_name,
+                "tool": tool_name,
             }
         })
 
@@ -385,7 +395,16 @@ class ACPPlugin:
         })
 
     def sync_todos(self, todos: list[dict]) -> dict:
-        """Sync TODO list to ACP."""
+        """Sync TODO list to ACP.
+        
+        v1.0.3: Each TODO can include metadata with agent_name, tool, skill.
+        """
+        # Ensure each todo has metadata with agent attribution
+        for todo in todos:
+            if "metadata" not in todo:
+                todo["metadata"] = {}
+            if "agent_name" not in todo["metadata"]:
+                todo["metadata"]["agent_name"] = self.agent_name
         return self._request("/api/todos/update", "POST", {"todos": todos})
 
     def reset(self):
