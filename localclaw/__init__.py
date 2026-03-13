@@ -12,6 +12,7 @@ from .core.tools import Tool, ToolRegistry, ToolParam
 from .core.ollama_client import OllamaClient
 from .core.orchestrator import Orchestrator, AgentCard
 from .skills import SkillLoader, Skill, SkillRegistry
+from .acp_plugin import ACPPlugin, create_acp_agent
 
 __all__ = [
     "Agent", "AgentRun", "StepResult",
