@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 """
 examples/04_comprehensive_test_acp.py
 --------------------------------------
@@ -14,7 +15,6 @@ Prerequisites:
 Environment variables:
 - LOCALCLAW_MODEL: Model name (default: qwen2.5-coder:0.5b-instruct-q4_k_m)
 - ACP_HOST: ACP server address (default: 127.0.0.1:8766)
-  Can be: "127.0.0.1:8766" or "http://127.0.0.1:8766" or "hostname:8766"
 
 Written by VTSTech — https://www.vts-tech.org — https://github.com/VTSTech/LocalClaw
 """
@@ -22,6 +22,8 @@ Written by VTSTech — https://www.vts-tech.org — https://github.com/VTSTech/L
 import sys
 import os
 import time
+
+# Ensure the parent directory is in the path so localclaw can be imported
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from localclaw import Agent, OllamaClient, StepResult
@@ -32,6 +34,54 @@ from localclaw.acp_plugin import ACPPlugin
 # ═══════════════════════════════════════════════════════════════════════════════
 # CONFIGURATION
 # ═══════════════════════════════════════════════════════════════════════════════
+
+# Model to test (set via environment or default)
+MODEL = os.environ.get("LOCALCLAW_MODEL", "qwen2.5-coder:0.5b-instruct-q4_k_m")
+
+# ACP configuration
+ACP_URL = os.environ.get("ACP_HOST", "127.0.0.1:8766")
+ACP_USER = os.environ.get("ACP_USER", "admin")
+ACP_PASS = os.environ.get("ACP_PASS", "secret")
+
+# Parse ACP host/port
+ACP_HOST = ACP_URL
+ACP_PORT = 8766
+if "://" in ACP_HOST:
+    ACP_HOST = ACP_HOST.split("://", 1)[1]
+if ":" in ACP_HOST:
+    ACP_HOST, port_str = ACP_HOST.rsplit(":", 1)
+    ACP_PORT = int(port_str)
+
+# Global ACP plugin
+acp = None
+
+# Test categories
+TESTS = {
+    "basic": [
+        {
+            "name": "Simple Addition",
+            "prompt": "What is 2 + 2? Answer with just the number.",
+            "check": lambda r: "4" in r,
+        },
+        {
+            "name": "Multiplication",
+            "prompt": "What is 7 times 8? Answer with just the number.",
+            "check": lambda r: "56" in r,
+        },
+        {
+            "name": "Capital City",
+            "prompt": "What is the capital of Japan? Answer in one word.",
+            "check": lambda r: "tokyo" in r.lower(),
+        },
+    ],
+    "reasoning": [
+        {
+            "name": "Simple Reasoning",
+            "prompt": "I have 10 apples. I eat 3 and give 2 to a friend. How many do I have left? Just the number.",
+            "check": lambda r: "5" in r,
+        },
+        {
+            "name": "Age Problem",
             "prompt": "Tom is 5 years older than Mary. Mary is 12. How old is Tom? Just the number.",
             "check": lambda r: "17" in r,
         },
@@ -55,7 +105,7 @@ from localclaw.acp_plugin import ACPPlugin
 # COMBINED CALLBACK: Verbose Print + ACP Logging
 # ═══════════════════════════════════════════════════════════════════════════════
 
-def make_on_step_callback(acp_plugin):
+def make_on_step_callback():
     """Create a combined callback: verbose print + ACP logging."""
     def on_step(step: StepResult):
         # Print to console (verbose)
@@ -70,14 +120,15 @@ def make_on_step_callback(acp_plugin):
             print(f"    ✨  Final: {preview}")
         
         # Log to ACP
-        if acp_plugin:
-            acp_plugin.on_step(step)
+        if acp:
+            acp.on_step(step)
     
     return on_step
 
 
 def run_tests():
     """Run all test categories with ACP logging."""
+    global acp
     
     # Check Ollama
     client = OllamaClient()
@@ -94,7 +145,7 @@ def run_tests():
     
     # Check ACP
     print(f"Connecting to ACP at {ACP_HOST}:{ACP_PORT}...")
-    acp = ACPPlugin(host=ACP_HOST, port=ACP_PORT)
+    acp = ACPPlugin(host=ACP_HOST, port=ACP_PORT, user=ACP_USER, password=ACP_PASS)
     status = acp.get_status()
     
     if "error" in status:
@@ -107,7 +158,9 @@ def run_tests():
         print(f"   Session tokens: {status.get('session_tokens', 0):,}")
     
     print(f"\n{'='*60}")
-    print(f"🧪
+    print(f"🧪  LocalClaw Comprehensive Test Suite (ACP Enabled)")
+    print(f"   Model: {MODEL}")
+    print(f"{'='*60}")
     
     # Sync TODOs to ACP
     if acp:
@@ -127,9 +180,11 @@ def run_tests():
     total_time = 0
     
     for category, tests in TESTS.items():
-        print(f"\n📋
+        print(f"\n📋  {category.upper()} TESTS")
+        print("-" * 40)
+        
         # Create combined callback
-        on_step = make_on_step_callback(acp)
+        on_step = make_on_step_callback()
         
         # Create agent for this category
         agent = Agent(
@@ -152,8 +207,10 @@ def run_tests():
             # Update TODO status
             if acp:
                 acp._request("/api/todos/update", "POST", {
-                    "id": f"{category}_{i}",
-                    "status": "in_progress"
+                    "todos": [
+                        {"id": f"{category}_{j}", "status": "in_progress" if j == i else ("completed" if j < i else "pending")}
+                        for j in range(len(tests))
+                    ]
                 })
             
             t0 = time.time()
@@ -165,20 +222,16 @@ def run_tests():
                 passed = test["check"](response)
                 total_passed += int(passed)
                 
-                status = "✅ PASS" if passed else "❌   FAIL"
+                status = "✅ PASS" if passed else "❌ FAIL"
                 preview = response[:60].replace("\n", " ")
                 print(f"  {status} ({elapsed:.1f}s): {preview}...")
                 
                 if not passed:
                     print(f"       Full response: {response}")
                 
-                # Update TODO with result
-                if acp:
-                    acp._request("/api/todos/update", "POST", {
-                        "id": f"{category}_{i}",
-                        "status": "completed" if passed else "pending",
-                        "content": f"{category}: {test['name']} - {'PASS' if passed else 'FAIL'}"
-                    })
+                # Add note for failed tests
+                if acp and not passed:
+                    acp.add_note("warning", f"{test['name']} failed: {response[:100]}", "high")
                     
             except Exception as e:
                 total_time += 60
@@ -206,6 +259,8 @@ def run_tests():
     elif pass_rate >= 50:
         print(f"\n⚠️  Model '{MODEL}' has some issues but usable.")
     else:
-        print(f"\n❌
+        print(f"\n❌  Model '{MODEL}' needs improvement or replacement.")
+
+
 if __name__ == "__main__":
     run_tests()
