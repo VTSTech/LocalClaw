@@ -59,9 +59,9 @@ class ACPPlugin:
     port : int
         ACP server port (default: 8766)
     user : str
-        ACP username (default: "vtstech")
+        ACP username (default: "admin")
     password : str
-        ACP password (default: "nopenope")
+        ACP password (default: "changeme")
     enabled : bool
         Whether plugin is active (default: True)
     on_stop : Callable[[str], None] | None
@@ -74,8 +74,8 @@ class ACPPlugin:
         self,
         host: str = "localhost",
         port: int = 8766,
-        user: str = "vtstech",
-        password: str = "nopenope",
+        user: str = "admin",
+        password: str = "changeme",
         enabled: bool = True,
         on_stop: Callable[[str], None] | None = None,
         debug: bool = False,
