@@ -43,6 +43,7 @@ from localclaw import Agent, OllamaClient, StepResult
 from localclaw.core.memory import Message
 from localclaw.tools.builtins import BUILTIN_REGISTRY
 from localclaw.skills import SkillLoader, SkillRegistry
+from localclaw.acp_plugin import ACPPlugin
 
 
 # ------------------------------------------------------------------ #
@@ -149,6 +150,16 @@ def _build_agent(args, client: OllamaClient):
     # Get temperature
     temperature = getattr(args, "temperature", 0.7)
     
+    # Create ACP plugin if requested
+    acp_plugin = None
+    if getattr(args, "acp", False):
+        acp_plugin = ACPPlugin(
+            agent_name=f"LocalClaw-{args.model}",
+            debug=getattr(args, "debug", False),
+        )
+        if getattr(args, "verbose", False):
+            print(dim(f"  🔗 ACP enabled: {acp_plugin.base_url}"))
+
     # Build model options for performance tuning
     model_options = {"temperature": temperature} if temperature else {}
     
@@ -165,18 +176,26 @@ def _build_agent(args, client: OllamaClient):
     if getattr(args, "num_predict", None):
         model_options["num_predict"] = args.num_predict
     
+    # Combine step callbacks: verbose printer + ACP plugin
+    def combined_on_step(step):
+        # Always call printer first (for verbose output)
+        _make_step_printer(getattr(args, "verbose", False), getattr(args, "debug", False))(step)
+        # Then call ACP plugin if enabled
+        if acp_plugin:
+            acp_plugin.on_step(step)
+
     agent = Agent(
         model=args.model,
         tools=tools_registry,
         system_prompt=system_prompt,
         client=client,
-        on_step=_make_step_printer(getattr(args, "verbose", False), getattr(args, "debug", False)),
+        on_step=combined_on_step,
         model_options=model_options,
         force_react=getattr(args, "force_react", False),
         debug=getattr(args, "debug", False),
     )
     
-    return agent, skill_registry
+    return agent, skill_registry, acp_plugin
 
 
 # ------------------------------------------------------------------ #
@@ -269,7 +288,7 @@ def cmd_run(args):
         print(red("✗  Ollama is not running. Start it with: ollama serve"))
         sys.exit(1)
 
-    agent, skill_registry = _build_agent(args, client)
+    agent, skill_registry, acp_plugin = _build_agent(args, client)
     
     print(bold("🦞 LocalClaw R02") + dim(" · Written by VTSTech · https://www.vts-tech.org · https://github.com/VTSTech/LocalClaw"))
     print(f"Prompt: {args.prompt}")
@@ -320,7 +339,7 @@ def cmd_chat(args):
             print(yellow(f"(warmup failed: {e})"))
         print()
 
-    agent, skill_registry = _build_agent(args, client)
+    agent, skill_registry, acp_plugin = _build_agent(args, client)
     
     # Build status line
     parts = [f"[{args.model}"]
@@ -855,6 +874,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--stream",
         action="store_true",
         help="Stream output token-by-token (better UX for slow connections)",
+    )
+    shared.add_argument(
+        "--acp",
+        action="store_true",
+        help="Enable ACP (Agent Control Panel) integration for activity tracking",
     )
 
     # ── run ─────────────────────────────────────────────────────────
