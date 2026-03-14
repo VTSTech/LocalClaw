@@ -78,6 +78,9 @@ class ACPPlugin:
     agent_name : str
         Name to use for activity attribution (default: "LocalClaw")
         v1.0.3: Helps identify which agent performed each action in multi-agent scenarios
+    model_name : str | None
+        Model identifier to display (e.g., "qwen2.5-coder:0.5b")
+        v1.0.3: Shows agent_name · model_name format in ACP UI
     """
 
     def __init__(
@@ -89,6 +92,7 @@ class ACPPlugin:
         on_stop: Callable[[str], None] | None = None,
         debug: bool = False,
         agent_name: str = "LocalClaw",
+        model_name: str | None = None,
     ):
         self.base_url = base_url if base_url else DEFAULT_ACP_URL
         self.auth = base64.b64encode(f"{user or DEFAULT_ACP_USER}:{password or DEFAULT_ACP_PASS}".encode()).decode()
@@ -96,6 +100,7 @@ class ACPPlugin:
         self.on_stop = on_stop
         self.debug = debug
         self.agent_name = agent_name  # v1.0.3: Agent identity for attribution
+        self.model_name = model_name  # v1.0.3: Model identifier
 
         self._csrf_token: str | None = None
         self._csrf_expiry: float = 0
@@ -255,17 +260,22 @@ class ACPPlugin:
         # Create target string from args (truncate if too long)
         target = self._format_target(tool_name, tool_args)
 
+        # Build metadata with agent_name and model_name
+        metadata = {
+            "agent_name": self.agent_name,  # v1.0.3: Agent attribution
+            "source": "localclaw",
+            "tool": tool_name,
+        }
+        if self.model_name:
+            metadata["model_name"] = self.model_name  # v1.0.3: Model identifier
+
         # Log to ACP
         resp = self._request("/api/start", "POST", {
             "action": action,
             "target": target,
             "details": f"LocalClaw tool: {tool_name}",
             "priority": "medium",
-            "metadata": {
-                "agent_name": self.agent_name,  # v1.0.3: Agent attribution
-                "source": "localclaw",
-                "tool": tool_name,
-            }
+            "metadata": metadata
         })
 
         activity_id = resp.get("activity_id")
@@ -425,14 +435,16 @@ class ACPPlugin:
 def create_acp_agent(
     model: str,
     tools: Any = None,
-    acp_host: str = "localhost",
-    acp_port: int = 8766,
+    acp_url: str | None = None,
+    agent_name: str = "LocalClaw",
     **agent_kwargs,
 ) -> tuple["Agent", ACPPlugin]:
     """
     Create a LocalClaw Agent pre-configured with ACP plugin.
 
     Returns both the agent and plugin for additional control.
+
+    v1.0.3: Now includes model_name in ACP metadata for agent_name · model_name display.
 
     Usage:
         from localclaw.acp_plugin import create_acp_agent
@@ -449,7 +461,11 @@ def create_acp_agent(
     # Import here to avoid circular imports
     from . import Agent
 
-    plugin = ACPPlugin(host=acp_host, port=acp_port)
+    plugin = ACPPlugin(
+        base_url=acp_url,
+        agent_name=agent_name,
+        model_name=model,  # v1.0.3: Include model identifier
+    )
     agent = Agent(
         model=model,
         tools=tools,
