@@ -18,7 +18,7 @@ import os
 # OLLAMA_BASE_URL = "http://localhost:11434"
 
 # REMOTE OLLAMA (cloudflare tunnel):
-OLLAMA_BASE_URL = "https://ooo.trycloudflare.com"
+OLLAMA_BASE_URL = "https://ooo.trycloudflare.com/"
 
 # Override via environment variable (takes precedence if set)
 _ollama_env = os.environ.get("OLLAMA_BASE_URL")
