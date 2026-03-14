@@ -21,19 +21,8 @@ import urllib.request
 import urllib.error
 from typing import Any, Iterator
 
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# OLLAMA HOST CONFIGURATION
-# ═══════════════════════════════════════════════════════════════════════════════
-# Uncomment ONE of the following lines to switch between local and remote Ollama:
-#
-# LOCAL OLLAMA (default):
-DEFAULT_BASE_URL = "http://localhost:11434"
-#
-# REMOTE OLLAMA (cloudflare tunnel) — uncomment and comment out the line above:
-#DEFAULT_BASE_URL = "https://your-tunnel.trycloudflare.com"
-#
-# ═══════════════════════════════════════════════════════════════════════════════
+# Import centralized config
+from ..config import OLLAMA_BASE_URL as DEFAULT_BASE_URL
 
 # Default timeout: configurable via environment variable
 # Cloudflare tunnels have ~100 second timeout, so default to 90s for remote

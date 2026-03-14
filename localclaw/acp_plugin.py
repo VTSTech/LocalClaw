@@ -9,8 +9,11 @@ Usage:
     from localclaw.tools.builtins import BUILTIN_REGISTRY
     from localclaw.acp_plugin import ACPPlugin
 
-    # Create plugin
-    acp = ACPPlugin(host="localhost", port=8766)
+    # Create plugin (uses config.py defaults)
+    acp = ACPPlugin()
+
+    # Or with custom URL:
+    acp = ACPPlugin(base_url="http://localhost:8766")
 
     # Attach to agent
     agent = Agent(
@@ -41,6 +44,11 @@ except ImportError:
     # Allow standalone usage
     StepResult = Any
 
+# Import centralized config
+from .config import ACP_BASE_URL as DEFAULT_ACP_URL
+from .config import ACP_USER as DEFAULT_ACP_USER
+from .config import ACP_PASS as DEFAULT_ACP_PASS
+
 
 class ACPPlugin:
     """
@@ -54,17 +62,13 @@ class ACPPlugin:
 
     Parameters
     ----------
-    host : str
-        ACP server hostname (default: "localhost")
-    port : int
-        ACP server port (default: 8766)
-    user : str
-        ACP username (default: "admin")
-    password : str
-        ACP password (default: "changeme")
     base_url : str | None
-        Full ACP URL (overrides host/port). Use for HTTPS tunnels.
+        Full ACP URL. If None, uses DEFAULT_ACP_URL from config.
         Example: "https://your-tunnel.trycloudflare.com"
+    user : str
+        ACP username (default: from DEFAULT_ACP_USER)
+    password : str
+        ACP password (default: from DEFAULT_ACP_PASS)
     enabled : bool
         Whether plugin is active (default: True)
     on_stop : Callable[[str], None] | None
@@ -78,18 +82,16 @@ class ACPPlugin:
 
     def __init__(
         self,
-        host: str = "localhost",
-        port: int = 8766,
-        user: str = "admin",
-        password: str = "changeme",
         base_url: str | None = None,
+        user: str = None,
+        password: str = None,
         enabled: bool = True,
         on_stop: Callable[[str], None] | None = None,
         debug: bool = False,
         agent_name: str = "LocalClaw",
     ):
-        self.base_url = base_url if base_url else f"http://{host}:{port}"
-        self.auth = base64.b64encode(f"{user}:{password}".encode()).decode()
+        self.base_url = base_url if base_url else DEFAULT_ACP_URL
+        self.auth = base64.b64encode(f"{user or DEFAULT_ACP_USER}:{password or DEFAULT_ACP_PASS}".encode()).decode()
         self.enabled = enabled
         self.on_stop = on_stop
         self.debug = debug
