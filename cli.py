@@ -45,6 +45,73 @@ from localclaw.tools.builtins import BUILTIN_REGISTRY
 from localclaw.skills import SkillLoader, SkillRegistry
 from localclaw.acp_plugin import ACPPlugin
 
+# Global reference for A2A processing (set in cmd_chat)
+_acp_plugin = None
+_tools_registry = None
+
+
+def _execute_a2a_tool(action: str, payload: dict) -> any:
+    """Execute an A2A action using the available tools registry."""
+    global _tools_registry
+    
+    if not _tools_registry:
+        return {"error": "No tools available"}
+    
+    # Map A2A actions to tool names
+    action_to_tool = {
+        "read_file": "read_file",
+        "write_file": "write_file",
+        "list_directory": "list_directory",
+        "shell": "shell",
+        "execute_python": "python_repl",
+        "execute_code": "python_repl",
+        "python_repl": "python_repl",
+    }
+    
+    tool_name = action_to_tool.get(action, action)
+    tool = _tools_registry.get(tool_name)
+    
+    if not tool:
+        return {"error": f"Tool not found: {tool_name} (action: {action})"}
+    
+    try:
+        # Execute the tool with the payload as kwargs
+        result = tool.fn(**payload)
+        return result
+    except Exception as e:
+        return {"error": str(e)}
+
+
+def _on_a2a_message_callback(hints: dict):
+    """Callback to process A2A messages automatically when notified."""
+    global _acp_plugin
+    
+    pending_count = hints.get("pending_count", 0)
+    senders = hints.get("senders", [])
+    
+    if pending_count > 0 and _acp_plugin:
+        print()
+        print(cyan(f"  📨 Processing {pending_count} A2A message(s) from {senders}..."))
+        
+        # Process the inbox
+        results = _acp_plugin.a2a_process_inbox(
+            tool_executor=_execute_a2a_tool,
+            auto_respond=True
+        )
+        
+        for r in results:
+            status = green("✓") if r.get("status") == "processed" else yellow("○")
+            action = r.get("action", "unknown")
+            from_agent = r.get("from_agent", "unknown")
+            result_preview = ""
+            if r.get("result"):
+                result_str = str(r.get("result"))[:60]
+                result_preview = f" → {result_str}"
+            elif r.get("error"):
+                result_preview = f" ✗ {r.get('error')}"
+            print(dim(f"    {status} {action} from {from_agent}{result_preview}"))
+        print()
+
 
 # ------------------------------------------------------------------ #
 #  Helper functions                                                    #
@@ -148,6 +215,7 @@ def _build_agent(args, client: OllamaClient):
             agent_name="LocalClaw",
             model_name=args.model,
             debug=getattr(args, "debug", False),
+            on_a2a_message=_on_a2a_message_callback,  # Auto-process A2A messages
         )
         if getattr(args, "verbose", False):
             print(dim(f"  🔗 ACP enabled: {acp_plugin.base_url}"))
@@ -186,6 +254,11 @@ def _build_agent(args, client: OllamaClient):
         force_react=getattr(args, "force_react", False),
         debug=getattr(args, "debug", False),
     )
+    
+    # Store globals for A2A processing
+    global _acp_plugin, _tools_registry
+    _acp_plugin = acp_plugin
+    _tools_registry = tools_registry
     
     return agent, skill_registry, acp_plugin
 
@@ -377,6 +450,7 @@ def cmd_chat(args):
     print(dim("  Type '/skills' to list active skills."))
     print(dim("  Type '/status' to show session status."))
     print(dim("  Type '/context' to show context information."))
+    print(dim("  Type '/a2a' to process pending A2A messages."))
     print(dim("  ─────────────────────────────────────"))
     
     # Show loaded skills if verbose
@@ -514,6 +588,49 @@ def cmd_chat(args):
                 print()
                 continue
 
+            if user_input == "/a2a":
+                # Process pending A2A messages
+                if not acp_plugin:
+                    print(yellow("  A2A not enabled. Start with --acp flag."))
+                    continue
+                
+                print()
+                print(cyan("  A2A Message Processing"))
+                print(dim("  ─────────────────────────────────────"))
+                
+                # Get pending messages
+                messages = acp_plugin.a2a_get_inbox()
+                if not messages:
+                    print(dim("  No pending A2A messages."))
+                    print()
+                    continue
+                
+                print(f"  Processing {len(messages)} message(s)...")
+                print()
+                
+                # Process with tool executor
+                results = acp_plugin.a2a_process_inbox(
+                    tool_executor=_execute_a2a_tool,
+                    auto_respond=True
+                )
+                
+                for r in results:
+                    status = green("✓") if r.get("status") == "processed" else yellow("○")
+                    action = r.get("action", "unknown")
+                    from_agent = r.get("from_agent", "unknown")
+                    msg_type = r.get("type", "unknown")
+                    
+                    print(f"  {status} {bold(action)} from {cyan(from_agent)} ({msg_type})")
+                    
+                    if r.get("result"):
+                        result_str = str(r.get("result"))[:200]
+                        print(dim(f"    → {result_str}"))
+                    elif r.get("error"):
+                        print(red(f"    ✗ {r.get('error')}"))
+                
+                print()
+                continue
+
             if user_input == "/help":
                 print()
                 print(cyan("  Available Commands"))
@@ -531,6 +648,9 @@ def cmd_chat(args):
                 print(dim("    /skills          List active skills"))
                 print(dim("    /stats           Show session statistics"))
                 print(dim("    /messages        Show raw message history"))
+                print()
+                print("  " + bold("A2A Messaging"))
+                print(dim("    /a2a             Process pending A2A messages"))
                 print()
                 print("  " + bold("Export/Save"))
                 print(dim("    /export          Export to markdown file"))

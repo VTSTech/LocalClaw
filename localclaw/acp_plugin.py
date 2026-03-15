@@ -4,8 +4,8 @@
 This plugin connects LocalClaw agents to an ACP (Agent Control Panel) server,
 enabling real-time monitoring, token tracking, and STOP/Resume control.
 
-ACP Specification: v1.0.3
-Compliance: Full (mandatory requirements, hints, orphan handling, nudge support, batch ops, shutdown)
+ACP Specification: v1.0.4
+Compliance: Full (mandatory requirements, hints, orphan handling, nudge support, batch ops, shutdown, A2A)
 
 Features:
 - Logs all tool calls to ACP (using combined /api/action endpoint)
@@ -18,6 +18,7 @@ Features:
 - Syncs final answers as AI notes
 - Batch operations for efficient multi-file reads (v1.0.3)
 - Graceful shutdown support (v1.0.2)
+- A2A Agent Registry and Messaging (v1.0.4)
 
 Usage:
     from localclaw import Agent
@@ -111,6 +112,9 @@ class ACPPlugin:
         Callback when nudge is received (receives nudge dict)
     on_orphan : Callable[[list], None] | None
         Callback when orphans are detected (receives orphan list)
+    on_a2a_message : Callable[[dict], None] | None
+        Callback when A2A messages are pending (v1.0.4)
+        Receives dict with pending_count, senders, and preview
     debug : bool
         Print debug info (default: False)
     agent_name : str
@@ -119,6 +123,12 @@ class ACPPlugin:
     model_name : str | None
         Model identifier to display (e.g., "qwen2.5-coder:0.5b")
         v1.0.3: Shows agent_name · model_name format in ACP UI
+    capabilities : list[str]
+        List of agent capabilities for A2A registry (v1.0.4)
+        Examples: ["code", "research"], ["testing"], ["a2a"]
+    endpoint : str | None
+        Optional HTTP endpoint for A2A messaging (v1.0.4)
+        Other agents can use this to send direct messages
     """
 
     def __init__(
@@ -131,9 +141,12 @@ class ACPPlugin:
         on_hint: Callable[[dict], None] | None = None,
         on_nudge: Callable[[dict], None] | None = None,
         on_orphan: Callable[[list], None] | None = None,
+        on_a2a_message: Callable[[dict], None] | None = None,
         debug: bool = False,
         agent_name: str = "LocalClaw",
         model_name: str | None = None,
+        capabilities: list[str] | None = None,
+        endpoint: str | None = None,
     ):
         self.base_url = base_url if base_url else DEFAULT_ACP_URL
         self.auth = base64.b64encode(f"{user or DEFAULT_ACP_USER}:{password or DEFAULT_ACP_PASS}".encode()).decode()
@@ -142,9 +155,12 @@ class ACPPlugin:
         self.on_hint = on_hint          # v1.0.3: Hints callback
         self.on_nudge = on_nudge        # v1.0.3: Nudge callback
         self.on_orphan = on_orphan      # v1.0.3: Orphan callback
+        self.on_a2a_message = on_a2a_message  # v1.0.4: A2A message notification callback
         self.debug = debug
         self.agent_name = agent_name
         self.model_name = model_name
+        self.capabilities = capabilities or ["code", "research"]  # v1.0.4: A2A capabilities
+        self.endpoint = endpoint  # v1.0.4: A2A endpoint
 
         self._csrf_token: str | None = None
         self._csrf_expiry: float = 0
@@ -270,7 +286,7 @@ class ACPPlugin:
 
     def _process_response_fields(self, resp: dict) -> None:
         """
-        Process ACP response fields: hints, orphan_warning, nudge.
+        Process ACP response fields: hints, orphan_warning, nudge, a2a.
         
         This is called after every /api/action request to handle
         all the important response fields per ACP spec.
@@ -286,6 +302,20 @@ class ACPPlugin:
                 self._log(f"⚠️ Loop detected: {hints.get('loop_count')} repetitions")
                 if hints.get("suggestion"):
                     self._log(f"Suggestion: {hints['suggestion']}")
+            
+            # v1.0.4: Process A2A hints (pending messages notification)
+            a2a_hints = hints.get("a2a")
+            if a2a_hints:
+                pending = a2a_hints.get("pending_count", 0)
+                if pending > 0:
+                    senders = a2a_hints.get("senders", [])
+                    preview = a2a_hints.get("preview", {})
+                    self._log(f"📨 A2A: {pending} pending message(s) from {senders}")
+                    if preview:
+                        self._log(f"   Preview: {preview.get('from')} - {preview.get('action')}")
+                    # Call A2A callback if registered
+                    if self.on_a2a_message:
+                        self.on_a2a_message(a2a_hints)
 
         # Process orphan_warning (v1.0.2 - incomplete activities)
         orphan_warning = resp.get("orphan_warning")
@@ -941,6 +971,9 @@ class ACPPlugin:
         if not self.enabled:
             return {"success": False, "error": "Plugin disabled"}
 
+        # Unregister from A2A first (v1.0.4)
+        self.a2a_unregister()
+
         resp = self._request("/api/shutdown", "POST", {
             "reason": reason,
             "export_summary": export_summary,
@@ -1063,6 +1096,13 @@ class ACPPlugin:
                 result["warnings"].append(f"Primary agent is {current_primary}")
                 self._log(f"Bootstrap: Primary agent is {current_primary}")
 
+        # 5. Register with A2A Agent Registry (v1.0.4)
+        if not result["stop_flag"]:
+            a2a_result = self.a2a_register()
+            result["a2a_registered"] = a2a_result.get("success", False)
+            if a2a_result.get("success"):
+                self._log(f"Bootstrap: Registered with A2A")
+
         return result
 
     def reset(self):
@@ -1074,6 +1114,498 @@ class ACPPlugin:
         self._stop_reason = None
         self._pending_nudge = None
 
+    # ------------------------------------------------------------------ #
+    #  A2A Methods (v1.0.4)                                               #
+    # ------------------------------------------------------------------ #
+
+    def a2a_register(self) -> dict:
+        """
+        Register this agent with the A2A Agent Registry.
+
+        Call this after bootstrap to make the agent discoverable by other agents.
+        Registration includes capabilities, model name, and optional endpoint.
+
+        Returns
+        -------
+        dict
+            Registration response with success status and agent details
+        """
+        if not self.enabled:
+            return {"success": False, "error": "Plugin disabled"}
+
+        resp = self._request("/api/agents/register", "POST", {
+            "agent_name": self.agent_name,
+            "capabilities": self.capabilities,
+            "model_name": self.model_name,
+            "endpoint": self.endpoint,
+        })
+
+        if resp.get("success"):
+            self._log(f"A2A: Registered as {self.agent_name}")
+
+        return resp
+
+    def a2a_unregister(self) -> dict:
+        """
+        Unregister this agent from the A2A Agent Registry.
+
+        Call this before shutdown to cleanly remove the agent from the registry.
+
+        Returns
+        -------
+        dict
+            Unregistration response
+        """
+        if not self.enabled:
+            return {"success": False, "error": "Plugin disabled"}
+
+        resp = self._request("/api/agents/unregister", "POST", {
+            "agent_name": self.agent_name,
+        })
+
+        if resp.get("success"):
+            self._log(f"A2A: Unregistered {self.agent_name}")
+
+        return resp
+
+    def a2a_heartbeat(self) -> dict:
+        """
+        Send heartbeat to update agent's last_seen timestamp.
+
+        Call this periodically (every 30-60 seconds) to maintain online status.
+
+        Returns
+        -------
+        dict
+            Heartbeat response with success status
+        """
+        if not self.enabled:
+            return {"success": False, "error": "Plugin disabled"}
+
+        return self._request("/api/agents/heartbeat", "POST", {
+            "agent_name": self.agent_name,
+        })
+
+    def a2a_get_agents(self) -> list[dict]:
+        """
+        Get list of all registered agents.
+
+        Returns
+        -------
+        list[dict]
+            List of agent objects with name, capabilities, status, etc.
+        """
+        if not self.enabled:
+            return []
+
+        resp = self._request("/api/agents")
+        return resp.get("agents", [])
+
+    def a2a_get_agent(self, agent_name: str) -> dict | None:
+        """
+        Get details for a specific agent.
+
+        Parameters
+        ----------
+        agent_name : str
+            Name of the agent to look up
+
+        Returns
+        -------
+        dict | None
+            Agent details or None if not found
+        """
+        if not self.enabled:
+            return None
+
+        resp = self._request(f"/api/agents/{agent_name}")
+        return resp.get("agent") if resp.get("success") else None
+
+    def a2a_send(
+        self,
+        to_agent: str,
+        action: str,
+        payload: dict | None = None,
+        message_type: str = "notification",
+        subject: str | None = None,
+        priority: int = 5,
+        ttl: int = 3600,
+        reply_to: str | None = None,
+    ) -> dict:
+        """
+        Send an A2A message to another agent.
+
+        Parameters
+        ----------
+        to_agent : str
+            Name of the target agent
+        action : str
+            Action type (e.g., "run_tests", "status_check", "collaborate")
+        payload : dict | None
+            Message payload/data
+        message_type : str
+            "request" (expects response), "response" (reply), or "notification"
+        subject : str | None
+            Human-readable subject line
+        priority : int
+            Message priority 1-10 (default: 5)
+        ttl : int
+            Time-to-live in seconds (default: 3600 = 1 hour)
+        reply_to : str | None
+            Message ID this is a reply to
+
+        Returns
+        -------
+        dict
+            Response with success status and message_id
+        """
+        if not self.enabled:
+            return {"success": False, "error": "Plugin disabled"}
+
+        data = {
+            "from_agent": self.agent_name,
+            "to_agent": to_agent,
+            "action": action,
+            "payload": payload or {},
+            "type": message_type,
+            "priority": priority,
+            "ttl": ttl,
+        }
+        if subject:
+            data["subject"] = subject
+        if reply_to:
+            data["reply_to"] = reply_to
+
+        resp = self._request("/api/a2a/send", "POST", data)
+
+        if resp.get("success"):
+            self._log(f"A2A: Sent message to {to_agent} ({action})")
+
+        return resp
+
+    def a2a_get_inbox(self, since: float | None = None) -> list[dict]:
+        """
+        Get messages for this agent.
+
+        Parameters
+        ----------
+        since : float | None
+            Optional timestamp to only get messages after this time
+
+        Returns
+        -------
+        list[dict]
+            List of messages for this agent
+        """
+        if not self.enabled:
+            return []
+
+        data = {"agent_name": self.agent_name}
+        if since:
+            data["since"] = since
+
+        resp = self._request("/api/a2a/inbox", "POST", data)
+
+        messages = resp.get("messages", [])
+        if messages:
+            self._log(f"A2A: Received {len(messages)} message(s)")
+
+        return messages
+
+    def a2a_clear(self, older_than_hours: int = 24) -> dict:
+        """
+        Clear old messages (optional cleanup).
+
+        Parameters
+        ----------
+        older_than_hours : int
+            Clear messages older than this many hours (default: 24)
+
+        Returns
+        -------
+        dict
+            Response with cleared count
+        """
+        if not self.enabled:
+            return {"success": False, "error": "Plugin disabled"}
+
+        return self._request("/api/a2a/clear", "POST", {
+            "older_than_hours": older_than_hours,
+        })
+
+    def a2a_acknowledge(self, msg_ids: str | list[str]) -> dict:
+        """
+        Acknowledge (remove) messages after processing.
+
+        Parameters
+        ----------
+        msg_ids : str | list[str]
+            Message ID or list of message IDs to acknowledge
+
+        Returns
+        -------
+        dict
+            Response with removed count
+        """
+        if not self.enabled:
+            return {"success": False, "error": "Plugin disabled"}
+
+        if isinstance(msg_ids, str):
+            msg_ids = [msg_ids]
+
+        return self._request("/api/a2a/acknowledge", "POST", {
+            "msg_ids": msg_ids,
+        })
+
+    def a2a_get_history(
+        self,
+        from_agent: str | None = None,
+        to_agent: str | None = None,
+        msg_type: str | None = None,
+    ) -> list[dict]:
+        """
+        Get A2A message history with optional filters.
+
+        Parameters
+        ----------
+        from_agent : str | None
+            Filter by sender
+        to_agent : str | None
+            Filter by recipient
+        msg_type : str | None
+            Filter by message type
+
+        Returns
+        -------
+        list[dict]
+            List of messages matching filters
+        """
+        if not self.enabled:
+            return []
+
+        params = []
+        if from_agent:
+            params.append(f"from={from_agent}")
+        if to_agent:
+            params.append(f"to={to_agent}")
+        if msg_type:
+            params.append(f"type={msg_type}")
+
+        query = "?" + "&".join(params) if params else ""
+        resp = self._request(f"/api/a2a/history{query}")
+
+        return resp.get("messages", [])
+
+    def a2a_broadcast(
+        self,
+        action: str,
+        payload: dict | None = None,
+        capabilities_filter: list[str] | None = None,
+        exclude_self: bool = True,
+    ) -> list[dict]:
+        """
+        Broadcast a message to all agents (optionally filtered by capability).
+
+        Parameters
+        ----------
+        action : str
+            Action type for the broadcast
+        payload : dict | None
+            Message payload
+        capabilities_filter : list[str] | None
+            Only send to agents with these capabilities
+        exclude_self : bool
+            Exclude this agent from broadcast (default: True)
+
+        Returns
+        -------
+        list[dict]
+            List of send responses for each recipient
+        """
+        agents = self.a2a_get_agents()
+        results = []
+
+        for agent in agents:
+            agent_name = agent.get("name")
+
+            # Skip self
+            if exclude_self and agent_name == self.agent_name:
+                continue
+
+            # Check capability filter
+            if capabilities_filter:
+                agent_caps = set(agent.get("capabilities", []))
+                if not any(cap in agent_caps for cap in capabilities_filter):
+                    continue
+
+            # Send message
+            result = self.a2a_send(
+                to_agent=agent_name,
+                action=action,
+                payload=payload,
+                message_type="notification",
+            )
+            results.append({"agent": agent_name, "result": result})
+
+        self._log(f"A2A: Broadcast {action} to {len(results)} agent(s)")
+        return results
+
+    def a2a_process_inbox(
+        self,
+        tool_executor: Callable[[str, dict], Any] | None = None,
+        auto_respond: bool = True,
+    ) -> list[dict]:
+        """
+        Process pending A2A messages and optionally respond.
+
+        This method fetches pending messages from the inbox and processes
+        each request-type message by executing the requested action.
+
+        Parameters
+        ----------
+        tool_executor : Callable | None
+            Optional custom tool executor. If None, returns messages without
+            processing. Signature: (action: str, payload: dict) -> result
+        auto_respond : bool
+            Whether to automatically send responses (default: True)
+
+        Returns
+        -------
+        list[dict]
+            List of processed messages with results
+
+        Example
+        -------
+        >>> # Process with custom executor
+        >>> results = acp.a2a_process_inbox(
+        ...     tool_executor=lambda action, payload: my_tools.run(action, payload)
+        ... )
+        """
+        messages = self.a2a_get_inbox()
+        if not messages:
+            return []
+
+        processed = []
+        for msg in messages:
+            msg_id = msg.get("id")
+            msg_type = msg.get("type", "notification")
+            action = msg.get("action", "")
+            payload = msg.get("payload", {})
+            from_agent = msg.get("from_agent", "unknown")
+
+            self._log(f"A2A: Processing {msg_type} from {from_agent}: {action}")
+
+            result = {
+                "msg_id": msg_id,
+                "from_agent": from_agent,
+                "action": action,
+                "type": msg_type,
+                "status": "processed",
+                "result": None,
+                "error": None,
+            }
+
+            # Only process request-type messages
+            if msg_type == "request" and tool_executor:
+                try:
+                    exec_result = tool_executor(action, payload)
+                    result["result"] = exec_result
+                    self._log(f"A2A: Executed {action} -> {str(exec_result)[:100]}")
+
+                    # Send response
+                    if auto_respond:
+                        self.a2a_send(
+                            to_agent=from_agent,
+                            action=f"{action}_result",
+                            payload={
+                                "success": True,
+                                "result": exec_result,
+                                "original_msg_id": msg_id,
+                            },
+                            message_type="response",
+                            reply_to=msg_id,
+                        )
+                        self._log(f"A2A: Sent response to {from_agent}")
+
+                except Exception as e:
+                    result["status"] = "error"
+                    result["error"] = str(e)
+                    self._log(f"A2A: Error executing {action}: {e}")
+
+                    # Send error response
+                    if auto_respond:
+                        self.a2a_send(
+                            to_agent=from_agent,
+                            action=f"{action}_error",
+                            payload={
+                                "success": False,
+                                "error": str(e),
+                                "original_msg_id": msg_id,
+                            },
+                            message_type="response",
+                            reply_to=msg_id,
+                        )
+
+            elif msg_type == "notification":
+                # Notifications don't need responses
+                result["status"] = "acknowledged"
+
+            elif msg_type == "response":
+                # Responses are just informational
+                result["status"] = "received"
+
+            processed.append(result)
+
+        # Acknowledge (remove) all processed messages
+        if processed:
+            msg_ids = [p["msg_id"] for p in processed]
+            ack_result = self.a2a_acknowledge(msg_ids)
+            if ack_result.get("success"):
+                self._log(f"A2A: Acknowledged {len(msg_ids)} message(s)")
+
+        return processed
+
+    def a2a_process_with_tools(
+        self,
+        tools_registry: dict[str, Callable] | None = None,
+    ) -> list[dict]:
+        """
+        Process A2A inbox using a tools registry.
+
+        This is a convenience method that creates a tool executor from
+        a registry of tool functions.
+
+        Parameters
+        ----------
+        tools_registry : dict | None
+            Dict mapping action names to callables.
+            If None, uses built-in mapping.
+
+        Returns
+        -------
+        list[dict]
+            List of processed messages with results
+
+        Example
+        -------
+        >>> tools = {
+        ...     "read_file": lambda p: open(p["path"]).read(),
+        ...     "execute_python": lambda p: exec(p["code"]),
+        ... }
+        >>> results = acp.a2a_process_with_tools(tools)
+        """
+        if tools_registry is None:
+            # Default tools mapping
+            tools_registry = {}
+
+        def executor(action: str, payload: dict) -> Any:
+            if action in tools_registry:
+                return tools_registry[action](payload)
+            else:
+                return {"error": f"Unknown action: {action}"}
+
+        return self.a2a_process_inbox(tool_executor=executor)
+
 
 # ------------------------------------------------------------------ #
 #  Convenience Factory                                                 #
@@ -1084,6 +1616,8 @@ def create_acp_agent(
     tools: Any = None,
     acp_url: str | None = None,
     agent_name: str = "LocalClaw",
+    capabilities: list[str] | None = None,
+    endpoint: str | None = None,
     on_hint: Callable[[dict], None] | None = None,
     on_nudge: Callable[[dict], None] | None = None,
     on_orphan: Callable[[list], None] | None = None,
@@ -1094,7 +1628,7 @@ def create_acp_agent(
 
     Returns both the agent and plugin for additional control.
 
-    v1.0.3: Full spec compliance with hints, nudge, orphan support.
+    v1.0.4: Full spec compliance with hints, nudge, orphan support, and A2A.
 
     Usage:
         from localclaw.acp_plugin import create_acp_agent
@@ -1103,10 +1637,17 @@ def create_acp_agent(
         agent, acp = create_acp_agent(
             model="qwen2.5-coder:0.5b",
             tools=BUILTIN_REGISTRY,
+            capabilities=["code", "research"],
         )
+
+        # Bootstrap to register with ACP and A2A
+        acp.bootstrap()
 
         result = agent.run("Calculate 2^20")
         print(f"Tokens used: {acp.get_session_tokens()}")
+
+        # Send A2A message to another agent
+        acp.a2a_send("Super-Z", "help_request", {"task": "debug code"})
     """
     # Import here to avoid circular imports
     from . import Agent
@@ -1115,6 +1656,8 @@ def create_acp_agent(
         base_url=acp_url,
         agent_name=agent_name,
         model_name=model,
+        capabilities=capabilities,
+        endpoint=endpoint,
         on_hint=on_hint,
         on_nudge=on_nudge,
         on_orphan=on_orphan,
