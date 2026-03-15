@@ -581,6 +581,77 @@ class ACPPlugin:
             return tool_name
 
     # ------------------------------------------------------------------ #
+    #  Chat Logging Methods                                                #
+    # ------------------------------------------------------------------ #
+
+    def log_chat(
+        self,
+        role: str,
+        content: str,
+        complete: bool = True,
+    ) -> dict:
+        """
+        Log a chat message to ACP.
+
+        This makes LocalClaw conversations visible in the ACP activity feed.
+
+        Parameters
+        ----------
+        role : str
+            "user" or "assistant"
+        content : str
+            The message content
+        complete : bool
+            Whether to immediately complete the activity (default: True)
+            Set False for streaming responses, then call complete_chat()
+
+        Returns
+        -------
+        dict
+            API response with activity_id
+        """
+        if not self.enabled:
+            return {"success": False, "error": "Plugin disabled"}
+
+        # Build metadata
+        metadata = self._build_metadata()
+        metadata["chat_role"] = role
+
+        # Truncate for display
+        preview = content[:200] if content else ""
+
+        # Create activity
+        resp = self._request("/api/action", "POST", {
+            "action": "CHAT",
+            "target": f"{role.title()}: {preview[:50]}...",
+            "details": content[:1000] if content else "",
+            "priority": "normal",
+            "metadata": metadata,
+        })
+
+        # Process response fields
+        self._process_response_fields(resp)
+
+        activity_id = resp.get("activity_id")
+        if activity_id and complete:
+            # Complete immediately for non-streaming
+            self._request("/api/complete", "POST", {
+                "activity_id": activity_id,
+                "result": content[:500] if content else "",
+            })
+            self._log(f"Logged {role} message")
+
+        return resp
+
+    def log_user_message(self, content: str) -> dict:
+        """Convenience method to log a user message."""
+        return self.log_chat("user", content)
+
+    def log_assistant_message(self, content: str) -> dict:
+        """Convenience method to log an assistant message."""
+        return self.log_chat("assistant", content)
+
+    # ------------------------------------------------------------------ #
     #  Utility Methods                                                    #
     # ------------------------------------------------------------------ #
 
@@ -622,6 +693,100 @@ class ACPPlugin:
     def get_duration_stats(self) -> dict:
         """Get activity duration statistics (v1.0.3)."""
         return self._request("/api/stats/duration")
+
+    def get_todos(self) -> list[dict]:
+        """
+        Get current TODO list from ACP.
+
+        Use this to recover TODOs from a previous session or to check
+        current task state.
+
+        Returns
+        -------
+        list[dict]
+            List of TODO objects, each with id, content, status, priority
+        """
+        resp = self._request("/api/todos")
+        return resp.get("todos", [])
+
+    def bootstrap(self, claim_primary: bool = True) -> dict:
+        """
+        Bootstrap ACP session - check status, establish identity, claim primary.
+
+        Call this at the start of a session to:
+        1. Check if STOP flag is set
+        2. Establish agent identity via /api/whoami
+        3. Optionally claim primary agent status
+
+        Per ACP spec §5, this should be the first ACP call in a session.
+
+        Parameters
+        ----------
+        claim_primary : bool
+            Whether to claim primary agent status (default: True)
+            If False, will only check status and establish identity
+
+        Returns
+        -------
+        dict
+            Bootstrap result with status, identity, and primary_claimed fields
+        """
+        result = {
+            "status": None,
+            "identity": None,
+            "primary_claimed": False,
+            "stop_flag": False,
+            "warnings": [],
+        }
+
+        # 1. Check status
+        status = self.get_status()
+        result["status"] = status
+
+        if status.get("stop_flag"):
+            self._stop_flag = True
+            self._stop_reason = status.get("stop_reason", "No reason given")
+            result["stop_flag"] = True
+            result["warnings"].append(f"STOP flag is set: {self._stop_reason}")
+            self._log(f"Bootstrap: STOP flag detected - {self._stop_reason}")
+
+        # 2. Establish identity
+        whoami = self._request("/api/whoami")
+        result["identity"] = whoami.get("identity", {})
+        self._log(f"Bootstrap: Identity established as {self.agent_name}")
+
+        # 3. Log bootstrap activity (always, regardless of primary claim)
+        if not result["stop_flag"]:
+            resp = self._request("/api/action", "POST", {
+                "action": "CHAT",
+                "target": f"{self.agent_name}: Session bootstrap",
+                "details": f"Connecting to ACP session" + ("(claiming primary)" if claim_primary else "(secondary agent)"),
+                "metadata": self._build_metadata(),
+            })
+            self._process_response_fields(resp)
+            if resp.get("success") and resp.get("activity_id"):
+                # Complete immediately
+                self._request("/api/complete", "POST", {
+                    "activity_id": resp["activity_id"],
+                    "result": "Bootstrap complete",
+                })
+                self._log(f"Bootstrap: Logged bootstrap activity")
+
+        # 4. Handle primary agent claim
+        if claim_primary and not result["stop_flag"]:
+            current_primary = status.get("primary_agent")
+            if current_primary is None:
+                # Try to claim primary via bootstrap activity
+                result["primary_claimed"] = True  # We were first to log
+                self._log(f"Bootstrap: Claimed primary agent status")
+            elif current_primary == self.agent_name:
+                result["primary_claimed"] = True
+                self._log(f"Bootstrap: Already primary agent")
+            else:
+                result["warnings"].append(f"Primary agent is {current_primary}")
+                self._log(f"Bootstrap: Primary agent is {current_primary}")
+
+        return result
 
     def reset(self):
         """Reset plugin state (for new session)."""

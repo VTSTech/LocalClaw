@@ -130,15 +130,6 @@ def _build_agent(args, client: OllamaClient):
                 print(red(f"Failed to load skill '{name}': {e}"))
                 print(f"Run {bold('localclaw skills')} to see available skills.")
                 sys.exit(1)
-    
-    # Add datetime skill by default if no skills specified
-    if len(skill_registry) == 0:
-        loader = SkillLoader()
-        try:
-            datetime_skill = loader.load("datetime")
-            skill_registry.add(datetime_skill)
-        except Exception:
-            pass  # No datetime skill available
 
     # Build system prompt
     system_prompt = getattr(args, "system", None) or "You are a helpful assistant. Answer concisely and directly."
@@ -154,7 +145,8 @@ def _build_agent(args, client: OllamaClient):
     acp_plugin = None
     if getattr(args, "acp", False):
         acp_plugin = ACPPlugin(
-            agent_name=f"LocalClaw-{args.model}",
+            agent_name="LocalClaw",
+            model_name=args.model,
             debug=getattr(args, "debug", False),
         )
         if getattr(args, "verbose", False):
@@ -278,7 +270,6 @@ def cmd_skills(args):
     print()
     print(dim(f"  Use with: --skills {','.join(skills[:2])}"))
     print(dim("  Skills provide knowledge/instructions to the agent."))
-    print(dim("  Tip: The 'datetime' skill is loaded by default."))
     print()
 
 
@@ -289,20 +280,33 @@ def cmd_run(args):
         sys.exit(1)
 
     agent, skill_registry, acp_plugin = _build_agent(args, client)
-    
+
+    # Bootstrap ACP if enabled
+    if acp_plugin:
+        bootstrap_result = acp_plugin.bootstrap(claim_primary=False)  # LocalClaw is secondary
+
     print(bold("🦞 LocalClaw R02") + dim(" · Written by VTSTech · https://www.vts-tech.org · https://github.com/VTSTech/LocalClaw"))
     print(f"Prompt: {args.prompt}")
-    
+
+    # Log user message to ACP
+    if acp_plugin:
+        acp_plugin.log_user_message(args.prompt)
+
     # Use streaming if requested
     if getattr(args, "stream", False):
         if getattr(args, "verbose", False):
             print()
         print(bold("Agent: "), end="", flush=True)
+        full_response = ""
         for token in agent.stream(args.prompt):
             print(token, end="", flush=True)
+            full_response += token
         print()  # newline after streaming
         if getattr(args, "verbose", False):
             print(dim(f"\n  [streaming mode]"))
+        # Log assistant response to ACP
+        if acp_plugin:
+            acp_plugin.log_assistant_message(full_response)
     else:
         run = agent.run(args.prompt)
 
@@ -310,6 +314,10 @@ def cmd_run(args):
             print()
 
         print(run.final_answer)
+
+        # Log assistant response to ACP
+        if acp_plugin:
+            acp_plugin.log_assistant_message(run.final_answer)
 
         if getattr(args, "verbose", False):
             tool_steps = [s for s in run.steps if s.type == "tool_call"]
@@ -340,7 +348,19 @@ def cmd_chat(args):
         print()
 
     agent, skill_registry, acp_plugin = _build_agent(args, client)
-    
+
+    # Bootstrap ACP if enabled
+    if acp_plugin:
+        bootstrap_result = acp_plugin.bootstrap(claim_primary=False)  # LocalClaw is secondary
+        if getattr(args, "verbose", False):
+            if bootstrap_result.get("primary_claimed"):
+                print(dim(f"  🔗 ACP: Claimed primary agent"))
+            else:
+                print(dim(f"  🔗 ACP: Connected as secondary agent"))
+            if bootstrap_result.get("warnings"):
+                for w in bootstrap_result["warnings"]:
+                    print(yellow(f"  ⚠ {w}"))
+
     # Build status line
     parts = [f"[{args.model}"]
     if args.tools:
@@ -721,16 +741,30 @@ def cmd_chat(args):
 
             # Use streaming if requested
             if getattr(args, "stream", False):
+                # Log user message to ACP
+                if acp_plugin:
+                    acp_plugin.log_user_message(user_input)
                 print(bold("Agent: "), end="", flush=True)
+                full_response = ""
                 for token in agent.stream(user_input):
                     print(token, end="", flush=True)
+                    full_response += token
                 print()  # newline after streaming
                 if getattr(args, "verbose", False):
                     print(dim("         [streaming mode]"))
                 print()
+                # Log assistant response to ACP
+                if acp_plugin:
+                    acp_plugin.log_assistant_message(full_response)
             else:
+                # Log user message to ACP
+                if acp_plugin:
+                    acp_plugin.log_user_message(user_input)
                 run = agent.run(user_input)
                 print(f"{bold('Agent')}: {run.final_answer}")
+                # Log assistant response to ACP
+                if acp_plugin:
+                    acp_plugin.log_assistant_message(run.final_answer)
                 if getattr(args, "verbose", False) and run.steps:
                     tool_steps = [s for s in run.steps if s.type == "tool_call"]
                     print(dim(f"         [{len(tool_steps)} tool calls · {run.total_ms:.0f}ms]"))
