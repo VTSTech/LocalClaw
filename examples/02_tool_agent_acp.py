@@ -1,11 +1,15 @@
 """
-examples/02_tool_agent.py
---------------------------
-An agent with custom + built-in tools.
-Demonstrates the decorator-based tool registry.
+examples/02_tool_agent_acp.py
+-----------------------------
+An agent with custom + built-in tools — with ACP integration.
 
-Run from the project root:   python examples/02_tool_agent.py
-Or from the examples folder: python 02_tool_agent.py
+Demonstrates:
+- ACP plugin attached to on_step callback
+- Tool calls logged automatically to ACP
+- Hints and nudge handling
+
+Run from the project root:   python examples/02_tool_agent_acp.py
+Or from the examples folder: python 02_tool_agent_acp.py
 """
 
 import sys
@@ -14,8 +18,21 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from localclaw import Agent, ToolRegistry, StepResult
 from localclaw.tools.builtins import BUILTIN_REGISTRY
+from localclaw.acp_plugin import ACPPlugin
 
-# ── 1. Define custom tools ─────────────────────────────────────────
+# ── 1. Create ACP plugin and bootstrap ─────────────────────────────
+acp = ACPPlugin(
+    agent_name="LocalClaw-ToolAgent",
+    model_name=os.environ.get("LOCALCLAW_MODEL", "qwen2.5-coder:0.5b"),
+    debug=os.environ.get("ACP_DEBUG", "").lower() in ("1", "true"),
+    on_hint=lambda h: print(f"   💡 Hint: {h}"),
+    on_nudge=lambda n: print(f"   📢 Nudge: {n.get('message', '')}"),
+)
+
+bootstrap = acp.bootstrap(claim_primary=False)
+print(f"ACP: {'connected' if bootstrap.get('status') else 'unavailable'}\n")
+
+# ── 2. Define custom tools ─────────────────────────────────────────
 registry = ToolRegistry()
 
 @registry.tool(
@@ -60,23 +77,19 @@ def convert_currency(amount, from_currency: str = "USD", to_currency: str = "EUR
     rates_to_usd = {"USD": 1.0, "EUR": 1.08, "GBP": 1.27, "JPY": 0.0067, "CAD": 0.74}
     
     # ── Fuzzy handling for amount ─────────────────────────────────
-    # Handle string amounts (common with small models)
     if isinstance(amount, str):
         # Try to extract number from "500 JPY" pattern
         match = re.match(r'(\d+(?:\.\d+)?)\s*([A-Z]{3})?', amount.upper())
         if match:
             amount = float(match.group(1))
-            # If currency embedded in amount string, use it
             if match.group(2) and from_currency == "USD":
                 from_currency = match.group(2)
         else:
-            # Try direct conversion
             try:
                 amount = float(amount)
             except ValueError:
                 return f"Error: Could not parse amount '{amount}'. Please provide a number."
     
-    # Ensure amount is numeric
     try:
         amount = float(amount)
     except (TypeError, ValueError):
@@ -84,8 +97,6 @@ def convert_currency(amount, from_currency: str = "USD", to_currency: str = "EUR
     
     # ── Validate currencies ───────────────────────────────────────
     fc, tc = from_currency.upper(), to_currency.upper()
-    
-    # Check for unknown currencies
     unknown = []
     if fc not in rates_to_usd:
         unknown.append(fc)
@@ -100,12 +111,18 @@ def convert_currency(amount, from_currency: str = "USD", to_currency: str = "EUR
     return f"{amount} {fc} ≈ {result:.2f} {tc}"
 
 
-# ── 2. Also include the built-in calculator ─────────────────────────
+# Include the built-in calculator
 for t in BUILTIN_REGISTRY.subset(["calculator"]).all():
     registry.register(t)
 
-# ── 3. Live step hook for a nice trace ─────────────────────────────
+
+# ── 3. Combined step hook: ACP + local printing ────────────────────
 def print_step(step: StepResult):
+    """Print step info AND log to ACP."""
+    # Log to ACP
+    acp.on_step(step)
+    
+    # Print locally
     icons = {"thought": "💭", "tool_call": "🔧", "tool_result": "📦", "final": "✅"}
     icon = icons.get(step.type, "•")
     if step.type == "tool_call":
@@ -116,8 +133,7 @@ def print_step(step: StepResult):
         print(f"  {icon} {step.content[:120]}")
 
 
-# ── 4. Build the agent ─────────────────────────────────────────────
-# Set LOCALCLAW_MODEL env var to override, or change here
+# ── 4. Build the agent with ACP integration ────────────────────────
 MODEL = os.environ.get("LOCALCLAW_MODEL", "qwen2.5-coder:0.5b-instruct-q4_k_m")
 
 agent = Agent(
@@ -127,15 +143,15 @@ agent = Agent(
         "You are a helpful assistant with access to tools. "
         "Call tools when needed. Give brief final answers after getting results."
     ),
-    on_step=print_step,
+    on_step=print_step,  # Combined callback
     model_options={
-        "temperature": 0.0,     # Deterministic for tool usage
-        "num_ctx": 1024,        # Enough for tool definitions
-        "num_predict": 256,     # Reasonable response length
+        "temperature": 0.0,
+        "num_ctx": 1024,
+        "num_predict": 256,
     },
 )
 
-print(f"=== Multi-tool agent demo ({agent.model}) ===\n")
+print(f"=== Multi-tool agent demo with ACP ({agent.model}) ===\n")
 
 # Use simpler, single-tool prompts for small models (≤1B parameters)
 # Complex multi-part prompts can confuse small models
@@ -150,7 +166,20 @@ queries = [
 for q in queries:
     agent.reset()
     print(f"User: {q}")
+    
+    # Log user message to ACP
+    acp.log_user_message(q)
+    
     run = agent.run(q)
+    
+    # Log assistant message to ACP
+    acp.log_assistant_message(run.final_answer)
+    
     print(f"\nFinal: {run.final_answer}")
     print(f"Took {run.total_ms:.0f}ms | {len(run.steps)} steps\n")
     print("-" * 60 + "\n")
+
+# Show ACP stats
+status = acp.get_status()
+print(f"ACP Session tokens: {status.get('session_tokens', 0)}")
+print(f"Agent tokens: {acp.get_agent_tokens()}")
