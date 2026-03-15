@@ -465,6 +465,89 @@ python examples/11_skill_creator_test.py
 
 ---
 
+## ACP Integration (Agent Control Panel)
+
+🦞 LocalClaw R02 supports **[ACP (Agent Control Panel)](https://github.com/VTSTech/ACP-Agent-Control-Panel)** for centralized activity tracking, token monitoring, and multi-agent coordination.
+
+### What is ACP?
+
+ACP is a monitoring and observability protocol for AI agents. Unlike communication protocols (MCP, A2A), ACP sits alongside your agents and provides:
+
+- **Activity Tracking**: Real-time monitoring of all agent actions
+- **Token Management**: Context window usage estimation per agent
+- **Multi-Agent Coordination**: Track multiple agents in one session
+- **STOP/Resume Control**: Emergency stop capability
+- **Session Persistence**: State preserved across restarts
+
+### Enable ACP
+
+```bash
+# Run with ACP tracking
+python cli.py chat --acp --tools shell,read_file,write_file -m qwen2.5-coder:0.5b
+
+# Run single prompt with ACP
+python cli.py run --acp "What is 2+2?"
+```
+
+### Configuration
+
+Set your ACP server URL in `localclaw/config.py`:
+
+```python
+# LOCAL ACP:
+# ACP_BASE_URL = "http://localhost:8766"
+
+# REMOTE ACP (cloudflare tunnel):
+ACP_BASE_URL = "https://your-tunnel.trycloudflare.com"
+
+# Credentials
+ACP_USER = "admin"
+ACP_PASS = "secret"
+```
+
+### What Gets Logged
+
+| Activity | Description |
+|----------|-------------|
+| **Bootstrap** | Session start, identity establishment |
+| **User messages** | All prompts sent to the model |
+| **Assistant messages** | All model responses |
+| **Tool calls** | Shell commands, file operations, etc. |
+| **Tool results** | Outcomes from tool execution |
+
+### Per-Agent Token Tracking
+
+When multiple agents connect to the same ACP session:
+
+```json
+{
+  "primary_agent": "Super Z",
+  "agent_tokens": {
+    "Super Z": 42000,
+    "LocalClaw": 500
+  },
+  "other_agents_tokens": 500
+}
+```
+
+- First agent to connect becomes **primary** (owns main context window)
+- Other agents tracked separately in `agent_tokens`
+- Prevents context pollution between agents
+
+### ACP Server
+
+To run your own ACP server, see the [ACP Specification](https://github.com/VTSTech/ACP-Agent-Control-Panel):
+
+```bash
+# ACP is a single Python file
+python VTSTech-GLMACP.py
+
+# With cloudflare tunnel
+GLMACP_TUNNEL=auto python VTSTech-GLMACP.py
+```
+
+---
+
 ## Remote Ollama Configuration
 
 To use a remote Ollama instance (e.g., via Cloudflare tunnel), edit `localclaw/core/ollama_client.py`:
@@ -621,6 +704,7 @@ python cli.py chat --model qwen2.5-coder:0.5b --debug --verbose --tools python_r
 | `--num-ctx N` | Set context window size |
 | `--num-predict N` | Set max output tokens |
 | `--force-react` | Force text-based ReAct format |
+| `--acp` | Enable ACP integration for activity tracking |
 
 ---
 

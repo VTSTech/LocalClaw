@@ -812,6 +812,7 @@ def build_parser() -> argparse.ArgumentParser:
           --num-predict N        Max tokens to generate (smaller = faster)
           --temperature TEMP     Temperature (default: 0.7)
           --force-react          Force ReAct text-based tool calling
+          --acp                  Enable ACP (Agent Control Panel) integration for activity tracking
 
         examples:
           localclaw run "What is the capital of France?"
@@ -821,6 +822,7 @@ def build_parser() -> argparse.ArgumentParser:
           localclaw chat --tools calculator,shell,python_repl
           localclaw chat --skills skill-creator --tools write_file,shell
           localclaw chat --fast --stream --verbose
+          localclaw chat --acp --tools shell,read_file,write_file
           localclaw models
           localclaw tools
           localclaw skills
