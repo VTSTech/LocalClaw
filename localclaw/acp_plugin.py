@@ -5,7 +5,19 @@ This plugin connects LocalClaw agents to an ACP (Agent Control Panel) server,
 enabling real-time monitoring, token tracking, and STOP/Resume control.
 
 ACP Specification: v1.0.3
-Compliance: Full (mandatory requirements, hints, orphan handling, nudge support)
+Compliance: Full (mandatory requirements, hints, orphan handling, nudge support, batch ops, shutdown)
+
+Features:
+- Logs all tool calls to ACP (using combined /api/action endpoint)
+- Logs shell commands to /api/shell/add (MANDATORY per spec §5.0)
+- Tracks tokens using ACP's estimation
+- Respects ACP STOP flag (raises StopIteration)
+- Processes hints field for context-aware decisions
+- Handles orphan_warning by completing orphaned activities
+- Processes nudge field for mid-task guidance
+- Syncs final answers as AI notes
+- Batch operations for efficient multi-file reads (v1.0.3)
+- Graceful shutdown support (v1.0.2)
 
 Usage:
     from localclaw import Agent
@@ -31,6 +43,15 @@ Usage:
 
     # Run - all activity logged to ACP
     result = agent.run("What is 2^20?")
+
+    # Batch operations (efficient for multiple files):
+    result = acp.batch_start([
+        {"action": "READ", "target": "/file1.py", "content_size": 5000},
+        {"action": "READ", "target": "/file2.py", "content_size": 3000},
+    ])
+
+    # Graceful shutdown:
+    acp.shutdown("Work complete")
 
 Written by VTSTech — https://www.vts-tech.org
 """
@@ -693,6 +714,262 @@ class ACPPlugin:
     def get_duration_stats(self) -> dict:
         """Get activity duration statistics (v1.0.3)."""
         return self._request("/api/stats/duration")
+
+    # ------------------------------------------------------------------ #
+    #  Batch Operations (v1.0.3)                                          #
+    # ------------------------------------------------------------------ #
+
+    def batch_start(
+        self,
+        activities: list[dict],
+    ) -> dict:
+        """
+        Start multiple activities in a single atomic request.
+
+        This is more efficient than individual /api/action calls when
+        reading multiple files or starting several operations at once.
+
+        Parameters
+        ----------
+        activities : list[dict]
+            List of activity dicts, each with:
+            - action: Action type (READ, WRITE, etc.)
+            - target: Target string (file path, command, etc.)
+            - details: Optional description
+            - content_size: Optional character count for token tracking
+            - priority: Optional priority (high, medium, low)
+
+        Returns
+        -------
+        dict
+            Response with 'results' array containing activity_id for each
+
+        Example
+        -------
+        >>> result = acp.batch_start([
+        ...     {"action": "READ", "target": "/file1.py", "content_size": 5000},
+        ...     {"action": "READ", "target": "/file2.py", "content_size": 3000},
+        ... ])
+        >>> activity_ids = [r["activity_id"] for r in result["results"]]
+        """
+        if not self.enabled:
+            return {"success": False, "error": "Plugin disabled"}
+
+        # Build operations array for /api/activity/batch
+        operations = []
+        for act in activities:
+            op = {
+                "type": "start",
+                "action": act.get("action", "READ"),
+                "target": act.get("target", ""),
+                "details": act.get("details", ""),
+                "content_size": act.get("content_size", 0),
+                "priority": act.get("priority", "medium"),
+                "metadata": self._build_metadata(act.get("tool")),
+            }
+            if act.get("details"):
+                op["details"] = act["details"]
+            operations.append(op)
+
+        resp = self._request("/api/activity/batch", "POST", {
+            "operations": operations,
+        })
+
+        # Process response fields
+        self._process_response_fields(resp)
+
+        # Track activity IDs
+        if resp.get("success"):
+            for result in resp.get("results", []):
+                if result.get("success") and result.get("activity_id"):
+                    self._activity_stack.append(result["activity_id"])
+
+        return resp
+
+    def batch_complete(
+        self,
+        completions: list[dict],
+    ) -> dict:
+        """
+        Complete multiple activities in a single atomic request.
+
+        Parameters
+        ----------
+        completions : list[dict]
+            List of completion dicts, each with:
+            - activity_id: ID of activity to complete
+            - result: Optional result summary
+            - error: Optional error message
+            - content_size: Optional character count for token tracking
+
+        Returns
+        -------
+        dict
+            Response with 'results' array for each completion
+
+        Example
+        -------
+        >>> result = acp.batch_complete([
+        ...     {"activity_id": "id1", "result": "File read successfully"},
+        ...     {"activity_id": "id2", "result": "File read successfully"},
+        ... ])
+        """
+        if not self.enabled:
+            return {"success": False, "error": "Plugin disabled"}
+
+        # Build operations array
+        operations = []
+        for comp in completions:
+            op = {
+                "type": "complete",
+                "activity_id": comp.get("activity_id"),
+                "result": comp.get("result", ""),
+                "content_size": comp.get("content_size", 0),
+            }
+            if comp.get("error"):
+                op["error"] = comp["error"]
+            operations.append(op)
+
+        resp = self._request("/api/activity/batch", "POST", {
+            "operations": operations,
+        })
+
+        # Remove from activity stack
+        if resp.get("success"):
+            completed_ids = {c.get("activity_id") for c in completions}
+            self._activity_stack = [
+                aid for aid in self._activity_stack if aid not in completed_ids
+            ]
+
+        return resp
+
+    def batch_action(
+        self,
+        operations: list[dict],
+    ) -> dict:
+        """
+        Execute mixed batch of start and complete operations.
+
+        This is the most flexible batch method - combine starts and
+        completions in a single atomic request.
+
+        Parameters
+        ----------
+        operations : list[dict]
+            List of operations, each with:
+            - type: "start" or "complete"
+            - For start: action, target, details, content_size, priority
+            - For complete: activity_id, result, error, content_size
+
+        Returns
+        -------
+        dict
+            Response with 'results' array for each operation
+
+        Example
+        -------
+        >>> # Complete previous reads and start new ones
+        >>> result = acp.batch_action([
+        ...     {"type": "complete", "activity_id": "prev1", "result": "Done"},
+        ...     {"type": "complete", "activity_id": "prev2", "result": "Done"},
+        ...     {"type": "start", "action": "READ", "target": "/newfile.py"},
+        ... ])
+        """
+        if not self.enabled:
+            return {"success": False, "error": "Plugin disabled"}
+
+        # Add metadata to start operations
+        for op in operations:
+            if op.get("type") == "start":
+                op["metadata"] = self._build_metadata(op.get("tool"))
+
+        resp = self._request("/api/activity/batch", "POST", {
+            "operations": operations,
+        })
+
+        self._process_response_fields(resp)
+
+        # Track/cleanup activity IDs
+        if resp.get("success"):
+            for result in resp.get("results", []):
+                if result.get("operation") == "start" and result.get("activity_id"):
+                    self._activity_stack.append(result["activity_id"])
+                elif result.get("operation") == "complete":
+                    # Remove from stack if present
+                    completed_id = result.get("activity_id")
+                    if completed_id in self._activity_stack:
+                        self._activity_stack.remove(completed_id)
+
+        return resp
+
+    # ------------------------------------------------------------------ #
+    #  Shutdown Support (v1.0.2)                                          #
+    # ------------------------------------------------------------------ #
+
+    def shutdown(
+        self,
+        reason: str = "Session ended by LocalClaw",
+        export_summary: bool = True,
+    ) -> dict:
+        """
+        Gracefully end the ACP session.
+
+        This triggers:
+        1. Session summary export for context recovery
+        2. Cancellation of all running activities
+        3. Shutdown nudge sent to any connected agents
+        4. Server stops after brief delay
+
+        Parameters
+        ----------
+        reason : str
+            Human-readable reason for shutdown
+        export_summary : bool
+            Whether to export session summary (default: True)
+
+        Returns
+        -------
+        dict
+            Response with shutdown status and summary path
+
+        Example
+        -------
+        >>> # End session gracefully
+        >>> result = acp.shutdown("Work complete, ending session")
+        >>> print(f"Summary saved to: {result.get('summary_path')}")
+        """
+        if not self.enabled:
+            return {"success": False, "error": "Plugin disabled"}
+
+        resp = self._request("/api/shutdown", "POST", {
+            "reason": reason,
+            "export_summary": export_summary,
+        })
+
+        self._log(f"Shutdown requested: {reason}")
+
+        # Clear local state
+        if resp.get("success"):
+            self._activity_stack.clear()
+            self._current_activity_id = None
+
+        return resp
+
+    def is_shutdown_nudge(self, nudge: dict) -> bool:
+        """
+        Check if a nudge is a shutdown notification.
+
+        Parameters
+        ----------
+        nudge : dict
+            Nudge dict from ACP response
+
+        Returns
+        -------
+        bool
+            True if this is a shutdown nudge
+        """
+        return nudge and nudge.get("type") == "shutdown"
 
     def get_todos(self) -> list[dict]:
         """
