@@ -359,14 +359,13 @@ class ACPPlugin:
             return {"success": False, "error": str(e)}
 
     def _ensure_csrf_token(self):
-        """Ensure we have a valid CSRF token."""
         now = time.time()
-        # Refresh if no token or expired (> 50 minutes, tokens last 1 hour)
-        if not self._csrf_token or (now - self._csrf_expiry) > 3000:
+        if self._csrf_token is None or (now - self._csrf_expiry) > 3000:
             resp = self._request("/api/csrf-token")
-            self._csrf_token = resp.get("csrf_token", "")
+            token = resp.get("csrf_token")
+            # If CSRF is disabled, use empty string sentinel so we don't re-fetch
+            self._csrf_token = token if token else ""
             self._csrf_expiry = now
-            self._log(f"CSRF token refreshed")
 
     # ------------------------------------------------------------------ #
     #  JSON-RPC 2.0 Support (1.0.4 - A2A Compliance)                          #
