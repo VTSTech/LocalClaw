@@ -1716,20 +1716,29 @@ class ACPPlugin:
 
     def a2a_heartbeat(self) -> dict:
         """
-        Send heartbeat to update agent's last_seen timestamp.
+        Update agent's last_seen timestamp to maintain online status.
 
-        Call this periodically (every 30-60 seconds) to maintain online status.
+        Per spec §3.7, there is no dedicated heartbeat endpoint. Online status
+        is computed from last_seen: agents seen within 60 seconds are "online".
+        To stay online, re-register via POST /api/agents/register — this updates
+        last_seen without changing other fields.
+
+        Call this every 30-60 seconds during long-running sessions.
 
         Returns
         -------
         dict
-            Heartbeat response with success status
+            Re-registration response with success status
         """
         if not self.enabled:
             return {"success": False, "error": "Plugin disabled"}
 
-        return self._request("/api/agents/heartbeat", "POST", {
+        # Re-register to update last_seen — spec §3.7: online = last_seen < 60s ago
+        return self._request("/api/agents/register", "POST", {
             "agent_name": self.agent_name,
+            "capabilities": self.capabilities,
+            "model_name": self.model_name,
+            "endpoint": self.endpoint,
         })
 
     def a2a_get_agents(self, use_jsonrpc: bool = False) -> list[dict]:
@@ -1784,7 +1793,7 @@ class ACPPlugin:
         payload: dict | None = None,
         message_type: str = "notification",
         subject: str | None = None,
-        priority: int = 5,
+        priority: str = "normal",
         ttl: int = 3600,
         reply_to: str | None = None,
         use_jsonrpc: bool = True,
@@ -1806,8 +1815,8 @@ class ACPPlugin:
             "request" (expects response), "response" (reply), or "notification"
         subject : str | None
             Human-readable subject line
-        priority : int
-            Message priority 1-10 (default: 5)
+        priority : str
+            Message priority per spec §3.12: "normal" | "high" | "urgent" (default: "normal")
         ttl : int
             Time-to-live in seconds (default: 3600 = 1 hour)
         reply_to : str | None
@@ -1842,7 +1851,7 @@ class ACPPlugin:
                 "metadata": {
                     "action": action,
                     "target_agent": to_agent,
-                    "priority": priority,
+                    "priority": priority,  # str: "normal"|"high"|"urgent" per spec §3.12
                 }
             }
 
@@ -1885,10 +1894,14 @@ class ACPPlugin:
         """
         Get messages for this agent.
 
+        Per spec §4.13, uses GET /api/a2a/history?to=<agent_name> to retrieve
+        messages addressed to this agent.
+
         Parameters
         ----------
         since : float | None
-            Optional timestamp to only get messages after this time
+            Unused — spec does not support since-based filtering.
+            Messages expire automatically via TTL.
 
         Returns
         -------
@@ -1898,11 +1911,7 @@ class ACPPlugin:
         if not self.enabled:
             return []
 
-        data = {"agent_name": self.agent_name}
-        if since:
-            data["since"] = since
-
-        resp = self._request("/api/a2a/inbox", "POST", data)
+        resp = self._request(f"/api/a2a/history?to={self.agent_name}")
 
         messages = resp.get("messages", [])
         if messages:
@@ -1912,48 +1921,47 @@ class ACPPlugin:
 
     def a2a_clear(self, older_than_hours: int = 24) -> dict:
         """
-        Clear old messages (optional cleanup).
+        No-op — there is no message clear endpoint in the ACP spec.
+
+        Per spec §4.13, the only A2A endpoints are:
+          - POST /api/a2a/send
+          - GET  /api/a2a/history
+
+        Messages are capped at MAX_A2A_MESSAGES=100 server-side (spec §8.2)
+        and expire automatically via their TTL/expires_at field.
 
         Parameters
         ----------
         older_than_hours : int
-            Clear messages older than this many hours (default: 24)
+            Ignored — kept for API compatibility.
 
         Returns
         -------
         dict
-            Response with cleared count
+            Always returns success (no-op)
         """
-        if not self.enabled:
-            return {"success": False, "error": "Plugin disabled"}
-
-        return self._request("/api/a2a/clear", "POST", {
-            "older_than_hours": older_than_hours,
-        })
+        return {"success": True, "note": "No-op — ACP has no clear endpoint; messages expire via TTL per spec §8.2"}
 
     def a2a_acknowledge(self, msg_ids: str | list[str]) -> dict:
         """
-        Acknowledge (remove) messages after processing.
+        No-op — acknowledgement is not part of the ACP spec.
+
+        Per spec §4.13 and §3.12, messages expire automatically via their
+        TTL/expires_at field. There is no acknowledgement or delete endpoint.
+        To avoid processing the same message twice, track processed IDs locally
+        or filter by created_at timestamp.
 
         Parameters
         ----------
         msg_ids : str | list[str]
-            Message ID or list of message IDs to acknowledge
+            Ignored — kept for API compatibility.
 
         Returns
         -------
         dict
-            Response with removed count
+            Always returns success (no-op)
         """
-        if not self.enabled:
-            return {"success": False, "error": "Plugin disabled"}
-
-        if isinstance(msg_ids, str):
-            msg_ids = [msg_ids]
-
-        return self._request("/api/a2a/acknowledge", "POST", {
-            "msg_ids": msg_ids,
-        })
+        return {"success": True, "note": "No-op — ACP messages expire via TTL per spec §3.12"}
 
     def a2a_get_history(
         self,
@@ -2224,12 +2232,10 @@ class ACPPlugin:
 
             processed.append(result)
 
-        # Acknowledge (remove) all processed messages
+        # Note: per spec §3.12, messages expire via TTL — no acknowledgement endpoint.
+        # a2a_acknowledge() is a no-op. Messages will naturally expire.
         if processed:
-            msg_ids = [p["msg_id"] for p in processed]
-            ack_result = self.a2a_acknowledge(msg_ids)
-            if ack_result.get("success"):
-                self._log(f"A2A: Acknowledged {len(msg_ids)} message(s)")
+            self._log(f"A2A: Processed {len(processed)} message(s) — will expire via TTL")
 
         return processed
 
