@@ -68,7 +68,9 @@ import json
 import time
 import urllib.request
 import urllib.error
-from typing import Any, Callable
+from contextlib import contextmanager
+from dataclasses import dataclass, field
+from typing import Any, Callable, Generator
 
 # Import StepResult for type hints (optional - works without it)
 try:
@@ -81,6 +83,73 @@ except ImportError:
 from .config import ACP_BASE_URL as DEFAULT_ACP_URL
 from .config import ACP_USER as DEFAULT_ACP_USER
 from .config import ACP_PASS as DEFAULT_ACP_PASS
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# COST ESTIMATION (Merged from acp_streaming.py)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# Approximate costs per 1M tokens (as of 2024, will vary)
+MODEL_COSTS = {
+    # OpenAI
+    "gpt-4": {"input": 30.0, "output": 60.0},
+    "gpt-4-turbo": {"input": 10.0, "output": 30.0},
+    "gpt-3.5-turbo": {"input": 0.5, "output": 1.5},
+    # Anthropic
+    "claude-3-opus": {"input": 15.0, "output": 75.0},
+    "claude-3-sonnet": {"input": 3.0, "output": 15.0},
+    "claude-3-haiku": {"input": 0.25, "output": 1.25},
+    # Local (free)
+    "local": {"input": 0.0, "output": 0.0},
+    # Default for unknown
+    "default": {"input": 0.0, "output": 0.0},
+}
+
+
+@dataclass
+class CostTracker:
+    """Track approximate costs for API calls."""
+    input_tokens: int = 0
+    output_tokens: int = 0
+    model: str = "local"
+    
+    @property
+    def total_tokens(self) -> int:
+        return self.input_tokens + self.output_tokens
+    
+    @property
+    def estimated_cost(self) -> float:
+        """Return estimated cost in USD."""
+        costs = MODEL_COSTS.get(self.model, MODEL_COSTS["default"])
+        input_cost = (self.input_tokens / 1_000_000) * costs["input"]
+        output_cost = (self.output_tokens / 1_000_000) * costs["output"]
+        return input_cost + output_cost
+    
+    def add(self, input_tokens: int, output_tokens: int):
+        self.input_tokens += input_tokens
+        self.output_tokens += output_tokens
+
+
+@dataclass
+class SessionHealth:
+    """Track session health metrics."""
+    acp_connected: bool = True
+    last_successful_heartbeat: float = 0.0
+    failed_requests: int = 0
+    total_requests: int = 0
+    last_error: str | None = None
+    
+    @property
+    def health_score(self) -> float:
+        """Return 0.0-1.0 health score."""
+        if self.total_requests == 0:
+            return 1.0
+        success_rate = 1.0 - (self.failed_requests / self.total_requests)
+        return success_rate
+    
+    @property
+    def is_healthy(self) -> bool:
+        return self.health_score > 0.8 and self.acp_connected
 
 
 class ACPPlugin:
@@ -218,6 +287,12 @@ class ACPPlugin:
         # This allows other agents to know what actions this agent supports
         self._auto_skills = self._generate_skills_from_tools()
 
+        # v1.0.5: Health and cost tracking (merged from acp_streaming.py)
+        self.health = SessionHealth()
+        self.costs = CostTracker(model=model_name or "local")
+        self.token_budget = 0  # Set via set_token_budget() if needed
+        self.on_budget_exceeded: Callable[[int, int], None] | None = None
+
     # ------------------------------------------------------------------ #
     #  Internal HTTP Methods                                              #
     # ------------------------------------------------------------------ #
@@ -234,9 +309,12 @@ class ACPPlugin:
         data: dict | None = None,
         timeout: float = 5.0,
     ) -> dict:
-        """Make HTTP request to ACP server."""
+        """Make HTTP request to ACP server with health tracking."""
         if not self.enabled:
             return {"success": False, "error": "Plugin disabled"}
+
+        # Track request for health monitoring
+        self.health.total_requests += 1
 
         # Refresh CSRF token for POST requests
         if method == "POST":
@@ -261,13 +339,23 @@ class ACPPlugin:
 
         try:
             with urllib.request.urlopen(req, timeout=timeout) as resp:
-                return json.loads(resp.read().decode())
+                result = json.loads(resp.read().decode())
+                self.health.last_successful_heartbeat = time.time()
+                self.health.acp_connected = True
+                return result
         except urllib.error.HTTPError as e:
+            self.health.failed_requests += 1
+            self.health.last_error = f"HTTP {e.code}"
             error_body = e.read().decode() if e.fp else ""
             return {"success": False, "error": f"HTTP {e.code}: {error_body}"}
         except urllib.error.URLError as e:
+            self.health.failed_requests += 1
+            self.health.acp_connected = False
+            self.health.last_error = str(e.reason)
             return {"success": False, "error": f"Connection error: {e.reason}"}
         except Exception as e:
+            self.health.failed_requests += 1
+            self.health.last_error = str(e)
             return {"success": False, "error": str(e)}
 
     def _ensure_csrf_token(self):
@@ -1030,6 +1118,130 @@ class ACPPlugin:
         """Get per-agent token breakdown from ACP (v1.0.3)."""
         status = self.get_status()
         return status.get("agent_tokens", {})
+
+    # ------------------------------------------------------------------ #
+    #  Budget & Cost Tracking (v1.0.5 - merged from acp_streaming.py)     #
+    # ------------------------------------------------------------------ #
+
+    def set_token_budget(self, budget: int, on_exceeded: Callable[[int, int], None] | None = None):
+        """
+        Set token budget limit for this session.
+        
+        Parameters
+        ----------
+        budget : int
+            Maximum tokens allowed (0 = unlimited)
+        on_exceeded : Callable[[current, budget], None] | None
+            Callback when budget is exceeded
+        """
+        self.token_budget = budget
+        self.on_budget_exceeded = on_exceeded
+
+    def get_remaining_budget(self) -> int:
+        """Get remaining tokens in budget. Returns -1 if unlimited."""
+        if self.token_budget <= 0:
+            return -1
+        current = self.get_session_tokens()
+        return max(0, self.token_budget - current)
+
+    def check_budget(self) -> bool:
+        """Check if we're within token budget. Raises StopIteration if exceeded."""
+        if self.token_budget <= 0:
+            return True
+        
+        current = self.get_session_tokens()
+        if current >= self.token_budget:
+            if self.on_budget_exceeded:
+                self.on_budget_exceeded(current, self.token_budget)
+            raise StopIteration(f"Token budget exceeded: {current}/{self.token_budget}")
+        return True
+
+    @contextmanager
+    def track_operation(self, action: str, target: str) -> Generator[str | None, None, None]:
+        """
+        Context manager for tracking an operation.
+        
+        Usage:
+            with acp.track_operation("READ", "/path/to/file") as activity_id:
+                # do work
+                result = read_file("/path/to/file")
+            # Activity automatically completed on exit
+        
+        Parameters
+        ----------
+        action : str
+            ACP action type (READ, WRITE, BASH, etc.)
+        target : str
+            Target string (file path, command, etc.)
+        
+        Yields
+        ------
+        str | None
+            Activity ID or None if tracking disabled
+        """
+        activity_id = None
+        start_time = time.time()
+        
+        # Start activity
+        resp = self._request("/api/action", "POST", {
+            "action": action,
+            "target": target[:200],
+            "details": f"Tracked operation: {action}",
+            "priority": "medium",
+            "metadata": {"agent_name": self.agent_name}
+        })
+        activity_id = resp.get("activity_id")
+        if activity_id:
+            self._activity_stack.append(activity_id)
+        
+        try:
+            yield activity_id
+        except Exception as e:
+            if activity_id:
+                self._request("/api/complete", "POST", {
+                    "activity_id": activity_id,
+                    "result": f"Error: {e}"
+                })
+                if activity_id in self._activity_stack:
+                    self._activity_stack.remove(activity_id)
+            raise
+        else:
+            # Completed successfully
+            if activity_id:
+                elapsed = time.time() - start_time
+                self._request("/api/complete", "POST", {
+                    "activity_id": activity_id,
+                    "result": f"Completed in {elapsed:.1f}s"
+                })
+                if activity_id in self._activity_stack:
+                    self._activity_stack.remove(activity_id)
+
+    @property
+    def summary(self) -> dict:
+        """
+        Get plugin session summary.
+        
+        Returns
+        -------
+        dict
+            Summary with health, costs, and activity stats
+        """
+        return {
+            "agent_name": self.agent_name,
+            "model_name": self.model_name,
+            "enabled": self.enabled,
+            "health_score": self.health.health_score,
+            "is_healthy": self.health.is_healthy,
+            "acp_connected": self.health.acp_connected,
+            "total_requests": self.health.total_requests,
+            "failed_requests": self.health.failed_requests,
+            "total_tokens": self.costs.total_tokens,
+            "estimated_cost_usd": self.costs.estimated_cost,
+            "steps_logged": self._step_count,
+            "pending_activities": len(self._activity_stack),
+            "token_budget": self.token_budget,
+            "remaining_budget": self.get_remaining_budget(),
+        }
 
     def add_note(self, category: str, content: str, importance: str = "normal") -> dict:
         """Add a note to ACP."""

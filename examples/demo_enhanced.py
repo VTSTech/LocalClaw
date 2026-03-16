@@ -27,7 +27,7 @@ from localclaw import (
 from localclaw.tools.builtins import BUILTIN_REGISTRY
 from localclaw.tools.extended import EXTENDED_TOOLS
 from localclaw.core.orchestrator_enhanced import Orchestrator as EnhancedOrchestrator, AgentCard as EnhancedAgentCard
-from localclaw.acp_streaming import ACPStreamingPlugin
+from localclaw.acp_plugin import ACPPlugin  # Merged: was ACPStreamingPlugin
 
 print(f"""
 ╔═══════════════════════════════════════════════════════════════════╗
@@ -129,17 +129,19 @@ def demo_parallel_orchestrator():
 
 def demo_acp_streaming():
     print("\n" + "="*60)
-    print("DEMO 3: ACP Streaming with Cost Tracking")
+    print("DEMO 3: ACP Plugin with Cost Tracking (merged)")
     print("="*60)
     
-    # Create streaming plugin (uses config defaults)
-    plugin = ACPStreamingPlugin(
+    # Create ACP plugin with cost tracking (uses config defaults)
+    plugin = ACPPlugin(
         agent_name="LocalClaw-Demo",
-        model="local",  # Local model = free
-        token_budget=50000,
+        model_name=DEFAULT_MODEL,  # Local model = free
         debug=True,
         enabled=True
     )
+    
+    # Set optional token budget
+    plugin.set_token_budget(50000)
     
     status = plugin.get_status()
     if "error" in status:
