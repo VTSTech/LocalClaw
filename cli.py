@@ -199,7 +199,7 @@ def _build_agent(args, client: OllamaClient):
                 sys.exit(1)
 
     # Build system prompt
-    system_prompt = getattr(args, "system", None) or "You are a helpful assistant. Answer concisely and directly."
+    system_prompt = getattr(args, "system", None) or "You are the AI Agent: LocalClaw, You have access to tools."
     
     # Add skill instructions if skills are loaded
     if len(skill_registry) > 0:
