@@ -4,8 +4,8 @@
 This plugin connects LocalClaw agents to an ACP (Agent Control Panel) server,
 enabling real-time monitoring, token tracking, and STOP/Resume control.
 
-ACP Specification: v1.0.4
-Compliance: Full (mandatory requirements, hints, orphan handling, nudge support, batch ops, shutdown, A2A)
+ACP Specification: v1.0.4 (A2A Compliance)
+Compliance: Full (mandatory requirements, hints, orphan handling, nudge support, batch ops, shutdown, A2A, JSON-RPC 2.0)
 
 Features:
 - Logs all tool calls to ACP (using combined /api/action endpoint)
@@ -19,6 +19,10 @@ Features:
 - Batch operations for efficient multi-file reads (v1.0.3)
 - Graceful shutdown support (v1.0.2)
 - A2A Agent Registry and Messaging (v1.0.4)
+- JSON-RPC 2.0 support for A2A compliance (1.0.4)
+- Agent Card discovery via well-known URI (1.0.4)
+- AgentSkill registration support (1.0.4)
+- contextId tracking for session continuity (1.0.4)
 
 Usage:
     from localclaw import Agent
@@ -174,6 +178,13 @@ class ACPPlugin:
         # Track pending nudge for acknowledgment
         self._pending_nudge: dict | None = None
 
+        # 1.0.4: A2A compliance - context tracking
+        self._context_id: str | None = None
+        self._jsonrpc_id: int = 0  # Incrementing ID for JSON-RPC requests
+
+        # 1.0.4: AgentSkills for A2A Agent Card
+        self._skills: list[dict] | None = None
+
         # Tool name to ACP action type mapping
         self._action_map = {
             "read_file": "READ",
@@ -191,6 +202,10 @@ class ACPPlugin:
             "list_notes": "READ",
             "list_directory": "READ",
         }
+
+        # 1.0.4: Auto-generate AgentSkills from tools for A2A discovery
+        # This allows other agents to know what actions this agent supports
+        self._auto_skills = self._generate_skills_from_tools()
 
     # ------------------------------------------------------------------ #
     #  Internal HTTP Methods                                              #
@@ -253,6 +268,291 @@ class ACPPlugin:
             self._csrf_token = resp.get("csrf_token", "")
             self._csrf_expiry = now
             self._log(f"CSRF token refreshed")
+
+    # ------------------------------------------------------------------ #
+    #  JSON-RPC 2.0 Support (1.0.4 - A2A Compliance)                          #
+    # ------------------------------------------------------------------ #
+
+    def _jsonrpc_request(
+        self,
+        method: str,
+        params: dict | None = None,
+        timeout: float = 5.0,
+    ) -> dict:
+        """
+        Make a JSON-RPC 2.0 request to ACP server.
+
+        This is the A2A-compliant way to communicate with ACP.
+
+        Parameters
+        ----------
+        method : str
+            JSON-RPC method name (e.g., "SendMessage", "GetTask", "RegisterAgent")
+        params : dict | None
+            Method parameters
+        timeout : float
+            Request timeout in seconds
+
+        Returns
+        -------
+        dict
+            JSON-RPC response with 'result' or 'error'
+        """
+        if not self.enabled:
+            return {"error": {"code": -32603, "message": "Plugin disabled"}}
+
+        # Build JSON-RPC 2.0 request
+        self._jsonrpc_id += 1
+        request_body = {
+            "jsonrpc": "2.0",
+            "id": self._jsonrpc_id,
+            "method": method,
+            "params": params or {}
+        }
+
+        headers = {
+            "Authorization": f"Basic {self.auth}",
+            "Content-Type": "application/json",
+            "X-Agent-Name": self.agent_name,  # 1.0.4: Agent identification header
+        }
+
+        url = f"{self.base_url}/jsonrpc"
+        body = json.dumps(request_body).encode()
+
+        req = urllib.request.Request(
+            url,
+            headers=headers,
+            method="POST",
+            data=body,
+        )
+
+        try:
+            with urllib.request.urlopen(req, timeout=timeout) as resp:
+                response = json.loads(resp.read().decode())
+
+                # Check for JSON-RPC error
+                if "error" in response:
+                    return {"error": response["error"]}
+
+                # Return result
+                return response.get("result", {})
+
+        except urllib.error.HTTPError as e:
+            error_body = e.read().decode() if e.fp else ""
+            return {"error": {"code": e.code, "message": error_body}}
+        except urllib.error.URLError as e:
+            return {"error": {"code": -32300, "message": f"Connection error: {e.reason}"}}
+        except json.JSONDecodeError as e:
+            return {"error": {"code": -32700, "message": f"Parse error: {e}"}}
+        except Exception as e:
+            return {"error": {"code": -32603, "message": str(e)}}
+
+    def get_agent_card(self) -> dict:
+        """
+        Get ACP server's Agent Card from well-known URI.
+
+        Returns
+        -------
+        dict
+            Agent Card with name, description, skills, capabilities
+        """
+        if not self.enabled:
+            return {"error": "Plugin disabled"}
+
+        headers = {
+            "Authorization": f"Basic {self.auth}",
+        }
+
+        url = f"{self.base_url}/.well-known/agent-card.json"
+
+        req = urllib.request.Request(url, headers=headers, method="GET")
+
+        try:
+            with urllib.request.urlopen(req, timeout=5.0) as resp:
+                return json.loads(resp.read().decode())
+        except Exception as e:
+            return {"error": str(e)}
+
+    def _generate_skills_from_tools(self) -> list[dict]:
+        """
+        Auto-generate AgentSkill objects from LocalClaw's tool mapping.
+
+        Per ACP-Spec 1.0.4 §3.10, AgentSkill objects describe specific capabilities
+        an agent can perform. This method creates them automatically from the
+        _action_map so other agents can discover what actions this agent supports.
+
+        Returns
+        -------
+        list[dict]
+            List of AgentSkill objects for A2A registration
+        """
+        # Define skill templates for each tool type
+        skill_templates = {
+            "read_file": {
+                "id": "read_file",
+                "name": "Read File",
+                "description": "Read the contents of a file from the filesystem",
+                "tags": ["file", "read", "filesystem"],
+                "examples": ["Read /etc/passwd", "Read the contents of config.py"],
+                "inputModes": ["text/plain", "application/json"],
+                "outputModes": ["text/plain"],
+            },
+            "write_file": {
+                "id": "write_file",
+                "name": "Write File",
+                "description": "Create or overwrite a file with new content",
+                "tags": ["file", "write", "create", "filesystem"],
+                "examples": ["Create a new Python script", "Write config to file"],
+                "inputModes": ["text/plain", "application/json"],
+                "outputModes": ["text/plain"],
+            },
+            "edit_file": {
+                "id": "edit_file",
+                "name": "Edit File",
+                "description": "Modify an existing file with targeted edits",
+                "tags": ["file", "edit", "modify", "filesystem"],
+                "examples": ["Edit the config file", "Fix a bug in the code"],
+                "inputModes": ["text/plain", "application/json"],
+                "outputModes": ["text/plain"],
+            },
+            "shell": {
+                "id": "shell",
+                "name": "Execute Shell Command",
+                "description": "Run a bash/shell command and return the output",
+                "tags": ["bash", "shell", "command", "execute"],
+                "examples": ["Run ls -la", "Execute npm install", "Run pytest"],
+                "inputModes": ["text/plain", "application/json"],
+                "outputModes": ["text/plain"],
+            },
+            "web_search": {
+                "id": "web_search",
+                "name": "Web Search",
+                "description": "Search the web for information",
+                "tags": ["web", "search", "internet", "query"],
+                "examples": ["Search for Python tutorials", "Find documentation for FastAPI"],
+                "inputModes": ["text/plain", "application/json"],
+                "outputModes": ["text/plain", "application/json"],
+            },
+            "http_get": {
+                "id": "http_get",
+                "name": "HTTP GET Request",
+                "description": "Make an HTTP GET request to a URL",
+                "tags": ["http", "api", "request", "get"],
+                "examples": ["GET https://api.example.com/data", "Fetch data from API"],
+                "inputModes": ["text/plain", "application/json"],
+                "outputModes": ["text/plain", "application/json"],
+            },
+            "http_post": {
+                "id": "http_post",
+                "name": "HTTP POST Request",
+                "description": "Make an HTTP POST request to a URL",
+                "tags": ["http", "api", "request", "post"],
+                "examples": ["POST data to API", "Submit form data"],
+                "inputModes": ["text/plain", "application/json"],
+                "outputModes": ["text/plain", "application/json"],
+            },
+            "calculator": {
+                "id": "calculator",
+                "name": "Calculator",
+                "description": "Evaluate mathematical expressions",
+                "tags": ["math", "calculate", "expression"],
+                "examples": ["Calculate 2^20", "Evaluate sqrt(144)"],
+                "inputModes": ["text/plain"],
+                "outputModes": ["text/plain"],
+            },
+            "python_repl": {
+                "id": "python_repl",
+                "name": "Python REPL",
+                "description": "Execute Python code and return the result",
+                "tags": ["python", "code", "execute", "repl"],
+                "examples": ["Run Python script", "Execute Python expression"],
+                "inputModes": ["text/plain", "application/json"],
+                "outputModes": ["text/plain"],
+            },
+            "list_directory": {
+                "id": "list_directory",
+                "name": "List Directory",
+                "description": "List contents of a directory",
+                "tags": ["directory", "list", "files", "filesystem"],
+                "examples": ["List files in /home", "Show directory contents"],
+                "inputModes": ["text/plain"],
+                "outputModes": ["text/plain", "application/json"],
+            },
+        }
+
+        # Generate skills for tools in our action map
+        skills = []
+        for tool_name in self._action_map.keys():
+            if tool_name in skill_templates:
+                skills.append(skill_templates[tool_name])
+
+        return skills
+
+    def set_skills(self, skills: list[dict]) -> None:
+        """
+        Set agent skills for A2A Agent Card (overrides auto-generated skills).
+
+        Skills define what this agent can do for other agents.
+
+        Parameters
+        ----------
+        skills : list[dict]
+            List of skill objects, each with:
+            - id: Unique skill identifier
+            - name: Human-readable name
+            - description: What this skill does
+            - tags: Keywords for discovery
+            - examples: Example prompts
+            - inputModes: Supported input MIME types (default: ["text/plain"])
+            - outputModes: Supported output MIME types (default: ["text/plain"])
+
+        Example
+        -------
+        >>> acp.set_skills([
+        ...     {
+        ...         "id": "code_generation",
+        ...         "name": "Code Generation",
+        ...         "description": "Generate code from specifications",
+        ...         "tags": ["code", "generation", "programming"],
+        ...         "examples": ["Create a REST API", "Write a Python function"]
+        ...     }
+        ... ])
+        """
+        self._skills = skills
+
+    def get_skills(self) -> list[dict]:
+        """
+        Get the agent's skills for A2A discovery.
+
+        Returns custom skills if set via set_skills(), otherwise returns
+        auto-generated skills from LocalClaw's tool mapping.
+
+        Returns
+        -------
+        list[dict]
+            List of AgentSkill objects
+        """
+        return self._skills if self._skills else self._auto_skills
+
+    def get_context_id(self, create: bool = True) -> str | None:
+        """
+        Get current contextId for A2A session continuity.
+
+        Parameters
+        ----------
+        create : bool
+            If True and no context exists, create one
+
+        Returns
+        -------
+        str | None
+            Current contextId or None
+        """
+        if self._context_id is None and create:
+            import uuid
+            self._context_id = f"ctx-{uuid.uuid4().hex[:12]}"
+            self._log(f"Created contextId: {self._context_id}")
+        return self._context_id
 
     def _check_stop_flag(self) -> bool:
         """Check if STOP flag is set on ACP server."""
@@ -1115,30 +1415,53 @@ class ACPPlugin:
         self._pending_nudge = None
 
     # ------------------------------------------------------------------ #
-    #  A2A Methods (v1.0.4)                                               #
+    #  A2A Methods (v1.0.4, 1.0.4 - JSON-RPC 2.0)                            #
     # ------------------------------------------------------------------ #
 
-    def a2a_register(self) -> dict:
+    def a2a_register(self, use_jsonrpc: bool = True) -> dict:
         """
         Register this agent with the A2A Agent Registry.
 
         Call this after bootstrap to make the agent discoverable by other agents.
-        Registration includes capabilities, model name, and optional endpoint.
+        Registration includes capabilities, model name, skills, and optional endpoint.
+
+        1.0.4: Supports JSON-RPC 2.0 for A2A compliance.
+
+        Parameters
+        ----------
+        use_jsonrpc : bool
+            Use JSON-RPC 2.0 if True (default), REST API otherwise
 
         Returns
         -------
         dict
-            Registration response with success status and agent details
+            Registration response with success status and agent_card
         """
         if not self.enabled:
             return {"success": False, "error": "Plugin disabled"}
 
-        resp = self._request("/api/agents/register", "POST", {
+        # Get skills (custom or auto-generated)
+        skills = self.get_skills()
+        
+        params = {
             "agent_name": self.agent_name,
             "capabilities": self.capabilities,
             "model_name": self.model_name,
             "endpoint": self.endpoint,
-        })
+            "skills": skills,
+        }
+
+        if use_jsonrpc:
+            resp = self._jsonrpc_request("RegisterAgent", params)
+            if "error" in resp:
+                # Fallback to REST
+                self._log(f"JSON-RPC failed, falling back to REST: {resp.get('error')}")
+                resp = self._request("/api/agents/register", "POST", params)
+            elif "agent_card" in resp:
+                self._log(f"A2A: Registered via JSON-RPC as {self.agent_name}")
+                return {"success": True, "agent_card": resp["agent_card"]}
+        else:
+            resp = self._request("/api/agents/register", "POST", params)
 
         if resp.get("success"):
             self._log(f"A2A: Registered as {self.agent_name}")
@@ -1186,17 +1509,27 @@ class ACPPlugin:
             "agent_name": self.agent_name,
         })
 
-    def a2a_get_agents(self) -> list[dict]:
+    def a2a_get_agents(self, use_jsonrpc: bool = False) -> list[dict]:
         """
-        Get list of all registered agents.
+        Get list of all registered agents with their Agent Cards.
+
+        Parameters
+        ----------
+        use_jsonrpc : bool
+            Use JSON-RPC 2.0 for A2A compliance
 
         Returns
         -------
         list[dict]
-            List of agent objects with name, capabilities, status, etc.
+            List of agent cards with name, skills, capabilities, status
         """
         if not self.enabled:
             return []
+
+        if use_jsonrpc:
+            resp = self._jsonrpc_request("GetAgents", {})
+            if "error" not in resp:
+                return resp.get("agents", [])
 
         resp = self._request("/api/agents")
         return resp.get("agents", [])
@@ -1231,9 +1564,12 @@ class ACPPlugin:
         priority: int = 5,
         ttl: int = 3600,
         reply_to: str | None = None,
+        use_jsonrpc: bool = True,
     ) -> dict:
         """
         Send an A2A message to another agent.
+
+        1.0.4: Supports JSON-RPC 2.0 SendMessage for A2A compliance.
 
         Parameters
         ----------
@@ -1253,15 +1589,54 @@ class ACPPlugin:
             Time-to-live in seconds (default: 3600 = 1 hour)
         reply_to : str | None
             Message ID this is a reply to
+        use_jsonrpc : bool
+            Use JSON-RPC 2.0 SendMessage if True (default)
 
         Returns
         -------
         dict
-            Response with success status and message_id
+            Response with success status and message_id or task
         """
         if not self.enabled:
             return {"success": False, "error": "Plugin disabled"}
 
+        # 1.0.4: Use JSON-RPC SendMessage for A2A compliance
+        if use_jsonrpc:
+            # Build A2A-format message
+            parts = []
+            if payload:
+                if isinstance(payload, dict):
+                    parts.append({"data": payload})
+                else:
+                    parts.append({"text": str(payload)})
+            else:
+                parts.append({"text": action})
+
+            message = {
+                "contextId": self._context_id,
+                "messageId": f"msg-{time.time_ns()}",
+                "parts": parts,
+                "metadata": {
+                    "action": action,
+                    "target_agent": to_agent,
+                    "priority": priority,
+                }
+            }
+
+            resp = self._jsonrpc_request("SendMessage", {"message": message})
+            if "error" not in resp:
+                task = resp.get("task", {})
+                self._log(f"A2A: Sent via JSON-RPC to {to_agent}: {action}")
+                return {
+                    "success": True,
+                    "message_id": task.get("id"),
+                    "task": task,
+                    "context_id": task.get("contextId"),
+                }
+            else:
+                self._log(f"JSON-RPC failed, falling back to REST: {resp.get('error')}")
+
+        # Fallback to REST API
         data = {
             "from_agent": self.agent_name,
             "to_agent": to_agent,
@@ -1450,6 +1825,49 @@ class ACPPlugin:
         self._log(f"A2A: Broadcast {action} to {len(results)} agent(s)")
         return results
 
+    def a2a_map_action_to_tool(self, action: str) -> str | None:
+        """
+        Map an incoming A2A action to a LocalClaw tool name.
+
+        ACP-Spec 1.0.4: Other agents send actions like "read_file", "shell", etc.
+        This method maps those actions to LocalClaw tool names.
+
+        Parameters
+        ----------
+        action : str
+            Action name from incoming A2A message
+
+        Returns
+        -------
+        str | None
+            LocalClaw tool name or None if not supported
+        """
+        # Direct mapping for standard tool names
+        tool_map = {
+            "read_file": "read_file",
+            "read": "read_file",
+            "write_file": "write_file",
+            "write": "write_file",
+            "edit_file": "edit_file",
+            "edit": "edit_file",
+            "shell": "shell",
+            "bash": "shell",
+            "execute": "shell",
+            "web_search": "web_search",
+            "search": "web_search",
+            "http_get": "http_get",
+            "get": "http_get",
+            "http_post": "http_post",
+            "post": "http_post",
+            "calculator": "calculator",
+            "calculate": "calculator",
+            "python_repl": "python_repl",
+            "python": "python_repl",
+            "list_directory": "list_directory",
+            "ls": "list_directory",
+        }
+        return tool_map.get(action.lower())
+
     def a2a_process_inbox(
         self,
         tool_executor: Callable[[str, dict], Any] | None = None,
@@ -1495,6 +1913,10 @@ class ACPPlugin:
 
             self._log(f"A2A: Processing {msg_type} from {from_agent}: {action}")
 
+            # Map action to LocalClaw tool
+            tool_name = self.a2a_map_action_to_tool(action)
+            supported = tool_name is not None
+
             result = {
                 "msg_id": msg_id,
                 "from_agent": from_agent,
@@ -1503,10 +1925,33 @@ class ACPPlugin:
                 "status": "processed",
                 "result": None,
                 "error": None,
+                "tool_name": tool_name,
+                "supported": supported,
             }
 
-            # Only process request-type messages
-            if msg_type == "request" and tool_executor:
+            # Check if action is supported
+            if msg_type == "request" and not supported:
+                result["status"] = "unsupported"
+                result["error"] = f"Tool not found: {action}"
+                self._log(f"A2A: Unsupported action: {action}")
+                
+                # Send error response
+                if auto_respond:
+                    self.a2a_send(
+                        to_agent=from_agent,
+                        action=f"{action}_result",
+                        payload={
+                            "text": "",
+                            "success": True,
+                            "result": {"error": f"Tool not found: {action} (action: {action})"},
+                            "original_msg_id": msg_id,
+                        },
+                        message_type="request",
+                        reply_to=msg_id,
+                    )
+
+            # Only process request-type messages with supported actions
+            elif msg_type == "request" and tool_executor:
                 try:
                     exec_result = tool_executor(action, payload)
                     result["result"] = exec_result
