@@ -163,7 +163,7 @@ class ACPPlugin:
         self.debug = debug
         self.agent_name = agent_name
         self.model_name = model_name
-        self.capabilities = capabilities or ["code", "research"]  # v1.0.4: A2A capabilities
+        self._capabilities_override = capabilities  # Store for later, derive from tools if not provided
         self.endpoint = endpoint  # v1.0.4: A2A endpoint
 
         self._csrf_token: str | None = None
@@ -202,6 +202,17 @@ class ACPPlugin:
             "list_notes": "READ",
             "list_directory": "READ",
         }
+
+        # v1.0.4: Auto-derive capabilities from tool action map if not explicitly provided
+        # This ensures agents announce their actual tool capabilities to ACP/A2A
+        if self._capabilities_override:
+            self.capabilities = self._capabilities_override
+        else:
+            # Derive from _action_map unique values (ACP action types)
+            self.capabilities = list(set(self._action_map.values()))
+            # Add CHAT capability for conversational ability
+            if "CHAT" not in self.capabilities:
+                self.capabilities.append("CHAT")
 
         # 1.0.4: Auto-generate AgentSkills from tools for A2A discovery
         # This allows other agents to know what actions this agent supports
