@@ -19,6 +19,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from localclaw import Agent, OllamaClient
 from localclaw.tools.builtins import make_builtin_registry
+from localclaw.model_discovery import get_ollama_models
 
 
 def normalize_text(text: str) -> str:
@@ -42,17 +43,23 @@ SYSTEM_PROMPT_WITH_TOOLS = """You are a helpful assistant with access to tools.
 - Always execute tools rather than describing how to use them"""
 
 
-# Models to test
-MODELS = [
-    'qwen2.5-coder:0.5b-instruct-q4_k_m',
-    'granite3.1-moe:1b',
-    'qwen3:0.6b',
-    'llama3.2:1b',
-    'gemma3:270m',
-    'qwen2-math:1.5b',
-    'functiongemma:270m',
-    'smollm:135m',
-]
+# Models discovered dynamically at runtime
+# Filter for small models (indicators: 0.5b, 1b, 1.5b, 270m, 135m, 0.6b, etc.)
+SMALL_MODEL_INDICATORS = ["0.5b", "270m", "135m", "350m", "0.6b", "1b", "1.5b", "tiny", "mini", "micro", "small", "moe"]
+
+
+def get_small_models(client: OllamaClient) -> list[str]:
+    """Get list of small models from Ollama."""
+    available = get_ollama_models(client)
+    small_models = []
+    for model in available:
+        model_lower = model.lower()
+        if any(ind in model_lower for ind in SMALL_MODEL_INDICATORS):
+            small_models.append(model)
+    return small_models
+
+
+MODELS = []  # Will be populated dynamically in main()
 
 # Verbosity level: 0=minimal, 1=show failures, 2=show all responses
 VERBOSITY = 2
@@ -216,19 +223,16 @@ def main():
             print(f"   ⚠️ Could not load existing results: {e}")
             results = {}
 
-    # Filter to available models
-    models_to_test = [m for m in MODELS if any(m.split(':')[0] in a or m.split('-')[0] in a for a in available)]
-    print(f"   Testing: {', '.join(models_to_test)}")
+    # Get small models dynamically
+    models_to_test = get_small_models(client)
+    print(f"   Small models to test: {', '.join(models_to_test)}")
 
     for model in models_to_test:
-        # Find exact name
-        exact_name = next((a for a in available if model.split(':')[0] in a), model)
-
         print(f"\n{'='*50}")
-        print(f"🧪 Testing: {exact_name}")
+        print(f"🧪 Testing: {model}")
         print(f"{'='*50}")
 
-        test_model(client, exact_name, results)
+        test_model(client, model, results)
 
     # Print rankings
     print(f"\n{'='*50}")

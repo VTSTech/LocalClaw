@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 """
-GSM8K Agent Benchmark - Using LocalClaw Agent System
+GSM8K Agent Benchmark with ACP - Using LocalClaw Agent System
 
 This benchmark uses the full Agent system with:
   • Calculator tool for accurate arithmetic
   • Chain-of-thought prompting
   • Better output parsing
   • Math-specific system prompts
-  • Dynamic model discovery (no hardcoded models)
+  • Dynamic model discovery
+  • ACP integration for activity tracking
 
 Uses centralized config from localclaw/config.py
 """
@@ -17,30 +18,27 @@ import time
 import sys
 import os
 
-# Add LocalClaw package to path (parent directory)
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from localclaw.core.ollama_client import OllamaClient
 from localclaw.core.tools import ToolRegistry, Tool, ToolParam
-from localclaw.core.agent import Agent
+from localclaw.core.agent import Agent, StepResult
 from localclaw.core.math_prompts import (
     MATH_SYSTEM_PROMPT,
     MATH_SYSTEM_PROMPT_COMPACT,
     extract_number,
     calculator_tool,
 )
-from localclaw.model_discovery import get_ollama_models, pick_models_for_benchmark
+from localclaw.model_discovery import pick_models_for_benchmark
+from localclaw.acp_plugin import ACPPlugin
 from localclaw import OLLAMA_BASE_URL
 
-# Ollama URL from centralized config
 OLLAMA_URL = OLLAMA_BASE_URL
-
-RESULTS_FILE = "/home/z/my-project/download/gsm8k_agent_results.jsonl"
-LOG_FILE = "/home/z/my-project/download/gsm8k_agent_progress.log"
+RESULTS_FILE = "/home/z/my-project/download/gsm8k_agent_acp_results.jsonl"
+LOG_FILE = "/home/z/my-project/download/gsm8k_agent_acp_progress.log"
 
 # 50 GSM8K-style questions
 QUESTIONS = [
-    # Basic arithmetic (1-10)
     ("What is 15 + 27?", "42"),
     ("What is 8 times 7?", "56"),
     ("What is 100 minus 37?", "63"),
@@ -51,7 +49,6 @@ QUESTIONS = [
     ("What is 6 times 9?", "54"),
     ("What is 81 divided by 9?", "9"),
     ("What is 35 + 65?", "100"),
-    # Word problems basic (11-20)
     ("Janet has 8 apples. She buys 12 more. How many apples does she have now?", "20"),
     ("A book costs $15. If you pay with $20, how much change do you get?", "5"),
     ("There are 24 students in a class. If 6 are absent, how many are present?", "18"),
@@ -62,7 +59,6 @@ QUESTIONS = [
     ("If 5 pens cost $10, how much does 1 pen cost?", "2"),
     ("What is 15% of 80?", "12"),
     ("A rectangle is 8 feet long and 5 feet wide. What is the area in square feet?", "40"),
-    # Intermediate arithmetic (21-30)
     ("What is 12 times 11?", "132"),
     ("What is 3 squared plus 4 squared?", "25"),
     ("A store has 156 items. They sell 89. How many remain?", "67"),
@@ -73,7 +69,6 @@ QUESTIONS = [
     ("What is 1000 minus 777?", "223"),
     ("What is 9 times 8?", "72"),
     ("What is 18 divided by 3?", "6"),
-    # Word problems intermediate (31-40)
     ("Mary reads 12 pages per day. How many pages in 5 days?", "60"),
     ("A box contains 48 eggs. If 12 eggs are broken, how many are good?", "36"),
     ("John earns $15 per hour. How much for 6 hours of work?", "90"),
@@ -84,7 +79,6 @@ QUESTIONS = [
     ("What is 50 minus 17?", "33"),
     ("A garden has 15 rows with 8 plants each. How many plants total?", "120"),
     ("What is 11 times 11?", "121"),
-    # Advanced (41-50)
     ("What is 16 times 5?", "80"),
     ("A shirt costs $25. If it is 20% off, how much do you save?", "5"),
     ("What is 360 divided by 6?", "60"),
@@ -99,7 +93,6 @@ QUESTIONS = [
 
 
 def log(msg):
-    """Write to log file and print"""
     timestamp = time.strftime("%H:%M:%S")
     line = f"[{timestamp}] {msg}"
     print(line)
@@ -108,12 +101,11 @@ def log(msg):
 
 
 def create_calculator_tool():
-    """Create calculator tool for the agent"""
     registry = ToolRegistry()
     
     @registry.tool(
         description="Evaluate a mathematical expression. Use this for ALL arithmetic operations.",
-        param_descriptions={"expression": "Math expression to evaluate (e.g., '15 + 27', 'sqrt(144)')"}
+        param_descriptions={"expression": "Math expression to evaluate"}
     )
     def calculator(expression: str) -> str:
         return calculator_tool(expression)
@@ -121,16 +113,11 @@ def create_calculator_tool():
     return registry
 
 
-def test_model_with_agent(model: str, question: str, expected: str, client: OllamaClient) -> dict:
-    """
-    Test a model using the full Agent system with calculator tool.
-    """
+def test_model_with_agent(model: str, question: str, expected: str, client: OllamaClient, acp: ACPPlugin) -> dict:
     try:
-        # Choose prompt based on model size
         is_small = any(x in model.lower() for x in ["270m", "135m", "350m", "0.5b", "tiny", "1b"])
         system_prompt = MATH_SYSTEM_PROMPT_COMPACT if is_small else MATH_SYSTEM_PROMPT
         
-        # Create agent with tools
         agent = Agent(
             model=model,
             tools=create_calculator_tool(),
@@ -138,17 +125,16 @@ def test_model_with_agent(model: str, question: str, expected: str, client: Olla
             max_steps=5,
             client=client,
             model_options={"num_predict": 150},
+            on_step=acp.on_step,
         )
         
         start = time.time()
         result = agent.run(question)
         elapsed = time.time() - start
         
-        # Extract answer from agent's final response
         final_answer = result.final_answer or ""
         extracted = extract_number(final_answer)
         
-        # Check correctness
         correct = False
         if extracted:
             try:
@@ -179,33 +165,42 @@ def test_model_with_agent(model: str, question: str, expected: str, client: Olla
 
 
 def main():
-    # Clear previous results
     open(RESULTS_FILE, "w").close()
     open(LOG_FILE, "w").close()
     
-    # Shared client
     client = OllamaClient()
     
-    # Discover available models dynamically
+    if not client.is_running():
+        log("ERROR: Ollama is not running!")
+        sys.exit(1)
+    
+    # Setup ACP
+    acp = ACPPlugin(
+        agent_name="LocalClaw-GSM8K",
+        debug=os.environ.get("ACP_DEBUG", "").lower() in ("1", "true"),
+    )
+    
+    log(f"ACP URL: {acp.base_url}")
+    bootstrap = acp.bootstrap(claim_primary=False)
+    if bootstrap.get("stop_flag"):
+        log(f"ACP STOP flag set: {bootstrap.get('stop_reason')}")
+        sys.exit(0)
+    
+    # Discover models
     log("Discovering available models...")
     MODELS = pick_models_for_benchmark(max_models=6, prefer_small=True, client=client)
     
     if not MODELS:
-        log("ERROR: No models found! Make sure Ollama is running with models pulled.")
-        log("Run: ollama pull qwen2.5-coder:0.5b-instruct-q4_k_m")
+        log("ERROR: No models found!")
         sys.exit(1)
     
     log(f"Found {len(MODELS)} models: {MODELS}")
     
     results = []
     total_tests = len(MODELS) * len(QUESTIONS)
-    completed = 0
     
-    log(f"\nStarting GSM8K Agent Benchmark")
-    log(f"Models: {len(MODELS)}")
-    log(f"Questions per model: {len(QUESTIONS)}")
-    log(f"Total tests: {total_tests}")
-    log(f"Using: Agent system with calculator tool")
+    log(f"\nStarting GSM8K Agent Benchmark (ACP)")
+    log(f"Models: {len(MODELS)}, Questions: {len(QUESTIONS)}, Total: {total_tests}")
     log("=" * 50)
     
     overall_start = time.time()
@@ -216,9 +211,8 @@ def main():
         model_start = time.time()
         
         for i, (question, expected) in enumerate(QUESTIONS):
-            result = test_model_with_agent(model, question, expected, client)
+            result = test_model_with_agent(model, question, expected, client, acp)
             results.append(result)
-            completed += 1
             
             status = "✓" if result["correct"] else "✗"
             elapsed = result.get("time", 0)
@@ -229,14 +223,12 @@ def main():
             if result["correct"]:
                 correct_count += 1
             
-            # Brief pause between tests
             time.sleep(0.3)
         
         model_time = time.time() - model_start
         accuracy = (correct_count / len(QUESTIONS)) * 100
         log(f"  Score: {correct_count}/{len(QUESTIONS)} = {accuracy:.1f}% (Time: {model_time:.1f}s)")
         
-        # Save progress after each model
         with open(RESULTS_FILE, "a") as f:
             for r in results:
                 f.write(json.dumps(r) + "\n")
@@ -252,7 +244,6 @@ def main():
 
 
 def summarize_results(models: list[str]):
-    """Print final summary"""
     try:
         results = []
         with open(RESULTS_FILE, "r") as f:
@@ -261,7 +252,7 @@ def summarize_results(models: list[str]):
                     results.append(json.loads(line))
         
         print("\n" + "=" * 70)
-        print("GSM8K AGENT BENCHMARK RESULTS (with calculator tool)")
+        print("GSM8K AGENT BENCHMARK RESULTS (with calculator tool + ACP)")
         print("=" * 70)
         print(f"{'Model':<40} | {'Score':^7} | {'Accuracy':^8} | {'Avg Time':^8}")
         print("-" * 70)

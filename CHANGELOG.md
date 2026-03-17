@@ -6,6 +6,52 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [R03] - 2026-03-17
+
+### Added
+- **BitNet Backend Support** - Alternative inference backend using Microsoft's BitNet b1.58 2-bit quantization
+  - New `BitnetClient` class in `localclaw/bitnet_client.py`
+  - Setup helper in `localclaw/bitnet_setup.py` for cloning and compiling BitNet
+  - CLI flag `--backend bitnet` to switch from Ollama to BitNet
+  - Known models: `bitnet-b1.58-2b-4t`, `BitNet-b1.58-2B-4T`
+- **Enhanced Security in Built-in Tools**
+  - Path validation with configurable allowed directories (`LOCALCLAW_ALLOWED_PATHS`)
+  - Command blocklist with dangerous commands blocked (`LOCALCLAW_BLOCKED_COMMANDS`)
+  - Dangerous pattern detection (piping to bash, command substitution, device writes)
+  - SSRF protection in `http_get` with private IP blocking and DNS rebinding prevention
+  - Three security modes: `strict`, `permissive`, `disabled` (`LOCALCLAW_SECURITY_MODE`)
+- **ACP Plugin Enhancements**
+  - Merged `acp_streaming.py` into `acp_plugin.py` for unified ACP support
+  - Added `CostTracker` and `SessionHealth` classes for monitoring
+  - JSON-RPC 2.0 support for A2A compliance
+  - Agent Card discovery via `/.well-known/agent-card.json`
+  - Auto-generated AgentSkills from tool mapping
+- **Agent Improvements**
+  - Pre-call argument synthesis for missing required arguments
+  - Redundant calculator call detection to avoid unnecessary tool invocations
+  - Enhanced few-shot prompting for small models
+  - Improved date/time query handling with automatic Python code synthesis
+
+### Changed
+- Version tags updated from R02 to R03 across all files
+- CLI now supports `--backend ollama|bitnet` flag for backend selection
+- Tool system now has comprehensive security validation layer
+- ACP streaming functionality consolidated into main plugin
+
+### Removed
+- `localclaw/acp_streaming.py` - merged into `acp_plugin.py`
+
+### Pending Testing
+- BitNet backend testing with `bitnet-b1.58-2b-4t` model
+- Tool calling compatibility with BitNet models (currently requires ReAct fallback)
+- Benchmark comparison between Ollama and BitNet backends
+
+### Known Issues
+- BitNet models require `--force-react` as they don't support native tool calling
+- BitNet backend requires separate `llama-server` process running
+
+---
+
 ## [R02] - 2026-03-10
 
 ### Added

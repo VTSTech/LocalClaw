@@ -2,6 +2,7 @@
 examples/01_basic_agent.py
 --------------------------
 The simplest possible LocalClaw agent — no tools, just conversation.
+Uses dynamic model discovery to find available models.
 
 Run from the project root:   python examples/01_basic_agent.py
 Or from the examples folder: python 01_basic_agent.py
@@ -14,6 +15,7 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from localclaw import Agent, OllamaClient
+from localclaw.model_discovery import pick_best_model
 
 # ── 1. Verify Ollama is running ────────────────────────────────────
 client = OllamaClient()
@@ -25,24 +27,26 @@ print("✓  Ollama is running")
 print(f"   Available models: {client.list_models()}\n")
 
 # ── 2. Create an agent ─────────────────────────────────────────────
-# Recommended models (<=1B parameters, tested and working):
-#   - qwen2.5:0.5b      (494M, fastest, good quality)
-#   - tinyllama:latest  (1B, medium speed, good quality)
-#   - llama3.2:1b       (1.2B, slower, best quality)
-#
-# Set LOCALCLAW_MODEL env var to override, or change here
-MODEL = os.environ.get("LOCALCLAW_MODEL", "qwen2.5:0.5b")
+# Dynamically pick the best available model
+# Set LOCALCLAW_MODEL env var to override
+preferred = os.environ.get("LOCALCLAW_MODEL")
+MODEL = pick_best_model(preferred=preferred, client=client)
+
+if not MODEL:
+    print("❌  No models available. Pull one with: ollama pull qwen2.5-coder:0.5b")
+    sys.exit(1)
 
 agent = Agent(
     model=MODEL,
     system_prompt="You are a concise and helpful assistant. Keep answers brief.",
     model_options={
-        "temperature": 0.7,     # Some creativity for chat
-        "num_ctx": 1024,        # Moderate context
-        "num_predict": 256,     # Reasonable response length
+        "temperature": 0.7,
+        "num_ctx": 1024,
+        "num_predict": 256,
     },
 )
 print(f"   Using model: {agent.model}\n")
+
 # ── 3. Single-turn chat ────────────────────────────────────────────
 answer = agent.chat("What is the capital of France, and why is it historically significant?")
 print("Answer:", answer)

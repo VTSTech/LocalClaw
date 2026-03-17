@@ -19,6 +19,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from localclaw import Agent, OllamaClient
 from localclaw.tools.builtins import make_builtin_registry
+from localclaw.model_discovery import get_ollama_models
 
 
 def normalize_text(text: str) -> str:
@@ -33,20 +34,8 @@ def normalize_text(text: str) -> str:
 # Verbosity level: 0=minimal, 1=show failures, 2=show all responses
 VERBOSITY = 2
 
-# Models to test (1B parameters or less)
-MODELS = [
-    "gemma3:270m",
-    "granite4:350m",
-    "granite3.1-moe:1b",
-    "qwen3:0.6b",
-    "qwen2.5:0.5b",
-    "qwen2.5-coder:0.5b-instruct-q4_k_m",
-    "tinyllama:latest",
-    "llama3.2:1b",
-    "qwen2-math:1.5b",
-    "functiongemma:270m",
-    "smollm:135m",
-]
+# Models discovered dynamically at runtime
+MODELS = []  # Will be populated from available Ollama models
 
 # System prompts for different test types
 SYSTEM_PROMPT_NO_TOOLS = """You are a helpful assistant. Follow these rules:
