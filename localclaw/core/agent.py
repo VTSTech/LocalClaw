@@ -1493,38 +1493,61 @@ class Agent:
             if not self._native_tools and self.tools.all():
                 thought, t_name, t_args, final_answer = _parse_react(content)
 
+                # Also try JSON tool call format (BitNet, some small models)
+                # Models may output {"name": "tool", "arguments": {...}} instead of ReAct format
+                if not t_name and not final_answer:
+                    json_name, json_args = _parse_json_tool_call(content)
+                    if json_name:
+                        t_name = json_name
+                        t_args = json_args
+                        if self.debug:
+                            print(f"    ReAct path: parsed JSON tool call: name={t_name!r}, args={t_args!r}")
+
                 if thought:
                     step = StepResult(type="thought", content=thought, elapsed_ms=elapsed)
                     run.steps.append(step)
                     self._emit(step)
 
                 if t_name and t_name.strip() and t_args is not None:
-                    t_args = _normalize_args(t_args, self.tools.get(t_name))
-                    _tool_call_counts[t_name] = _tool_call_counts.get(t_name, 0) + 1
+                    # Check if tool exists, try fuzzy matching if not
+                    if not self.tools.get(t_name):
+                        fuzzy_name = _fuzzy_match_tool_name(t_name, self.tools)
+                        if self.debug:
+                            print(f"    ReAct fuzzy_match({t_name!r}) -> {fuzzy_name!r}")
+                        if fuzzy_name:
+                            t_name = fuzzy_name
+                        else:
+                            if self.debug:
+                                print(f"    Unknown tool {t_name!r}, skipping")
+                            t_name = None
+                    
+                    if t_name:
+                        t_args = _normalize_args(t_args, self.tools.get(t_name))
+                        _tool_call_counts[t_name] = _tool_call_counts.get(t_name, 0) + 1
 
-                    call_step = StepResult(
-                        type="tool_call",
-                        content=content,
-                        tool_name=t_name,
-                        tool_args=t_args,
-                        elapsed_ms=elapsed,
-                    )
-                    run.steps.append(call_step)
-                    self._emit(call_step)
+                        call_step = StepResult(
+                            type="tool_call",
+                            content=content,
+                            tool_name=t_name,
+                            tool_args=t_args,
+                            elapsed_ms=elapsed,
+                        )
+                        run.steps.append(call_step)
+                        self._emit(call_step)
 
-                    result = self.tools.invoke(t_name, t_args)
-                    result_str = str(result)
+                        result = self.tools.invoke(t_name, t_args)
+                        result_str = str(result)
 
-                    result_step = StepResult(type="tool_result", content=result_str, tool_name=t_name)
-                    run.steps.append(result_step)
-                    self._emit(result_step)
+                        result_step = StepResult(type="tool_result", content=result_str, tool_name=t_name)
+                        run.steps.append(result_step)
+                        self._emit(result_step)
 
-                    if not result_str.startswith("[Tool error]"):
-                        _successful_results.append(f"{t_name} → {result_str}")
+                        if not result_str.startswith("[Tool error]"):
+                            _successful_results.append(f"{t_name} → {result_str}")
 
-                    observation = content + f"\nObservation: {result_str}\n"
-                    self.memory.add_assistant(observation)
-                    continue
+                        observation = content + f"\nObservation: {result_str}\n"
+                        self.memory.add_assistant(observation)
+                        continue
 
                 if final_answer:
                     final_step = StepResult(type="final", content=final_answer, elapsed_ms=elapsed)
