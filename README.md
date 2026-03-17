@@ -108,7 +108,7 @@ python cli.py chat --backend bitnet --model bitnet-b1.58-2b-4t --force-react
 ```
 
 > **Note**: BitNet models require `--force-react` as they don't support native tool calling.
-> BitNet testing is pending — all current benchmarks are with Ollama backend.
+> BitNet benchmark results are now available — see **BitNet Benchmark Results** section below.
 
 ---
 
@@ -821,6 +821,84 @@ Key insights for small model prompt engineering:
 
 ---
 
+## BitNet Benchmark Results
+
+LocalClaw R03 has been tested with **Microsoft BitNet-b1.58-2B-4T** — a 2B parameter model with 1.58-bit ternary weights, designed for efficient CPU inference.
+
+### Test Results Summary
+
+| Test Suite | Score | Time | Notes |
+|------------|-------|------|-------|
+| **Model Comparison** (15 tests) | **13/15 (87%)** | 394s | 5 categories |
+| **Robust Comparison** (22 tests) | **19/22 (86%)** | ~6min | Incremental save |
+| **Comprehensive Test** (7 tests) | **6/7 (86%)** | ~90s | Basic + Reasoning + Code |
+
+### Category Breakdown (Model Comparison - 15 tests)
+
+| Category | Score | Pass Rate |
+|----------|-------|-----------|
+| **Math** | 3/3 | 100% ✅ |
+| **Code** | 3/3 | 100% ✅ |
+| **Calc (with tools)** | 3/3 | 100% ✅ |
+| **Reasoning** | 2/3 | 67% |
+| **Knowledge** | 2/3 | 67% |
+| **Total** | **13/15** | **87%** |
+
+### Failed Tests
+
+| Test | Expected | Got | Category |
+|------|----------|-----|----------|
+| Apples (reasoning) | 5 | 7 | Reasoning |
+| Brazil capital | Brasília | São Paulo | Knowledge |
+
+### Performance Notes
+
+| Metric | Value |
+|--------|-------|
+| **Avg response time** | 5-10s (simple), 100s+ (tool use) |
+| **Tool calling** | ReAct fallback (no native support) |
+| **Context window** | Default (model dependent) |
+| **Inference** | CPU-efficient ternary weights |
+
+### BitNet vs Ollama Small Models
+
+| Rank | Model | Score | Params | Backend |
+|:----:|-------|------:|-------:|---------|
+| 🥇 | `qwen2.5-coder:0.5b-instruct-q4_k_m` | 14/15 (93%) | 494M | Ollama |
+| 🥈 | **`BitNet-b1.58-2B-4T`** | **13/15 (87%)** | **2B** | **BitNet** |
+| 🥉 | `granite3.1-moe:1b` | 12/15 (80%) | 1B MoE | Ollama |
+| 4 | `llama3.2:1b` | 12/15 (80%) | 1.2B | Ollama |
+
+> **Note**: BitNet uses 1.58-bit ternary weights, making it highly efficient for CPU inference despite having 2B parameters.
+
+### BitNet Setup for Benchmarking
+
+```bash
+# 1. Clone and compile BitNet
+python localclaw/bitnet_setup.py
+
+# 2. Start the BitNet server
+./build/bin/llama-server -m models/BitNet-b1.58-2B-4T/ggml-model-i2_s.gguf
+
+# 3. Run benchmark
+export LOCALCLAW_BACKEND=bitnet
+python examples/07_model_comparison.py
+
+# 4. Run with ACP tracking
+export LOCALCLAW_BACKEND=bitnet
+python examples/07_model_comparison_acp.py
+```
+
+### Observations
+
+1. **Excellent for CPU-only systems** — ternary weights enable fast inference without GPU
+2. **Solid tool usage** — ReAct fallback handles calculator tools reliably
+3. **Code generation strong** — 100% pass rate on function writing tasks
+4. **Multi-step reasoning challenges** — the "apples" test requires tracking state
+5. **Knowledge gaps** — São Paulo is commonly mistaken for Brazil's capital
+
+---
+
 ## About
 
 **🦞 LocalClaw R03** is written and maintained by **VTSTech**.
@@ -831,4 +909,4 @@ Key insights for small model prompt engineering:
 
 ---
 
-> **Testing Status**: All benchmarks and test results shown are with **Ollama backend**. BitNet backend testing is pending and will be added in a future update.
+> **Testing Status**: LocalClaw has been tested with both **Ollama** (11 small models) and **BitNet** (BitNet-b1.58-2B-4T) backends. BitNet achieved **87%** on the benchmark, making it the 2nd best performer overall. See **Tested Small Models** and **BitNet Benchmark Results** sections for details.
