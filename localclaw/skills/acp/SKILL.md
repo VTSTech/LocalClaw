@@ -177,6 +177,79 @@ POST {ACP_URL}/api/todos/update {"todos": [...]}
 
 ---
 
+## FILE MANAGEMENT
+
+The ACP server provides a File Manager for workspace access. All agent-generated files should be uploaded to `/workspace/` on the ACP server for centralized access and sharing.
+
+### Base Directory
+
+Files are served from a base directory configured via `ACP_BASE_DIR` environment variable (default: `.`). All paths are relative to this base.
+
+**Recommended:** Set `ACP_BASE_DIR=/workspace` and upload all agent files there.
+
+### Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/files/list` | GET | List directory contents (headers: `X-Path`, `X-Sort-By`, `X-Sort-Dir`) |
+| `/api/files/view` | GET | View text file content (header: `X-Path`) |
+| `/api/files/download` | GET | Download any file (query: `path`) |
+| `/api/files/image` | GET | Get image file |
+| `/api/files/stats` | GET | Get file statistics |
+| `/api/files/upload` | POST | Upload file (headers: `X-Path`, `X-Filename`, body: raw binary) |
+| `/api/files/save` | POST | Save edited file `{"path": "...", "content": "..."}` |
+| `/api/files/delete` | POST | Delete file/directory `{"path": "..."}` |
+| `/api/files/mkdir` | POST | Create directory `{"path": "...", "name": "..."}` |
+| `/api/files/extract` | POST | Extract archive `{"path": "archive.zip"}` |
+| `/api/files/compress` | POST | Create zip `{"path": "...", "name": "...", "items": [...]}` |
+
+### Upload File Example
+
+```bash
+# Upload a file to /workspace/ on ACP server
+curl -u admin:secret -X POST "{ACP_URL}/api/files/upload" \
+  -H "X-Path: workspace" \
+  -H "X-Filename: output.txt" \
+  -H "Content-Type: application/octet-stream" \
+  --data-binary @/local/path/to/output.txt
+```
+
+### Save Text File Example
+
+```bash
+# Save text content directly
+POST {ACP_URL}/api/files/save {
+  "path": "workspace/report.md",
+  "content": "# Report\n\nContent here..."
+}
+```
+
+### View File Example
+
+```bash
+# View file content (returns JSON with content, lines, tokens)
+GET {ACP_URL}/api/files/view
+Header: X-Path: workspace/report.md
+
+# Response:
+{
+  "content": "file contents...",
+  "path": "workspace/report.md",
+  "lines": 150,
+  "tokens": 450,
+  "session_tokens": 45450
+}
+```
+
+### Workflow Recommendation
+
+1. **Log action** via `/api/action` before uploading
+2. **Upload files** to `/workspace/` on ACP server
+3. **Complete activity** with file path in result
+4. Human can access files via ACP web UI or download endpoints
+
+---
+
 ## QUICK REFERENCE
 
 ```bash
@@ -206,6 +279,14 @@ POST /api/todos/update  # Sync TODOs
 GET  /api/agents
 POST /api/a2a/send
 GET  /api/a2a/history?to=<name>
+
+# File Management
+GET  /api/files/list            # List directory (header: X-Path)
+GET  /api/files/view            # View text file (header: X-Path)
+GET  /api/files/download?path=  # Download file
+POST /api/files/upload          # Upload binary (headers: X-Path, X-Filename)
+POST /api/files/save            # Save text {"path": "...", "content": "..."}
+POST /api/files/mkdir           # Create dir {"path": "...", "name": "..."}
 ```
 
 ---
@@ -221,6 +302,7 @@ GET  /api/a2a/history?to=<name>
 - [ ] Log **ALL** shell commands via `/api/shell/add` (except ACP calls)
 - [ ] Log TODO changes as `TODO` action type
 - [ ] Use combined endpoint for efficiency: complete previous + start new in one call
+- [ ] **Upload files to `/workspace/`** on ACP server for centralized access
 
 ---
 
