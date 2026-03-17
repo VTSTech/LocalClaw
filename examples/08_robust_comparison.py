@@ -46,18 +46,23 @@ SYSTEM_PROMPT_WITH_TOOLS = """You are a helpful assistant with access to tools.
 
 
 # Models discovered dynamically at runtime
-# Filter for small models (indicators: 0.5b, 1b, 1.5b, 270m, 135m, 0.6b, etc.)
-SMALL_MODEL_INDICATORS = ["0.5b", "270m", "135m", "350m", "0.6b", "1b", "1.5b", "tiny", "mini", "micro", "small", "moe"]
+# Filter for small models (indicators: 0.5b, 1b, 1.5b, 2b, 270m, 135m, 0.6b, etc.)
+SMALL_MODEL_INDICATORS = ["0.5b", "270m", "135m", "350m", "0.6b", "1b", "1.5b", "2b", "tiny", "mini", "micro", "small", "moe", "bitnet"]
 
 
 def get_small_models(client) -> list[str]:
-    """Get list of small models."""
+    """Get list of small models, or all available if none match."""
     available = get_available_models(client)
     small_models = []
     for model in available:
         model_lower = model.lower()
         if any(ind in model_lower for ind in SMALL_MODEL_INDICATORS):
             small_models.append(model)
+    
+    # If no small models found by indicators,    if not small_models:
+        print("   ⚠️ No small models found by indicators, using all available")
+        small_models = available
+    
     return small_models
 
 
@@ -232,7 +237,13 @@ def main():
 
     # Get small models dynamically
     models_to_test = get_small_models(client)
-    print(f"   Small models to test: {', '.join(models_to_test)}")
+    
+    # Fallback: if no small models found, use all available
+    if not models_to_test:
+        print(f"   ⚠️ No small models found by name indicators, using all available")
+        models_to_test = available
+    
+    print(f"   Models to test: {', '.join(models_to_test)}")
 
     for model in models_to_test:
         print(f"\n{'='*50}")

@@ -37,7 +37,8 @@ def normalize_text(text: str) -> str:
 VERBOSITY = 2
 
 # Models discovered dynamically at runtime
-MODELS = []  # Will be populated from available models
+# Will be populated from available models (no hardcoded list)
+MODELS = None  # None means "use all available"
 
 # System prompts for different test types
 SYSTEM_PROMPT_NO_TOOLS = """You are a helpful assistant. Follow these rules:
@@ -212,8 +213,17 @@ def main():
     print(f"   Backend: {BACKEND_NAME}")
     print(f"   Available models: {', '.join(available)}")
     
-    # Filter to available models
-    models_to_test = [m for m in MODELS if any(m.split(':')[0] in a for a in available)]
+    # Use all available models if MODELS not specified
+    if MODELS is None:
+        models_to_test = available
+    else:
+        # Filter to available models
+        models_to_test = [m for m in MODELS if any(m.split(':')[0] in a for a in available)]
+    
+    if not models_to_test:
+        print("   ⚠️ No models to test!")
+        return
+    
     print(f"   Testing: {', '.join(models_to_test)}")
     
     # Clear old results - start fresh
