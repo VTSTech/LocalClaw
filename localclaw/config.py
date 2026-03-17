@@ -63,10 +63,29 @@ ACP_PASS = os.environ.get("ACP_PASS", "secret")
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# BACKEND SELECTION
+# ═══════════════════════════════════════════════════════════════════════════════
+# Set LOCALCLAW_BACKEND to "bitnet" to use BitNet instead of Ollama
+# Default: "ollama"
+LOCALCLAW_BACKEND = os.environ.get("LOCALCLAW_BACKEND", "ollama").lower()
+
+# Validate backend value
+if LOCALCLAW_BACKEND not in ("ollama", "bitnet"):
+    print(f"Warning: Invalid LOCALCLAW_BACKEND '{LOCALCLAW_BACKEND}', defaulting to 'ollama'")
+    LOCALCLAW_BACKEND = "ollama"
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # DEFAULT MODEL
 # ═══════════════════════════════════════════════════════════════════════════════
 # Default model for tests and examples
-DEFAULT_MODEL = os.environ.get("LOCALCLAW_MODEL", "qwen2.5-coder:0.5b-instruct-q4_k_m")
+# Can be overridden via environment variable
+# BitNet default: bitnet-b1.58-2b-4t
+# Ollama default: qwen2.5-coder:0.5b-instruct-q4_k_m
+if LOCALCLAW_BACKEND == "bitnet":
+    DEFAULT_MODEL = os.environ.get("LOCALCLAW_MODEL", "bitnet-b1.58-2b-4t")
+else:
+    DEFAULT_MODEL = os.environ.get("LOCALCLAW_MODEL", "qwen2.5-coder:0.5b-instruct-q4_k_m")
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

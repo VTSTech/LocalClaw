@@ -11,6 +11,9 @@ from __future__ import annotations
 
 from typing import Optional
 
+from .config import LOCALCLAW_BACKEND, DEFAULT_MODEL
+
+# Import clients based on backend
 from .core.ollama_client import OllamaClient
 
 # Try to import BitNet client
@@ -20,6 +23,30 @@ try:
 except ImportError:
     _BITNET_AVAILABLE = False
     BITNET_KNOWN_MODELS = []
+
+
+def get_client(backend: Optional[str] = None):
+    """
+    Get a client for the specified or default backend.
+    
+    Parameters
+    ----------
+    backend : str, optional
+        "ollama" or "bitnet". Defaults to LOCALCLAW_BACKEND from config.
+    
+    Returns
+    -------
+    OllamaClient or BitnetClient
+    """
+    backend = (backend or LOCALCLAW_BACKEND).lower()
+    
+    if backend == "bitnet":
+        if not _BITNET_AVAILABLE:
+            raise ImportError("BitNet backend requested but bitnet_client not available")
+        from .config import BITNET_BASE_URL
+        return BitnetClient(base_url=BITNET_BASE_URL)
+    else:
+        return OllamaClient()
 
 
 def get_ollama_models(client: Optional[OllamaClient] = None) -> list[str]:
@@ -72,6 +99,43 @@ def get_bitnet_models(client=None) -> list[str]:
     return client.list_models() or []
 
 
+def get_models(backend: Optional[str] = None, client=None) -> list[str]:
+    """
+    Get list of available models from the specified or default backend.
+    
+    This is the backend-agnostic version that respects LOCALCLAW_BACKEND.
+    
+    Parameters
+    ----------
+    backend : str, optional
+        "ollama" or "bitnet". Defaults to LOCALCLAW_BACKEND from config.
+    client : OllamaClient or BitnetClient, optional
+        Client to use. Creates one if not provided.
+    
+    Returns
+    -------
+    list[str]
+        List of model names available on the backend.
+    
+    Examples
+    --------
+    >>> # Use default backend from LOCALCLAW_BACKEND env var
+    >>> models = get_models()
+    
+    >>> # Explicitly use Ollama
+    >>> models = get_models(backend="ollama")
+    
+    >>> # Explicitly use BitNet
+    >>> models = get_models(backend="bitnet")
+    """
+    backend = (backend or LOCALCLAW_BACKEND).lower()
+    
+    if backend == "bitnet":
+        return get_bitnet_models(client)
+    else:
+        return get_ollama_models(client)
+
+
 def pick_best_model(
     preferred: Optional[str] = None,
     fallback_order: Optional[list[str]] = None,
@@ -101,7 +165,7 @@ def pick_best_model(
     >>> model = pick_best_model(preferred="llama3.1:8b")
     >>> model = pick_best_model(fallback_order=["qwen2.5-coder:0.5b", "tinyllama"])
     """
-    available = get_ollama_models(client)
+    available = get_models(client=client)
     
     if not available:
         return None
@@ -170,7 +234,7 @@ def pick_models_for_benchmark(
     list[str]
         List of model names for benchmarking
     """
-    available = get_ollama_models(client)
+    available = get_models(client=client)
     
     if not available:
         return []
@@ -237,7 +301,7 @@ def model_exists(model: str, client: Optional[OllamaClient] = None) -> bool:
     bool
         True if model is available
     """
-    available = get_ollama_models(client)
+    available = get_models(client=client)
     
     # Exact match
     if model in available:
@@ -254,6 +318,8 @@ def model_exists(model: str, client: Optional[OllamaClient] = None) -> bool:
 
 # Convenience exports
 __all__ = [
+    "get_client",
+    "get_models",
     "get_ollama_models",
     "get_bitnet_models",
     "pick_best_model",

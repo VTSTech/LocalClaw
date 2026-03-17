@@ -26,6 +26,13 @@ from .ollama_client import OllamaClient
 from .memory import Memory
 from .tools import ToolRegistry
 
+# Import backend-aware client selection
+try:
+    from .. import get_default_client as _get_default_client
+    _backend_aware = True
+except ImportError:
+    _backend_aware = False
+
 
 # ------------------------------------------------------------------ #
 #  Tool-specific argument aliases (for small model hallucinations)    #
@@ -1076,7 +1083,13 @@ class Agent:
         self.model = model
         self.tools = tools or ToolRegistry()
         self.max_steps = max_steps
-        self.client = client or OllamaClient()
+        # Use backend-aware client selection if no client provided
+        if client is not None:
+            self.client = client
+        elif _backend_aware:
+            self.client = _get_default_client()
+        else:
+            self.client = OllamaClient()
         self.force_react = force_react
         self.on_step = on_step
         self.model_options = model_options or {}
