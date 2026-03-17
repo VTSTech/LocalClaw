@@ -96,9 +96,8 @@ def test_model(client, model: str, acp: ACPPlugin) -> dict:
     model_short = model.split('/')[-1].split(':')[0][:20]  # Short name for agent
     model_agent_name = f"LocalClaw-{model_short}"
     
-    # Register this model as a sub-agent
-    acp.register_agent(model_agent_name, ["benchmark", "testing"], model)
-    acp.log_chat("system", f"Starting benchmark for {model}", agent_name=model_agent_name, complete=True)
+    # Note: We log activities with agent_name in metadata - ACP will track per-agent tokens
+    # No separate registration needed - activities are attributed by metadata.agent_name
     
     results = {"model": model, "passed": 0, "total": len(TESTS), "time": 0, "tests": {}, "categories": {}}
     current_category = None
@@ -120,7 +119,7 @@ def test_model(client, model: str, acp: ACPPlugin) -> dict:
         category_total += 1
         
         # Log test start
-        acp.log_action("READ", f"Test: {test_name}", details=prompt[:50], agent_name=model_agent_name)
+        acp.log_user_message(f"[{model_short}] Test: {test_name}")
         
         try:
             registry = make_builtin_registry().subset(tools) if tools else None
@@ -166,8 +165,7 @@ def test_model(client, model: str, acp: ACPPlugin) -> dict:
             
             # Log test result
             result_status = "PASS" if passed else ("NEAR-MISS" if near_miss else "FAIL")
-            acp.log_chat("assistant", f"[{result_status}] {test_name}: {response[:50]}", 
-                        agent_name=model_agent_name, complete=True)
+            acp.log_assistant_message(f"[{model_short}] [{result_status}] {test_name}: {response[:50]}")
             
             if passed:
                 print(f"✅ ({elapsed:.1f}s)")
@@ -186,8 +184,7 @@ def test_model(client, model: str, acp: ACPPlugin) -> dict:
         except Exception as e:
             results["time"] += 60
             results["tests"][test_name] = {"passed": False, "error": str(e)[:100]}
-            acp.log_chat("assistant", f"[ERROR] {test_name}: {str(e)[:50]}", 
-                        agent_name=model_agent_name, complete=True)
+            acp.log_assistant_message(f"[{model_short}] [ERROR] {test_name}: {str(e)[:50]}")
             print(f"❌ ERROR: {str(e)[:50]}")
     
     if current_category is not None:

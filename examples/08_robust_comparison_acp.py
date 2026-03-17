@@ -123,8 +123,8 @@ def test_model(client, model: str, results: dict, acp: ACPPlugin) -> dict:
             'total': len(TESTS),
             'time': 0
         }
-        # Register this model as an ACP agent
-        acp.register_agent(model_agent_name, ["benchmark", "testing"], model)
+        # Note: Activities logged with agent_name in metadata - ACP tracks per-agent tokens
+        # No separate registration needed
 
     model_results = results[model]
 
@@ -138,7 +138,7 @@ def test_model(client, model: str, results: dict, acp: ACPPlugin) -> dict:
         print(f"  Testing {full_name}...", end=' ', flush=True)
 
         # Log test start
-        acp.log_action("READ", f"Test: {full_name}", details=prompt[:40], agent_name=model_agent_name)
+        acp.log_user_message(f"[{model_short}] Test: {full_name}")
 
         try:
             registry = make_builtin_registry().subset(tools) if tools else None
@@ -185,8 +185,7 @@ def test_model(client, model: str, results: dict, acp: ACPPlugin) -> dict:
             model_results['time'] += elapsed
 
             result_status = "PASS" if passed else ("NEAR-MISS" if near_miss else "FAIL")
-            acp.log_chat("assistant", f"[{result_status}] {full_name}", 
-                        agent_name=model_agent_name, complete=True)
+            acp.log_assistant_message(f"[{model_short}] [{result_status}] {full_name}")
 
             if passed:
                 print(f"✅ ({elapsed:.1f}s)")
@@ -208,8 +207,7 @@ def test_model(client, model: str, results: dict, acp: ACPPlugin) -> dict:
                 'error': str(e)[:100]
             }
             model_results['time'] += 30
-            acp.log_chat("assistant", f"[ERROR] {full_name}: {str(e)[:30]}", 
-                        agent_name=model_agent_name, complete=True)
+            acp.log_assistant_message(f"[{model_short}] [ERROR] {full_name}: {str(e)[:30]}")
             print(f"❌ ERROR: {str(e)[:50]}")
 
         # Save after each test
