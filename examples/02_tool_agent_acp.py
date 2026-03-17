@@ -1,51 +1,50 @@
-"""
-examples/02_tool_agent_acp.py
------------------------------
-An agent with custom + built-in tools — with ACP integration.
-
-Demonstrates:
-- ACP plugin attached to on_step callback
-- Tool calls logged automatically to ACP
-- Hints and nudge handling
-
-Run from the project root:   python examples/02_tool_agent_acp.py
-Or from the examples folder: python 02_tool_agent_acp.py
-"""
-
 import sys
 import os
+import time
+import re
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from localclaw import Agent, ToolRegistry, StepResult
+from localclaw import Agent, ToolRegistry, StepResult, OllamaClient
 from localclaw.tools.builtins import BUILTIN_REGISTRY
 from localclaw.acp_plugin import ACPPlugin
 
-# ── 1. Create ACP plugin and bootstrap ─────────────────────────────
-acp = ACPPlugin(
-    agent_name="LocalClaw-ToolAgent",
-    model_name=os.environ.get("LOCALCLAW_MODEL", "qwen2.5-coder:0.5b"),
-    debug=os.environ.get("ACP_DEBUG", "").lower() in ("1", "true"),
-    on_hint=lambda h: print(f"   💡 Hint: {h}"),
-    on_nudge=lambda n: print(f"   📢 Nudge: {n.get('message', '')}"),
-)
+# ═══════════════════════════════════════════════════════════════════════════════
+# CONFIGURATION & MODELS
+# ═══════════════════════════════════════════════════════════════════════════════
 
-bootstrap = acp.bootstrap(claim_primary=False)
-print(f"ACP: {'connected' if bootstrap.get('status') else 'unavailable'}\n")
+MODELS_TO_TEST = [
+    "gemma3:270m",
+    "granite4:350m",
+    "qwen2.5:0.5b",
+    "AgentricAi/AgentricAI_TLM:latest",
+    "qwen2.5-coder:0.5b-instruct-q4_k_m",
+    "nchapman/dolphin3.0-qwen2.5:0.5b",
+    "nchapman/dolphin3.0-llama3:1b",
+    "deepseek-coder:1.3b",
+    "driaforall/tiny-agent-a:1.5b",
+    "nemotron-3-nano:4b",
+]
 
-# ── 2. Define custom tools ─────────────────────────────────────────
+QUERIES = [
+    "Convert 500 JPY to EUR",
+    "What is 17 to the power of 4?",
+    "What is the weather in Tokyo?",
+]
+
+# ── Tool Definitions ─────────────────────────────────────────────
 registry = ToolRegistry()
 
 @registry.tool(
-    description="Get the current weather for a city (mock data for this example)",
+    description="Get the current weather for a city",
     param_descriptions={
         "city": "City name",
         "unit": "Temperature unit: 'celsius' or 'fahrenheit'",
     },
 )
 def get_weather(city: str, unit: str = "celsius") -> str:
-    """Return mock weather data."""
     mock = {
-        "london":   {"temp": 12, "condition": "cloudy"},
+        "london":    {"temp": 12, "condition": "cloudy"},
         "new york": {"temp": 22, "condition": "sunny"},
         "tokyo":    {"temp": 28, "condition": "humid"},
     }
@@ -55,131 +54,87 @@ def get_weather(city: str, unit: str = "celsius") -> str:
         temp = temp * 9 / 5 + 32
     return f"{city}: {temp}°{'C' if unit == 'celsius' else 'F'}, {data['condition']}"
 
-
 @registry.tool(
-    description="Convert currency amounts. Use format: convert 500 JPY to EUR. Supports USD, EUR, GBP, JPY, CAD.",
+    description="Convert currency amounts. Supports USD, EUR, GBP, JPY, CAD.",
     param_descriptions={
-        "amount": "REQUIRED: The numeric amount to convert (e.g., 500, not '500 JPY')",
-        "from_currency": "Source currency code: USD, EUR, GBP, JPY, or CAD",
-        "to_currency": "Target currency code: USD, EUR, GBP, JPY, or CAD",
+        "amount": "Numeric amount (e.g. 500)",
+        "from_currency": "Source currency code (3 letters)",
+        "to_currency": "Target currency code (3 letters)",
     },
 )
 def convert_currency(amount, from_currency: str = "USD", to_currency: str = "EUR") -> str:
-    """
-    Approximate currency conversion with fuzzy argument handling.
-    
-    Handles common mistakes from small models:
-    - String amounts like "500" or "500 JPY"
-    - Missing currency parameters
-    """
-    import re
-    
     rates_to_usd = {"USD": 1.0, "EUR": 1.08, "GBP": 1.27, "JPY": 0.0067, "CAD": 0.74}
     
-    # ── Fuzzy handling for amount ─────────────────────────────────
+    # Handle string amounts from tiny models
     if isinstance(amount, str):
-        # Try to extract number from "500 JPY" pattern
-        match = re.match(r'(\d+(?:\.\d+)?)\s*([A-Z]{3})?', amount.upper())
-        if match:
-            amount = float(match.group(1))
-            if match.group(2) and from_currency == "USD":
-                from_currency = match.group(2)
-        else:
-            try:
-                amount = float(amount)
-            except ValueError:
-                return f"Error: Could not parse amount '{amount}'. Please provide a number."
-    
-    try:
-        amount = float(amount)
-    except (TypeError, ValueError):
-        return f"Error: Amount must be a number, got '{amount}'"
-    
-    # ── Validate currencies ───────────────────────────────────────
+        match = re.search(r'(\d+(?:\.\d+)?)', amount)
+        amount = float(match.group(1)) if match else 0.0
+
     fc, tc = from_currency.upper(), to_currency.upper()
-    unknown = []
-    if fc not in rates_to_usd:
-        unknown.append(fc)
-    if tc not in rates_to_usd:
-        unknown.append(tc)
-    if unknown:
-        return f"Unknown currency: {', '.join(unknown)}. Supported: USD, EUR, GBP, JPY, CAD"
+    if fc not in rates_to_usd or tc not in rates_to_usd:
+        return f"Unknown currency. Supported: {list(rates_to_usd.keys())}"
     
-    # ── Perform conversion ────────────────────────────────────────
-    usd = amount * rates_to_usd[fc]
+    usd = float(amount) * rates_to_usd[fc]
     result = usd / rates_to_usd[tc]
     return f"{amount} {fc} ≈ {result:.2f} {tc}"
 
-
-# Include the built-in calculator
+# Register built-in calculator
 for t in BUILTIN_REGISTRY.subset(["calculator"]).all():
     registry.register(t)
 
+# ═══════════════════════════════════════════════════════════════════════════════
+# BENCHMARK RUNNER
+# ═══════════════════════════════════════════════════════════════════════════════
 
-# ── 3. Combined step hook: ACP + local printing ────────────────────
-def print_step(step: StepResult):
-    """Print step info AND log to ACP."""
-    # Log to ACP
-    acp.on_step(step)
-    
-    # Print locally
-    icons = {"thought": "💭", "tool_call": "🔧", "tool_result": "📦", "final": "✅"}
-    icon = icons.get(step.type, "•")
-    if step.type == "tool_call":
-        print(f"  {icon} Calling {step.tool_name}({step.tool_args})")
-    elif step.type == "tool_result":
-        print(f"  {icon} Result: {step.content}")
-    elif step.type == "thought":
-        print(f"  {icon} {step.content[:120]}")
+def run_tool_benchmark(model_name, client):
+    available = client.list_models()
+    if model_name not in available:
+        print(f"⏩ Skipping {model_name} (not found)")
+        return
 
+    # Initialize ACP specifically for this model iteration
+    acp = ACPPlugin(
+        agent_name="LocalClaw",
+        model_name=model_name,
+        debug=False,
+    )
+    acp.bootstrap(claim_primary=False)
 
-# ── 4. Build the agent with ACP integration ────────────────────────
-MODEL = os.environ.get("LOCALCLAW_MODEL", "qwen2.5-coder:0.5b-instruct-q4_k_m")
+    def print_step(step: StepResult):
+        acp.on_step(step)
+        icons = {"thought": "💭", "tool_call": "🔧", "tool_result": "📦", "final": "✅"}
+        icon = icons.get(step.type, "•")
+        if step.type == "tool_call":
+            print(f"    {icon} Tool: {step.tool_name}")
+        elif step.type == "final":
+            print(f"    {icon} {step.content[:70]}...")
 
-agent = Agent(
-    model=MODEL,
-    tools=registry,
-    system_prompt=(
-        "You are a helpful assistant with access to tools. "
-        "Call tools when needed. Give brief final answers after getting results."
-    ),
-    on_step=print_step,  # Combined callback
-    model_options={
-        "temperature": 0.0,
-        "num_ctx": 1024,
-        "num_predict": 256,
-    },
-)
+    print(f"\n{'='*60}")
+    print(f"🛠️  TOOL TEST: {model_name}")
+    print(f"{'='*60}")
 
-print(f"=== Multi-tool agent demo with ACP ({agent.model}) ===\n")
+    agent = Agent(
+        model=model_name,
+        tools=registry,
+        system_prompt="You have tools. Use them to answer. Be concise.",
+        on_step=print_step,
+        model_options={"temperature": 0.0, "num_ctx": 2048},
+    )
 
-# Use simpler, single-tool prompts for small models (≤1B parameters)
-# Complex multi-part prompts can confuse small models
-queries = [
-    # Simple single-tool prompts work best with small models
-    "Convert 500 JPY to EUR",
-    "What is 17 to the power of 4?",
-    # Multi-tool prompts work better with larger models (>3B)
-    # "What's the weather in Tokyo, and how much is 500 JPY in EUR?",  # May fail on 0.5B
-]
+    for q in QUERIES:
+        print(f"\nUser: {q}")
+        acp.log_user_message(q)
+        try:
+            run = agent.run(q)
+            acp.log_assistant_message(run.final_answer)
+        except Exception as e:
+            print(f"    ❌ Execution Error: {e}")
 
-for q in queries:
-    agent.reset()
-    print(f"User: {q}")
-    
-    # Log user message to ACP
-    acp.log_user_message(q)
-    
-    run = agent.run(q)
-    
-    # Log assistant message to ACP
-    acp.log_assistant_message(run.final_answer)
-    
-    print(f"\nFinal: {run.final_answer}")
-    print(f"Took {run.total_ms:.0f}ms | {len(run.steps)} steps\n")
-    print("-" * 60 + "\n")
+if __name__ == "__main__":
+    ollama = OllamaClient()
+    if not ollama.is_running():
+        print("❌ Ollama not detected.")
+        sys.exit(1)
 
-# Show ACP stats
-status = acp.get_status()
-print(f"ACP Session tokens: {status.get('session_tokens', 0)}")
-print(f"Agent tokens: {acp.get_agent_tokens()}")
+    for model in MODELS_TO_TEST:
+        run_tool_benchmark(model, ollama)

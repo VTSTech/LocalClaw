@@ -1,34 +1,28 @@
-"""
-examples/04_comprehensive_test_acp.py
-------------------------------------
-Comprehensive test suite with ACP integration.
-
-Demonstrates:
-- ACP activity logging during tests
-- Token tracking per test category
-- Batch operations for efficiency
-
-Run from the project root:   python examples/04_comprehensive_test_acp.py
-Or from the examples folder: python 04_comprehensive_test_acp.py
-
-Written by VTSTech — https://www.vts-tech.org — https://github.com/VTSTech/LocalClaw
-"""
-
 import sys
 import os
 import time
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from localclaw import Agent, OllamaClient, StepResult
-from localclaw.tools.builtins import make_builtin_registry
+from localclaw import Agent, OllamaClient
 from localclaw.acp_plugin import ACPPlugin
-
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # CONFIGURATION
 # ═══════════════════════════════════════════════════════════════════════════════
 
-MODEL = os.environ.get("LOCALCLAW_MODEL", "qwen2.5-coder:0.5b-instruct-q4_k_m")
+# List extracted from your comments for iteration
+MODELS_TO_TEST = [
+    #"gemma3:270m",
+    #"granite4:350m",
+    #"qwen2.5:0.5b",
+    "qwen2.5-coder:0.5b-instruct-q4_k_m",
+    #"nchapman/dolphin3.0-qwen2.5:0.5b",
+    #"nchapman/dolphin3.0-llama3:1b",
+    #"driaforall/tiny-agent-a:1.5b",
+    "deepseek-coder:1.3b",
+    "AgentricAi/AgentricAI_TLM:latest",
+]
 
 TESTS = {
     "basic": [
@@ -74,24 +68,18 @@ TESTS = {
     ],
 }
 
+def run_tests(model_name, client):
+    """Run all test categories for a specific model with ACP tracking."""
+    
+    available_models = client.list_models()
+    if model_name not in available_models:
+        print(f"\n⚠️  Skipping '{model_name}': Not found in Ollama.")
+        return
 
-def run_tests():
-    """Run all test categories with ACP tracking."""
-    client = OllamaClient()
-    
-    if not client.is_running():
-        print("❌ Ollama is not running.")
-        return
-    
-    models = client.list_models()
-    if MODEL not in models:
-        print(f"❌ Model '{MODEL}' not found. Available: {models}")
-        return
-    
-    # ── Create ACP plugin and bootstrap ─────────────────────────────
+    # Create ACP plugin
     acp = ACPPlugin(
-        agent_name="LocalClaw-TestRunner",
-        model_name=MODEL,
+        agent_name="LocalClaw",
+        model_name=model_name,
         debug=os.environ.get("ACP_DEBUG", "").lower() in ("1", "true"),
     )
     
@@ -99,14 +87,12 @@ def run_tests():
     acp_connected = bootstrap.get("status") is not None
     
     print(f"\n{'='*60}")
-    print(f"🧪 LocalClaw Comprehensive Test Suite (ACP)")
-    print(f"   Model: {MODEL}")
-    print(f"   ACP: {'connected' if acp_connected else 'unavailable'}")
+    print(f"🧪 Testing Model: {model_name}")
+    print(f"   ACP: {'connected' if acp_connected else 'unavailable'}")
     print(f"{'='*60}")
     
-    # Log test session start
     if acp_connected:
-        acp.log_chat("system", f"Test suite started with model {MODEL}", complete=True)
+        acp.log_chat("system", f"Test suite started for {model_name}", complete=True)
     
     total_passed = 0
     total_tests = 0
@@ -114,15 +100,9 @@ def run_tests():
     
     for category, tests in TESTS.items():
         print(f"\n📋 {category.upper()} TESTS")
-        print("-" * 40)
         
-        # Log category start
-        if acp_connected:
-            acp.add_note("context", f"Starting {category} tests ({len(tests)} tests)")
-        
-        # Create agent for this category
         agent = Agent(
-            model=MODEL,
+            model=model_name,
             client=client,
             system_prompt="You are a helpful assistant. Be concise and accurate.",
             max_steps=6,
@@ -135,12 +115,6 @@ def run_tests():
         
         for test in tests:
             total_tests += 1
-            print(f"\n  🔮 {test['name']}")
-            
-            # Log test to ACP
-            if acp_connected:
-                acp.log_user_message(f"[TEST] {test['name']}: {test['prompt']}")
-            
             t0 = time.time()
             try:
                 response = agent.chat(test["prompt"])
@@ -151,46 +125,33 @@ def run_tests():
                 total_passed += int(passed)
                 
                 status = "✅ PASS" if passed else "❌ FAIL"
-                preview = response[:60].replace("\n", " ")
-                print(f"  {status} ({elapsed:.1f}s): {preview}...")
+                preview = response[:50].replace("\n", " ")
+                print(f"  {status} ({elapsed:.1f}s): {preview}...")
                 
-                # Log result to ACP
                 if acp_connected:
-                    acp.log_assistant_message(f"[{'PASS' if passed else 'FAIL'}] {response[:200]}")
-                
-                if not passed:
-                    print(f"       Full response: {response}")
+                    acp.log_user_message(f"[TEST] {test['name']}")
+                    acp.log_assistant_message(f"[{'PASS' if passed else 'FAIL'}] {response[:100]}")
+            
             except Exception as e:
-                total_time += 60
-                print(f"  ❌ ERROR: {e}")
-                if acp_connected:
-                    acp.log_assistant_message(f"[ERROR] {str(e)[:200]}")
-    
-    # Summary
-    print(f"\n{'='*60}")
-    print("📊 SUMMARY")
-    print(f"{'='*60}")
-    pass_rate = total_passed / total_tests * 100 if total_tests > 0 else 0
-    print(f"  Tests: {total_passed}/{total_tests} passed ({pass_rate:.0f}%)")
-    print(f"  Time: {total_time:.1f}s total, {total_time/total_tests:.1f}s avg")
-    
-    # ACP token summary
-    if acp_connected:
-        agent_tokens = acp.get_agent_tokens()
-        status = acp.get_status()
-        print(f"\n  ACP Session Tokens: {status.get('session_tokens', 0)}")
-        print(f"  This Agent Tokens: {agent_tokens}")
-        
-        # Add summary note
-        acp.add_note("context", f"Test suite complete: {total_passed}/{total_tests} passed ({pass_rate:.0f}%)")
-    
-    if pass_rate >= 70:
-        print(f"\n✅ Model '{MODEL}' is working well!")
-    elif pass_rate >= 50:
-        print(f"\n⚠️  Model '{MODEL}' has some issues but usable.")
-    else:
-        print(f"\n❌ Model '{MODEL}' needs improvement or replacement.")
+                print(f"  ❌ ERROR: {e}")
 
+    # Summary for this model
+    pass_rate = (total_passed / total_tests * 100) if total_tests > 0 else 0
+    print(f"\n📊 {model_name} Results: {total_passed}/{total_tests} ({pass_rate:.0f}%)")
+    
+    if acp_connected:
+        acp.add_note("context", f"Completed {model_name}: {pass_rate:.0f}% pass rate.")
 
 if __name__ == "__main__":
-    run_tests()
+    ollama_client = OllamaClient()
+    
+    if not ollama_client.is_running():
+        print("❌ Ollama is not running. Please start Ollama and try again.")
+        sys.exit(1)
+
+    print(f"🚀 Starting comprehensive benchmark for {len(MODELS_TO_TEST)} models...")
+    
+    for model in MODELS_TO_TEST:
+        run_tests(model, ollama_client)
+        
+    print("\n✅ All scheduled model tests complete.")
