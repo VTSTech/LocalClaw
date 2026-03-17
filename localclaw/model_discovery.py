@@ -127,7 +127,16 @@ def get_models(backend: Optional[str] = None, client=None) -> list[str]:
     
     >>> # Explicitly use BitNet
     >>> models = get_models(backend="bitnet")
+    
+    >>> # Pass client positionally (auto-detected)
+    >>> models = get_models(my_client)
     """
+    # Handle case where client is passed as first positional argument
+    if backend is not None and not isinstance(backend, str):
+        # backend is actually a client object
+        client = backend
+        backend = None
+    
     backend = (backend or LOCALCLAW_BACKEND).lower()
     
     if backend == "bitnet":
