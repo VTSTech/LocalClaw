@@ -617,7 +617,9 @@ def cmd_chat(args):
                 print(cyan("  Session Status"))
                 print(dim("  ─────────────────────────────────────"))
                 print(f"  Model:     {bold(args.model)}")
-                print(f"  Ollama:    {agent.client.base_url}")
+                # Dynamic Labeling based on backend
+                backend_label = "BitNet" if getattr(args, "backend", "ollama") == "bitnet" else "Ollama"
+                print(f"  {backend_label}:    {agent.client.base_url}")
                 print(f"  Timeout:   {agent.client.timeout}s")
                 print(f"  ReAct:     {'forced' if getattr(args, 'force_react', False) else 'auto-detect'}")
                 
@@ -990,14 +992,28 @@ def cmd_chat(args):
                 # Log user message to ACP
                 if acp_plugin:
                     acp_plugin.log_user_message(user_input)
-                run = agent.run(user_input)
-                print(f"{bold('Agent')}: {run.final_answer}")
-                # Log assistant response to ACP
-                if acp_plugin:
-                    acp_plugin.log_assistant_message(run.final_answer)
-                if getattr(args, "verbose", False) and run.steps:
-                    tool_steps = [s for s in run.steps if s.type == "tool_call"]
-                    print(dim(f"         [{len(tool_steps)} tool calls · {run.total_ms:.0f}ms]"))
+
+                run = None  # Initialize variable to prevent UnboundLocalError
+                try:
+                    run = agent.run(user_input)
+                    
+                    # Check if run was successful before accessing attributes
+                    if run and hasattr(run, 'final_answer'):
+                        print(f"{bold('Agent')}: {run.final_answer}")
+                        
+                        # Log assistant response to ACP
+                        if acp_plugin:
+                            acp_plugin.log_assistant_message(run.final_answer)
+                        
+                        if getattr(args, "verbose", False) and run.steps:
+                            tool_steps = [s for s in run.steps if s.type == "tool_call"]
+                            print(dim(f"         [{len(tool_steps)} tool calls · {run.total_ms:.0f}ms]"))
+                except json.JSONDecodeError as e:
+                    print(red(f"\n  ✗ BitNet output malformed JSON: {e}"))
+                    print(dim("  Tip: Try lowering --temperature to 0.1 for more stable JSON."))
+                except Exception as e:
+                    print(red(f"\n  ✗ LocalClaw Error: {e}"))
+                    print(dim("  Tip: The connection was likely dropped during heavy tool-use prefilling."))
                 print()
 
     except KeyboardInterrupt:
@@ -1190,11 +1206,11 @@ def build_parser() -> argparse.ArgumentParser:
     p_models.set_defaults(func=cmd_models)
 
     # ── tools ───────────────────────────────────────────────────────
-    p_tools = sub.add_parser("tools", help="List available tools")
+    p_tools = sub.add_parser("tools", parents=[shared], help="List available tools")
     p_tools.set_defaults(func=cmd_tools)
 
     # ── skills ──────────────────────────────────────────────────────
-    p_skills = sub.add_parser("skills", help="List available skills")
+    p_skills = sub.add_parser("skills", parents=[shared], help="List available skills")
     p_skills.set_defaults(func=cmd_skills)
 
     return parser
