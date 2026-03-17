@@ -309,19 +309,29 @@ def _build_agent(args, client: OllamaClient):
 # ------------------------------------------------------------------ #
 
 def cmd_models(args):
-    if getattr(args, "backend", "ollama") == "bitnet":
+    backend = getattr(args, "backend", "ollama")
+    
+    if backend == "bitnet":
         if not _BITNET_AVAILABLE:
             print(red("✗  bitnet_client.py not found. Copy it into localclaw/."))
             sys.exit(1)
-        print(bold("\n🦞 LocalClaw R03 BitNet Models"))
-        print(bold(f"  {'Model':<28} {'Size':<10} {'Quant':<8} Notes"))
-        print(dim("  " + "─" * 62))
-        for name, info in KNOWN_MODELS.items():
-            rec = green("  ★ recommended") if info["recommend"] else ""
-            print(f"  {cyan(name):<35} {info['size']:<10} {info['quant']:<8}{rec}")
-        print()
-        print(dim("  Setup: python bitnet_client.py setup --dir ./BitNet --model <name>"))
-        print(dim("  Run:   python cli.py chat --backend bitnet --bitnet-dir ./BitNet --force-react"))
+            
+        print(bold("\n🦞 LocalClaw R03 BitNet Model (Remote)"))
+        
+        # We use the client logic to see what is actually running at the URL
+        try:
+            client = _build_client(args)
+            models = client.list_models() # BitnetClient should return the loaded .gguf info
+            
+            if models:
+                print(bold(f"  {'Model Name':<50} {'Status'}"))
+                print(dim("  " + "─" * 60))
+                for m in models:
+                    print(f"  {cyan(m):<50} {green('ACTIVE')}")
+            else:
+                print(yellow("  No active model found at the BitNet endpoint."))
+        except Exception as e:
+            print(red(f"  ✗ Could not connect to BitNet backend: {e}"))
         print()
         return
     client = OllamaClient()
@@ -1176,7 +1186,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_chat.set_defaults(func=cmd_chat)
 
     # ── models ──────────────────────────────────────────────────────
-    p_models = sub.add_parser("models", help="List available models")
+    p_models = sub.add_parser("models", parents=[shared], help="List available models")
     p_models.set_defaults(func=cmd_models)
 
     # ── tools ───────────────────────────────────────────────────────

@@ -15,6 +15,15 @@ class BitnetClient:
         except:
             return False
 
+    def list_models(self):
+        try:
+            response = requests.get(f"{self.base_url}/v1/models", timeout=5)
+            if response.status_code == 200:
+                data = response.json()
+                # Return the ID of the model(s) from the data you verified
+                return [m['id'] for m in data.get('data', [])]
+        except:
+            return []
     def chat(
         self,
         model: str,
