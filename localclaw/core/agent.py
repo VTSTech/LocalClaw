@@ -159,6 +159,16 @@ def _normalize_args(args: dict, tool, tool_name: str = None) -> dict:
     Also handles special cases like power operations where multiple args
     (base, exponent) need to be combined into a single expression.
     """
+    # Guard: ensure args is a dict
+    if not isinstance(args, dict):
+        if args is None:
+            return {}
+        # If it's a string, try to parse as JSON or wrap it
+        if isinstance(args, str):
+            # For simple string args, wrap in a generic 'input' key
+            return {"input": args}
+        return {}
+    
     if tool is None:
         return args
 
@@ -561,6 +571,45 @@ def _is_greeting_or_simple(text: str) -> bool:
     return False
 
 
+def _convert_to_pystrftime(format_str: str) -> str:
+    """
+    Convert common date format patterns to Python strftime format.
+    
+    Handles formats like:
+    - YYYY-MM-DD -> %Y-%m-%d
+    - DD/MM/YYYY -> %d/%m/%Y
+    - MM-DD-YYYY -> %m-%d-%Y
+    - ISO -> %Y-%m-%d
+    """
+    # Map common patterns to strftime
+    replacements = [
+        ("YYYY", "%Y"),
+        ("YY", "%y"),
+        ("MM", "%m"),
+        ("DD", "%d"),
+        ("HH", "%H"),
+        ("mm", "%M"),
+        ("ss", "%S"),
+        ("ISO", "%Y-%m-%d"),
+        ("iso", "%Y-%m-%d"),
+    ]
+    
+    result = format_str
+    for pattern, strftime in replacements:
+        result = result.replace(pattern, strftime)
+    
+    # If nothing was replaced, use the format as-is
+    # (might already be in strftime format)
+    if result == format_str:
+        # Common strftime characters that indicate it's already formatted
+        if "%" in format_str:
+            return format_str
+        # Default to ISO format
+        return "%Y-%m-%d"
+    
+    return result
+
+
 def _generate_helpful_error_message(tool_name: str, tool, provided_args: dict, error_msg: str) -> str:
     """
     Generate a helpful error message that shows the correct usage format
@@ -662,9 +711,19 @@ def _synthesize_missing_args(tool_name: str, args: dict, user_input: str, prior_
         if "date" in q_lower and "time" in q_lower:
             args["code"] = "from datetime import datetime\nprint(datetime.now().strftime('Today is %A, %B %d, %Y and the time is %I:%M %p.'))"
         elif "date" in q_lower:
-            args["code"] = "from datetime import datetime\nprint(datetime.now().strftime('Today is %A, %B %d, %Y.'))"
+            # Check if a format was provided
+            provided_format = args.get("format", args.get("date_format", ""))
+            if provided_format:
+                # Convert common format patterns to Python strftime
+                py_format = _convert_to_pystrftime(provided_format)
+                args["code"] = f"from datetime import datetime\nprint(datetime.now().strftime('{py_format}'))"
+            else:
+                args["code"] = "from datetime import datetime\nprint(datetime.now().strftime('Today is %A, %B %d, %Y.'))"
         elif "time" in q_lower:
             args["code"] = "from datetime import datetime\nprint(datetime.now().strftime('The current time is %I:%M %p.'))"
+        else:
+            # Generic - just return current datetime
+            args["code"] = "from datetime import datetime\nprint(datetime.now())"
     
     elif tool_name == "shell" and "command" in missing:
         # Synthesize shell commands for common queries
@@ -1527,7 +1586,11 @@ class Agent:
                             t_name = None
                     
                     if t_name:
-                        t_args = _normalize_args(t_args, self.tools.get(t_name))
+                        t_args = _normalize_args(t_args, self.tools.get(t_name), t_name)
+                        
+                        # Try to synthesize missing required arguments
+                        t_args = _synthesize_missing_args(t_name, t_args, user_input, _successful_results, self.tools)
+                        
                         _tool_call_counts[t_name] = _tool_call_counts.get(t_name, 0) + 1
 
                         call_step = StepResult(
