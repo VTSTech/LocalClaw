@@ -27,8 +27,23 @@ class BitnetClient:
             with urllib.request.urlopen(f"{self.base_url}/v1/models", timeout=5) as resp:
                 if resp.getcode() == 200:
                     data = json.loads(resp.read().decode("utf-8"))
-                    # Return the ID of the model(s) from the data
-                    return [m['id'] for m in data.get('data', [])]
+                    # Return the ID of the model(s), cleaned up to show just model folder/filename
+                    models = []
+                    for m in data.get('data', []):
+                        model_id = m['id']
+                        # Strip common prefixes to show just model_dir/filename.gguf
+                        # e.g., /content/BitNet/models/BitNet-b1.58-2B-4T/bitnet_2b_i2_s.gguf
+                        #   -> BitNet-b1.58-2B-4T/bitnet_2b_i2_s.gguf
+                        if '/models/' in model_id:
+                            # Keep everything after /models/
+                            model_id = model_id.split('/models/')[-1]
+                        elif model_id.startswith('/'):
+                            # Just keep last two path components
+                            parts = model_id.strip('/').split('/')
+                            if len(parts) >= 2:
+                                model_id = '/'.join(parts[-2:])
+                        models.append(model_id)
+                    return models
         except:
             return []
 
