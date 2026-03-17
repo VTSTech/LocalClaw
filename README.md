@@ -120,147 +120,141 @@ python cli.py chat --backend bitnet --model bitnet-b1.58-2b-4t --force-react
 
 ## Quick start
 
-### 1. Simple chat agent
+### 1. Single prompt
 
-```python
-from localclaw import Agent
+```bash
+# Simple Q&A
+python cli.py run "What is the capital of Japan?"
 
-agent = Agent(
-    model="llama3.1:8b",
-    system_prompt="You are a helpful assistant.",
-)
+# With streaming output
+python cli.py run "Tell me a joke." --stream
 
-print(agent.chat("What is the capital of Japan?"))
-
-# Streaming
-for token in agent.stream("Tell me a joke."):
-    print(token, end="", flush=True)
+# Specify a model
+python cli.py run "Explain quantum computing" -m llama3.2:3b
 ```
 
-### 2. Agent with tools
+### 2. Interactive chat
 
-```python
-from localclaw import Agent, ToolRegistry
+```bash
+# Start interactive session
+python cli.py chat -m qwen2.5-coder:0.5b
 
-registry = ToolRegistry()
+# With tools enabled
+python cli.py chat -m llama3.1:8b --tools calculator,shell,read_file,write_file
 
-@registry.tool(description="Get the price of a stock ticker")
-def get_stock_price(ticker: str) -> str:
-    # your real implementation here
-    return f"{ticker}: $142.50"
+# With skills loaded
+python cli.py chat -m llama3.2:3b --skills skill-creator --tools write_file,shell
 
-agent = Agent(
-    model="llama3.1:8b",
-    tools=registry,
-    system_prompt="You are a financial assistant.",
-)
-
-run = agent.run("What's the price of AAPL?")
-print(run.final_answer)
-run.print_trace()   # shows all steps
+# Fast mode (reduced context for speed)
+python cli.py chat -m qwen2.5-coder:0.5b --fast --verbose
 ```
 
-### 3. Built-in tools
+### 3. Using BitNet backend
 
-```python
-from localclaw import Agent
-from localclaw.tools.builtins import BUILTIN_REGISTRY
+```bash
+# BitNet requires --force-react for tool support
+python cli.py chat --backend bitnet --force-react
 
-# All built-ins: calculator, python_repl, shell, read_file,
-#                write_file, list_directory, http_get, save_note, get_note
-
-agent = Agent(
-    model="llama3.1:8b",
-    tools=BUILTIN_REGISTRY,
-)
-
-agent.run("Write a Python script to fibonacci.py that prints the first 20 Fibonacci numbers, then run it")
+# Run single prompt with BitNet
+python cli.py run "Calculate 17 * 23" --backend bitnet --tools calculator
 ```
 
-### 4. Multi-agent orchestration
+### 4. With ACP tracking
 
-```python
-from localclaw import Agent, Orchestrator, AgentCard
+```bash
+# Enable ACP for activity monitoring
+python cli.py chat -m qwen2.5-coder:0.5b --acp --tools shell,read_file,write_file
 
-coder  = Agent(model="llama3.1:8b", system_prompt="You write code.")
-writer = Agent(model="llama3.1:8b", system_prompt="You write prose.")
-
-orch = Orchestrator(
-    agents=[
-        AgentCard("coder",  coder,  "Writing and explaining code"),
-        AgentCard("writer", writer, "Writing documents and emails"),
-    ],
-    router_model="llama3.2:3b",
-)
-
-result = orch.run("Write a Python function that reverses a string")
-print(result.chosen_agent, result.final_answer)
+# Single prompt with ACP
+python cli.py run "What is 2+2?" --acp
 ```
 
 ---
 
-## Tool registry
+## CLI Commands
 
-Tools are plain Python functions decorated with `@registry.tool()`.
+| Command | Description |
+|---------|-------------|
+| `run "prompt"` | Run single prompt and exit |
+| `chat` | Interactive multi-turn conversation |
+| `models` | List available Ollama models |
+| `tools` | List built-in tools |
+| `skills` | List available Agent Skills |
 
-```python
-from localclaw import ToolRegistry
+### CLI Flags
 
-reg = ToolRegistry()
+| Flag | Description |
+|------|-------------|
+| `-m`, `--model` | Model name (default: qwen2.5-coder:0.5b) |
+| `--tools` | Comma-separated tool list |
+| `--skills` | Comma-separated skill list |
+| `--backend` | `ollama` or `bitnet` |
+| `--force-react` | Force ReAct text parsing |
+| `--acp` | Enable ACP integration |
+| `-v`, `--verbose` | Show tool calls and timing |
+| `--debug` | Show detailed debug info |
+| `--fast` | Preset: reduced context for speed |
+| `--warmup` | Pre-load model before chat |
+| `--stream` | Stream output token-by-token |
+| `--temperature` | Sampling temperature (0.0-2.0) |
+| `--num-ctx` | Context window size |
+| `--num-predict` | Max output tokens |
 
-@reg.tool(
-    description="Search a local SQLite database",
-    param_descriptions={
-        "query": "SQL SELECT query to run",
-        "db_path": "Path to the .db file",
-    },
-)
-def sqlite_query(query: str, db_path: str = "data.db") -> str:
-    import sqlite3
-    conn = sqlite3.connect(db_path)
-    rows = conn.execute(query).fetchall()
-    return str(rows)
-```
+### Interactive Commands (in chat)
 
-The registry auto-generates the JSON schema from type hints. Optional parameters (those with defaults) are marked `required: false` in the schema.
-
-Use `registry.subset(["tool_a", "tool_b"])` to give different agents different tool subsets.
+| Command | Description |
+|---------|-------------|
+| `/help` | Show available commands |
+| `/status` | Show session status |
+| `/tools` | List active tools |
+| `/skills` | List active skills |
+| `/reset` | Clear conversation history |
+| `/undo` | Remove last exchange |
+| `/retry` | Retry last message |
+| `/a2a` | Process pending A2A messages |
+| `/export` | Export to markdown |
+| `exit` | End session |
 
 ---
 
-## Memory
+## Built-in Tools
 
-```python
-from localclaw import Memory
+| Tool | Description |
+|------|-------------|
+| `calculator` | Evaluate math expressions |
+| `python_repl` | Execute Python code |
+| `shell` | Run shell commands |
+| `read_file` | Read file contents |
+| `write_file` | Write content to file |
+| `list_directory` | List directory contents |
+| `http_get` | HTTP GET request |
+| `save_note` | Save a note to memory |
+| `get_note` | Retrieve saved notes |
 
-mem = Memory(
-    system_prompt="You are a helpful assistant.",
-    max_turns=20,                       # sliding window size
-    summary_model_fn=my_summarizer,     # optional: LLM-based compression
-)
+```bash
+# List all tools
+python cli.py tools
+
+# Use specific tools
+python cli.py chat --tools calculator,python_repl,shell
 ```
-
-When the window fills, older turns are archived. If `summary_model_fn` is provided, it is called with the archived text and the summary is injected back into the system prompt.
 
 ---
 
-## Agent options
+## Built-in Skills
 
-```python
-agent = Agent(
-    model="qwen2.5:14b",
-    tools=registry,
-    system_prompt="...",
-    max_steps=15,                    # max tool-call iterations
-    force_react=False,               # force text-based ReAct even for capable models
-    on_step=my_callback,             # called after each step (for UIs / logging)
-    model_options={                  # passed directly to Ollama
-        "temperature": 0.1,
-        "num_ctx": 8192,
-        "top_p": 0.9,
-    },
-    memory_max_turns=30,
-)
+| Skill | Description |
+|-------|-------------|
+| `skill-creator` | Generate new Agent Skills from requests |
+| `datetime` | Date/time formatting and calculations |
+| `web_search` | Web search capabilities |
+
+```bash
+# List all skills
+python cli.py skills
+
+# Use skills in chat
+python cli.py chat --skills skill-creator --tools write_file
 ```
 
 ---
@@ -417,29 +411,12 @@ Instructions for the model on how to use this skill...
 
 ### Using Skills
 
-```python
-from localclaw import Agent, SkillLoader, SkillRegistry
-from localclaw.tools.builtins import make_builtin_registry
+```bash
+# Load skills via CLI
+python cli.py chat --skills skill-creator --tools write_file,shell
 
-# Load skills
-loader = SkillLoader()
-registry = SkillRegistry()
-
-for skill_name in loader.list_skills():
-    skill = loader.load(skill_name)
-    registry.add(skill)
-
-# Create agent with skills
-tools = make_builtin_registry().subset(["calculator"])
-skill_prompt = registry.to_system_prompt_addition()
-
-agent = Agent(
-    model="qwen2.5-coder:0.5b-instruct-q4_k_m",
-    tools=tools,
-    system_prompt="You are a helpful assistant." + skill_prompt,
-)
-
-response = agent.chat("What is 25 times 17?")
+# Multiple skills
+python cli.py chat --skills datetime,web_search --tools calculator
 ```
 
 ### Progressive Disclosure
@@ -532,19 +509,21 @@ python cli.py run --acp "What is 2+2?"
 
 ### Configuration
 
-Set your ACP server URL in `localclaw/config.py`:
+Set your ACP server URL via environment variables:
 
-```python
-# LOCAL ACP:
-# ACP_BASE_URL = "http://localhost:8766"
+```bash
+# Local ACP
+export ACP_URL="http://localhost:8766"
 
-# REMOTE ACP (cloudflare tunnel):
-ACP_BASE_URL = "https://your-tunnel.trycloudflare.com"
+# Remote ACP (cloudflare tunnel)
+export ACP_URL="https://your-tunnel.trycloudflare.com"
 
 # Credentials
-ACP_USER = "admin"
-ACP_PASS = "secret"
+export ACP_USER="admin"
+export ACP_PASS="secret"
 ```
+
+Or edit `localclaw/config.py` for persistent settings.
 
 ### What Gets Logged
 
@@ -591,15 +570,17 @@ GLMACP_TUNNEL=auto python VTSTech-GLMACP.py
 
 ## Remote Ollama Configuration
 
-To use a remote Ollama instance (e.g., via Cloudflare tunnel), edit `localclaw/core/ollama_client.py`:
+To use a remote Ollama instance (e.g., via Cloudflare tunnel), set the environment variable:
 
-```python
-# LOCAL OLLAMA (default):
-DEFAULT_BASE_URL = "http://localhost:11434"
+```bash
+# Local Ollama (default)
+export OLLAMA_URL="http://localhost:11434"
 
-# REMOTE OLLAMA (cloudflare tunnel):
-# DEFAULT_BASE_URL = "https://your-tunnel.trycloudflare.com"
+# Remote Ollama (cloudflare tunnel)
+export OLLAMA_URL="https://your-tunnel.trycloudflare.com"
 ```
+
+Or edit `localclaw/config.py` for persistent settings.
 
 ### Timeout Configuration
 
@@ -653,20 +634,17 @@ python cli.py chat -m qwen2.5-coder:0.5b --warmup --fast
 
 ### Ollama Model Options
 
-You can pass any Ollama option via `model_options`:
+Control model behavior via CLI flags:
 
-```python
-agent = Agent(
-    model="qwen2.5-coder:0.5b",
-    model_options={
-        "temperature": 0.1,      # Lower = more deterministic
-        "num_ctx": 2048,         # Smaller context = faster
-        "num_predict": 128,      # Limit output length
-        "top_p": 0.9,            # Nucleus sampling
-        "top_k": 40,             # Top-k sampling
-        "repeat_penalty": 1.1,   # Reduce repetition
-    },
-)
+```bash
+# Lower temperature = more deterministic
+python cli.py chat -m qwen2.5-coder:0.5b --temperature 0.1
+
+# Smaller context = faster
+python cli.py chat -m qwen2.5-coder:0.5b --num-ctx 2048 --num-predict 128
+
+# Combined for optimal speed
+python cli.py chat -m qwen2.5-coder:0.5b --fast --temperature 0.3
 ```
 
 ### Remote Ollama Tips
@@ -695,57 +673,6 @@ python cli.py chat -m qwen2.5-coder:0.5b-instruct-q4_k_m \
 | **Remote connection** | Network latency | Use local Ollama if possible |
 | **Cold start** | First load is slowest | Use `--warmup` flag |
 | **GPU unavailable** | CPU inference is slow | Ensure GPU is configured |
-
----
-
-## CLI Commands (Interactive Chat)
-
-When using `examples/06_interactive_chat.py`, the following commands are available:
-
-| Command | Description |
-|---------|-------------|
-| `/help` | Show available commands |
-| `/status` | Show agent status (model, tools, memory) |
-| `/context` | Show current conversation context |
-| `/stats` | Show session statistics |
-| `/messages` | Show message count |
-| `/undo` | Undo last exchange |
-| `/retry` | Retry last message |
-| `/export` | Export conversation to file |
-| `/save <file>` | Save conversation to file |
-| `/load <file>` | Load conversation from file |
-| `/system <prompt>` | Change system prompt |
-| `/temp <value>` | Change temperature |
-| `/quit` or `exit` | Exit the chat |
-
-### CLI Flags
-
-```bash
-python cli.py chat --model llama3.2:1b --verbose
-
-# Use --force-react for models without native tool support
-python cli.py chat --model phi3.5:3.8b --force-react
-
-# Performance optimization
-python cli.py chat --model qwen2.5-coder:0.5b --fast --warmup
-
-# Fine-tune context and output limits
-python cli.py chat --model llama3.2:1b --num-ctx 4096 --num-predict 512
-
-# Debug mode - shows tool parsing, fuzzy matching, etc.
-python cli.py chat --model qwen2.5-coder:0.5b --debug --verbose --tools python_repl
-```
-
-| Flag | Description |
-|------|-------------|
-| `--verbose`, `-v` | Show tool calls and timing |
-| `--debug` | Show detailed debug info (tool parsing, fuzzy matching) |
-| `--fast` | Preset for faster responses (reduced context/output) |
-| `--warmup` | Pre-load model before chat |
-| `--num-ctx N` | Set context window size |
-| `--num-predict N` | Set max output tokens |
-| `--force-react` | Force text-based ReAct format |
-| `--acp` | Enable ACP integration for activity tracking |
 
 ---
 
