@@ -35,6 +35,11 @@ BITNET_BASE_URL = "http://localhost:8765"
 _bitnet_env = os.environ.get("BITNET_BASE_URL")
 if _bitnet_env:
     BITNET_BASE_URL = _bitnet_env
+
+# Remote BitNet tunnel (cloudflare)
+_remote_bitnet = os.environ.get("BITNET_TUNNEL")
+if _remote_bitnet:
+    BITNET_BASE_URL = _remote_bitnet
     
 # ═══════════════════════════════════════════════════════════════════════════════
 # ACP CONFIGURATION

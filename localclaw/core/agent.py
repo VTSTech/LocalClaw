@@ -334,80 +334,85 @@ def _fuzzy_match_tool_name(hallucinated_name: str, tools_registry) -> str | None
         if lower_real in lower_hallucinated or lower_hallucinated in lower_real:
             return real_name
     
-    # Strategy 2: Check for common word patterns (e.g., "calculate" -> "calculator")
+    # Strategy 2: Word mappings for common hallucinations
+    # Maps keyword → list of acceptable tools (in priority order)
     word_mappings = {
         # Calculator-related
-        "calculate": "calculator",
-        "calc": "calculator",
-        "math": "calculator",
-        "compute": "calculator",
-        "eval": "calculator",
-        "expression": "calculator",
-        "power": "calculator",
-        "pow": "calculator",
-        "square": "calculator",
-        "sqrt": "calculator",
-        "root": "calculator",
-        "add": "calculator",
-        "subtract": "calculator",
-        "multiply": "calculator",
-        "divide": "calculator",
+        "calculate": ["calculator"],
+        "calc": ["calculator"],
+        "math": ["calculator"],
+        "compute": ["calculator"],
+        "eval": ["calculator", "python_repl"],
+        "expression": ["calculator"],
+        "power": ["calculator"],
+        "pow": ["calculator"],
+        "square": ["calculator"],
+        "sqrt": ["calculator"],
+        "root": ["calculator"],
+        "add": ["calculator"],
+        "subtract": ["calculator"],
+        "multiply": ["calculator"],
+        "divide": ["calculator"],
         
-        # Python REPL - EXPANDED
-        "python": "python_repl",
-        "repl": "python_repl",
-        "code": "python_repl",
-        "print": "python_repl",      # Model often uses "print(...)" as tool name
-        "execute": "python_repl",
-        "run": "python_repl",
-        "exec": "python_repl",
-        "today": "python_repl",      # Model hallucinates "today" for date questions
-        "date": "python_repl",       # Model hallucinates "date" for date questions
-        "time": "python_repl",       # Model hallucinates "time" for time questions
-        "datetime": "python_repl",   # Model hallucinates "datetime"
-        "now": "python_repl",        # Model hallucinates "now"
-        "current": "python_repl",    # "current_date", "current_time"
-        "get_date": "python_repl",   # Common hallucination
-        "get_time": "python_repl",   # Common hallucination
+        # Python REPL - can fallback to shell for many operations
+        "python": ["python_repl", "shell"],
+        "repl": ["python_repl", "shell"],
+        "code": ["python_repl", "shell"],
+        "print": ["python_repl", "shell"],
+        "execute": ["python_repl", "shell"],
+        "run": ["python_repl", "shell"],
+        "exec": ["python_repl", "shell"],
         
-        # Shell - EXPANDED
-        "shell": "shell",
-        "bash": "shell",
-        "cmd": "shell",
-        "command": "shell",
-        "ls": "shell",             # Model may output "ls" as tool name
-        "dir": "shell",
-        "cat": "shell",
-        "echo": "shell",
-        "grep": "shell",
-        "find": "shell",
-        "pwd": "shell",
-        "mkdir": "shell",
-        "rm": "shell",
-        "cp": "shell",
-        "mv": "shell",
+        # Date/time - can use python_repl OR shell
+        "today": ["python_repl", "shell"],
+        "date": ["python_repl", "shell"],
+        "time": ["python_repl", "shell"],
+        "datetime": ["python_repl", "shell"],
+        "now": ["python_repl", "shell"],
+        "current": ["python_repl", "shell"],
+        "get_date": ["python_repl", "shell"],
+        "get_time": ["python_repl", "shell"],
+        
+        # Shell - explicit shell commands
+        "shell": ["shell"],
+        "bash": ["shell"],
+        "cmd": ["shell"],
+        "command": ["shell"],
+        "ls": ["shell"],
+        "dir": ["shell"],
+        "cat": ["shell"],
+        "echo": ["shell"],
+        "grep": ["shell"],
+        "find": ["shell"],
+        "pwd": ["shell"],
+        "mkdir": ["shell"],
+        "rm": ["shell"],
+        "cp": ["shell"],
+        "mv": ["shell"],
         
         # File I/O
-        "read": "read_file",
-        "write": "write_file",
-        "file": "read_file",
-        "load": "read_file",
-        "save": "write_file",
+        "read": ["read_file"],
+        "write": ["write_file"],
+        "file": ["read_file"],
+        "load": ["read_file"],
+        "save": ["write_file"],
         
         # Weather (example custom tool)
-        "weather": "get_weather",
+        "weather": ["get_weather"],
         
         # Currency (example custom tool)
-        "currency": "convert_currency",
-        "convert": "convert_currency",
-        "money": "convert_currency",
+        "currency": ["convert_currency"],
+        "convert": ["convert_currency"],
+        "money": ["convert_currency"],
     }
     
-    for keyword, tool_hint in word_mappings.items():
+    for keyword, tool_hints in word_mappings.items():
         if keyword in lower_hallucinated:
-            for real_name in real_names:
-                if tool_hint in real_name or real_name == tool_hint:
-                    return real_name
+            # Try each hint in priority order
+            for tool_hint in tool_hints:
+                for real_name in real_names:
+                    if tool_hint in real_name or real_name == tool_hint:
+                        return real_name
     
     # Strategy 3: Levenshtein-like similarity (first 4+ chars match)
     for real_name in real_names:

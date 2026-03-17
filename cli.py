@@ -189,6 +189,13 @@ def _build_agent(args, client: OllamaClient):
             print(f"Run {bold('localclaw tools')} to see available tools.")
             sys.exit(1)
         tools_registry = BUILTIN_REGISTRY.subset(names)
+    elif getattr(args, "force_react", False):
+        # Auto-load default tools when --force-react is set but no --tools specified
+        # This allows BitNet and other models to use tools they hallucinate
+        default_tools = ["shell", "python_repl", "calculator"]
+        tools_registry = BUILTIN_REGISTRY.subset(default_tools)
+        if getattr(args, "verbose", False):
+            print(dim(f"  🦞 Auto-loaded tools for ReAct: {', '.join(default_tools)}"))
 
     # Resolve skills
     skill_registry = SkillRegistry()
