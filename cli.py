@@ -44,6 +44,11 @@ from localclaw.core.memory import Message
 from localclaw.tools.builtins import BUILTIN_REGISTRY
 from localclaw.skills import SkillLoader, SkillRegistry
 from localclaw.acp_plugin import ACPPlugin
+try:
+    from localclaw.bitnet_client import BitnetClient, KNOWN_MODELS
+    _BITNET_AVAILABLE = True
+except ImportError:
+    _BITNET_AVAILABLE = False
 
 # Global reference for A2A processing (set in cmd_chat)
 _acp_plugin = None
@@ -198,13 +203,10 @@ def _build_agent(args, client: OllamaClient):
                 print(f"Run {bold('localclaw skills')} to see available skills.")
                 sys.exit(1)
 
-    # Build system prompt
+    # Build system prompt — structured for small model reliability
     if getattr(args, "system", None):
         system_prompt = args.system
     else:
-        # Structured prompt for small models (0.5b-1.5b).
-        # Explicitly lists tools, shows exact JSON format, gives a
-        # concrete example, and forbids markdown fences around tool calls.
         tool_lines = ""
         if tools_registry:
             for t in tools_registry.all():
@@ -215,7 +217,6 @@ def _build_agent(args, client: OllamaClient):
                 tool_lines += f"  - {t.name}({params}): {t.description}\n"
         else:
             tool_lines = "  (no tools loaded)\n"
-
         system_prompt = (
             "You are LocalClaw, a helpful AI assistant that can use tools.\n"
             "\n"
@@ -307,6 +308,21 @@ def _build_agent(args, client: OllamaClient):
 # ------------------------------------------------------------------ #
 
 def cmd_models(args):
+    if getattr(args, "backend", "ollama") == "bitnet":
+        if not _BITNET_AVAILABLE:
+            print(red("✗  bitnet_client.py not found. Copy it into localclaw/."))
+            sys.exit(1)
+        print(bold("\n🦞 LocalClaw R03 BitNet Models"))
+        print(bold(f"  {'Model':<28} {'Size':<10} {'Quant':<8} Notes"))
+        print(dim("  " + "─" * 62))
+        for name, info in KNOWN_MODELS.items():
+            rec = green("  ★ recommended") if info["recommend"] else ""
+            print(f"  {cyan(name):<35} {info['size']:<10} {info['quant']:<8}{rec}")
+        print()
+        print(dim("  Setup: python bitnet_client.py setup --dir ./BitNet --model <name>"))
+        print(dim("  Run:   python cli.py chat --backend bitnet --bitnet-dir ./BitNet --force-react"))
+        print()
+        return
     client = OllamaClient()
     if not client.is_running():
         print(red("✗  Ollama is not running. Start it with: ollama serve"))
@@ -385,10 +401,47 @@ def cmd_skills(args):
     print()
 
 
+def _build_client(args):
+    """Return OllamaClient or BitnetClient based on --backend flag."""
+    backend = getattr(args, "backend", "ollama")
+    if backend == "bitnet":
+        if not _BITNET_AVAILABLE:
+            print(red("✗  bitnet_client.py not found in localclaw/."))
+            print(dim("   Copy bitnet_client.py into the localclaw/ directory."))
+            sys.exit(1)
+        bitnet_dir = getattr(args, "bitnet_dir", None) or os.environ.get("BITNET_DIR")
+        if not bitnet_dir:
+            for candidate in ["./BitNet", "./bitnet", os.path.expanduser("~/BitNet"), "/content/BitNet"]:
+                if os.path.exists(candidate):
+                    bitnet_dir = candidate
+                    break
+        if not bitnet_dir:
+            print(red("✗  BitNet directory not found."))
+            print(dim("   Pass --bitnet-dir /path/to/BitNet  or  set BITNET_DIR env var"))
+            sys.exit(1)
+        model = getattr(args, "model", "bitnet-b1.58-2b-4t")
+        if _BITNET_AVAILABLE and model not in KNOWN_MODELS and not model.endswith(".gguf"):
+            model = "bitnet-b1.58-2b-4t"
+        threads = getattr(args, "bitnet_threads", None) or max(1, (os.cpu_count() or 4))
+        gpu_layers = getattr(args, "bitnet_gpu_layers", 0)
+        return BitnetClient(
+            bitnet_dir=bitnet_dir,
+            model=model,
+            threads=threads,
+            gpu_layers=gpu_layers,
+            verbose=getattr(args, "verbose", False),
+            auto_start=True,
+        )
+    return OllamaClient()
+
+
 def cmd_run(args):
-    client = OllamaClient()
+    client = _build_client(args)
     if not client.is_running():
-        print(red("✗  Ollama is not running. Start it with: ollama serve"))
+        if getattr(args, "backend", "ollama") == "bitnet":
+            print(red("✗  BitNet backend failed to start. Check --bitnet-dir."))
+        else:
+            print(red("✗  Ollama is not running. Start it with: ollama serve"))
         sys.exit(1)
 
     agent, skill_registry, acp_plugin = _build_agent(args, client)
@@ -437,9 +490,12 @@ def cmd_run(args):
 
 
 def cmd_chat(args):
-    client = OllamaClient()
+    client = _build_client(args)
     if not client.is_running():
-        print(red("✗  Ollama is not running. Start it with: ollama serve"))
+        if getattr(args, "backend", "ollama") == "bitnet":
+            print(red("✗  BitNet backend failed to start. Check --bitnet-dir."))
+        else:
+            print(red("✗  Ollama is not running. Start it with: ollama serve"))
         sys.exit(1)
 
     # Warm up model if requested (useful for remote Ollama with cold starts)
@@ -1074,6 +1130,35 @@ def build_parser() -> argparse.ArgumentParser:
         "--acp",
         action="store_true",
         help="Enable ACP (Agent Control Panel) integration for activity tracking",
+    )
+    shared.add_argument(
+        "--backend",
+        default="ollama",
+        choices=["ollama", "bitnet"],
+        help="Inference backend: ollama (default) or bitnet (bitnet.cpp llama-server)",
+    )
+    shared.add_argument(
+        "--bitnet-dir",
+        default=None,
+        metavar="DIR",
+        dest="bitnet_dir",
+        help="Path to BitNet repo (required when --backend bitnet)",
+    )
+    shared.add_argument(
+        "--bitnet-threads",
+        type=int,
+        default=None,
+        metavar="N",
+        dest="bitnet_threads",
+        help="CPU threads for llama-server (default: all cores)",
+    )
+    shared.add_argument(
+        "--bitnet-gpu-layers",
+        type=int,
+        default=0,
+        metavar="N",
+        dest="bitnet_gpu_layers",
+        help="GPU layers to offload in llama-server (default: 0)",
     )
 
     # ── run ─────────────────────────────────────────────────────────
