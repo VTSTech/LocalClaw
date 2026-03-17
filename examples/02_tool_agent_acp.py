@@ -134,7 +134,7 @@ if __name__ == "__main__":
         sys.exit(1)
 
     # Get available models dynamically
-    from localclaw.model_discovery import get_available_models
+    from localclaw import get_available_models
     available_models = get_available_models(client)
     MODELS_TO_TEST = available_models[:10] if available_models else []
     

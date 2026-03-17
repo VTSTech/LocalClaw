@@ -1855,7 +1855,13 @@ class Agent:
         )
         full = ""
         for chunk in chunks:
-            token = chunk.get("message", {}).get("content", "")
+            # Handle both Ollama (dict) and BitNet (string) streaming formats
+            if isinstance(chunk, dict):
+                token = chunk.get("message", {}).get("content", "")
+            elif isinstance(chunk, str):
+                token = chunk
+            else:
+                token = str(chunk) if chunk else ""
             full += token
             yield token
         self.memory.add_assistant(full)
