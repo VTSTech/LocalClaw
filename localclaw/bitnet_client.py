@@ -31,6 +31,7 @@ class BitnetClient:
                     return [m['id'] for m in data.get('data', [])]
         except:
             return []
+
     def chat(
         self,
         model: str,
@@ -39,7 +40,14 @@ class BitnetClient:
         stream: bool = False,
         tools: list | None = None, # Signature fix for agent.py
         **kwargs,                  # Catch-all for extra agent args
-    ) -> dict:
+    ):
+        """
+        Chat completion for BitNet.
+        
+        Note: BitNet llama-server doesn't support streaming in the same way
+        as Ollama. When stream=True, this yields tokens from a streaming
+        response. Otherwise returns a complete response dict.
+        """
         url = f"{self.base_url}/v1/chat/completions"
         
         data = {
@@ -55,17 +63,49 @@ class BitnetClient:
             headers={"Content-Type": "application/json"}
         )
 
+        if stream:
+            # Return a generator for streaming
+            return self._stream_response(req, model)
+        else:
+            # Non-streaming: return complete response
+            with urllib.request.urlopen(req, timeout=self.timeout) as resp:
+                result = json.loads(resp.read().decode("utf-8"))
+                # Normalize OpenAI completion to Ollama format for the Agent
+                return {
+                    "model": model,
+                    "message": {
+                        "role": "assistant",
+                        "content": result["choices"][0]["message"]["content"]
+                    },
+                    "done": True
+                }
+
+    def _stream_response(self, req, model):
+        """
+        Handle SSE streaming response from BitNet server.
+        Yields tokens one at a time.
+        """
         with urllib.request.urlopen(req, timeout=self.timeout) as resp:
-            result = json.loads(resp.read().decode("utf-8"))
-            # Normalize OpenAI completion to Ollama format for the Agent
-            return {
-                "model": model,
-                "message": {
-                    "role": "assistant",
-                    "content": result["choices"][0]["message"]["content"]
-                },
-                "done": True
-            }
+            buffer = ""
+            for line in resp:
+                line = line.decode("utf-8")
+                if line.startswith("data: "):
+                    data_str = line[6:].strip()
+                    if data_str == "[DONE]":
+                        break
+                    try:
+                        chunk = json.loads(data_str)
+                        if "choices" in chunk and len(chunk["choices"]) > 0:
+                            delta = chunk["choices"][0].get("delta", {})
+                            content = delta.get("content", "")
+                            if content:
+                                yield content
+                    except json.JSONDecodeError:
+                        continue
 
     def model_supports_tools(self, model: str) -> bool:
         return False # BitNet models require ReAct fallback in Agent.py
+    
+    def supports_streaming(self) -> bool:
+        """Return True if this client supports streaming."""
+        return True

@@ -320,9 +320,13 @@ def model_exists(model: str, client: Optional[OllamaClient] = None) -> bool:
 __all__ = [
     "get_client",
     "get_models",
+    "get_available_models",  # Alias for get_models
     "get_ollama_models",
     "get_bitnet_models",
     "pick_best_model",
     "pick_models_for_benchmark",
     "model_exists",
 ]
+
+# Alias for convenience
+get_available_models = get_models
