@@ -141,6 +141,7 @@ def print_step(step: StepResult):
 # ── 5. Build the agent ─────────────────────────────────────────────
 agent = Agent(
     model=MODEL,
+    client=client,
     tools=registry,
     system_prompt=(
         "You are a helpful assistant with access to tools. "

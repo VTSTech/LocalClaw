@@ -107,6 +107,7 @@ def run_tool_benchmark(model_name, client):
 
     agent = Agent(
         model=model_name,
+        client=client,
         tools=registry,
         system_prompt="You have tools. Use them to answer. Be concise.",
         on_step=print_step,

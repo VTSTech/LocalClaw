@@ -58,6 +58,7 @@ print()
 
 coder = Agent(
     model=MAIN_MODEL,
+    client=_client,
     system_prompt=(
         "You are an expert software engineer. "
         "When asked to write code, respond with clean, working Python code in a code block. "
@@ -67,6 +68,7 @@ coder = Agent(
 
 analyst = Agent(
     model=MAIN_MODEL,
+    client=_client,
     tools=BUILTIN_REGISTRY.subset(["calculator"]),
     system_prompt=(
         "You are a data analyst and mathematician. "
@@ -78,6 +80,7 @@ analyst = Agent(
 
 writer = Agent(
     model=MAIN_MODEL,
+    client=_client,
     system_prompt=(
         "You are a skilled writer. Produce clear, well-structured prose. "
         "Adapt tone to context: professional for business, friendly for casual. "

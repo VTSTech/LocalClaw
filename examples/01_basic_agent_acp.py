@@ -78,6 +78,7 @@ if bootstrap.get("warnings"):
 # ── 3. Create an agent ─────────────────────────────────────────────
 agent = Agent(
     model=MODEL,
+    client=client,  # Pass the backend-aware client!
     system_prompt="You are a concise and helpful assistant. Keep answers brief.",
     model_options={
         "temperature": 0.7,

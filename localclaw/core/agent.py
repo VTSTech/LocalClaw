@@ -26,12 +26,19 @@ from .ollama_client import OllamaClient
 from .memory import Memory
 from .tools import ToolRegistry
 
-# Import backend-aware client selection
-try:
-    from .. import get_default_client as _get_default_client
-    _backend_aware = True
-except ImportError:
-    _backend_aware = False
+# Import config for backend selection (avoids circular import)
+import os as _os
+_LOCALCLAW_BACKEND = _os.environ.get("LOCALCLAW_BACKEND", "ollama").lower()
+
+# Try to import BitNet client if needed
+if _LOCALCLAW_BACKEND == "bitnet":
+    try:
+        from ..bitnet_client import BitnetClient
+        _BITNET_AVAILABLE = True
+    except ImportError:
+        _BITNET_AVAILABLE = False
+else:
+    _BITNET_AVAILABLE = False
 
 
 # ------------------------------------------------------------------ #
@@ -1083,11 +1090,13 @@ class Agent:
         self.model = model
         self.tools = tools or ToolRegistry()
         self.max_steps = max_steps
-        # Use backend-aware client selection if no client provided
+        # Backend-aware client selection
         if client is not None:
             self.client = client
-        elif _backend_aware:
-            self.client = _get_default_client()
+        elif _LOCALCLAW_BACKEND == "bitnet" and _BITNET_AVAILABLE:
+            from ..bitnet_client import BitnetClient
+            from ..config import BITNET_BASE_URL
+            self.client = BitnetClient(base_url=BITNET_BASE_URL)
         else:
             self.client = OllamaClient()
         self.force_react = force_react
