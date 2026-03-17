@@ -292,16 +292,17 @@ The following models have been tested with a **15-test benchmark** (3 tests per 
 | Rank | Model | Score | Time | Math | Reason | Know | Calc | Code |
 |:----:|-------|------:|-----:|:----:|:------:|:----:|:----:|:----:|
 | 🥇 | `qwen2.5-coder:0.5b-instruct-q4_k_m` | **14/15 (93%)** | ~80s | **3/3** | 2/3 | 2/3 | **3/3** | **3/3** |
-| 🥈 | `granite3.1-moe:1b` | **12/15 (80%)** | ~60s | **3/3** | 2/3 | **3/3** | 1/3 | **3/3** |
-| 🥉 | `llama3.2:1b` | **12/15 (80%)** | ~600s | **3/3** | 1/3 | 2/3 | **3/3** | **3/3** |
-| 4 | `gemma3:270m` | 10/15 (67%) | ~75s | **3/3** | 1/3 | 1/3 | 2/3 | **3/3** |
-| 5 | `qwen3:0.6b` | ~9/12 | ~130s | 2/3 | **3/3** | **3/3** | 0/3 | — |
-| 6 | `granite4:350m` | 8/15 (53%) | ~97s | 2/3 | 1/3 | 2/3 | 0/3 | **3/3** |
-| 7 | `qwen2.5:0.5b` | 10/15 (67%) | ~107s | 1/3 | **3/3** | **3/3** | 0/3 | **3/3** |
-| 8 | `qwen2-math:1.5b` | 12/15 (80%) | ~611s | **3/3** | **3/3** | **3/3** | ❌ | **3/3** |
-| 9 | `tinyllama:latest` | 9/15 (60%) | ~587s | 2/3 | 2/3 | **3/3** | 0/3 | 2/3 |
-| 10 | `smollm:135m` | 7/15 (47%) | ~285s | 0/3 | 2/3 | 2/3 | 0/3 | **3/3** |
-| 11 | `functiongemma:270m` | 1/15 (7%) | ~90s | 0/3 | 0/3 | 0/3 | 0/3 | 1/3 |
+| 🥈 | **`BitNet-b1.58-2B-4T`** (BitNet) | **13/15 (87%)** | ~394s | **3/3** | 2/3 | 2/3 | **3/3** | **3/3** |
+| 🥉 | `granite3.1-moe:1b` | **12/15 (80%)** | ~60s | **3/3** | 2/3 | **3/3** | 1/3 | **3/3** |
+| 4 | `llama3.2:1b` | **12/15 (80%)** | ~600s | **3/3** | 1/3 | 2/3 | **3/3** | **3/3** |
+| 5 | `gemma3:270m` | 10/15 (67%) | ~75s | **3/3** | 1/3 | 1/3 | 2/3 | **3/3** |
+| 6 | `qwen3:0.6b` | ~9/12 | ~130s | 2/3 | **3/3** | **3/3** | 0/3 | — |
+| 7 | `granite4:350m` | 8/15 (53%) | ~97s | 2/3 | 1/3 | 2/3 | 0/3 | **3/3** |
+| 8 | `qwen2.5:0.5b` | 10/15 (67%) | ~107s | 1/3 | **3/3** | **3/3** | 0/3 | **3/3** |
+| 9 | `qwen2-math:1.5b` | 12/15 (80%) | ~611s | **3/3** | **3/3** | **3/3** | ❌ | **3/3** |
+| 10 | `tinyllama:latest` | 9/15 (60%) | ~587s | 2/3 | 2/3 | **3/3** | 0/3 | 2/3 |
+| 11 | `smollm:135m` | 7/15 (47%) | ~285s | 0/3 | 2/3 | 2/3 | 0/3 | **3/3** |
+| 12 | `functiongemma:270m` | 1/15 (7%) | ~90s | 0/3 | 0/3 | 0/3 | 0/3 | 1/3 |
 
 > **Note**: Scores vary between runs due to model non-determinism. The `qwen2.5-coder:0.5b` achieved 100% in some runs.
 
@@ -310,6 +311,7 @@ The following models have been tested with a **15-test benchmark** (3 tests per 
 | Model | Params | Size | Speed | Tool Support | Notes |
 |-------|--------|------|-------|--------------|-------|
 | `qwen2.5-coder:0.5b` | 494M | ~400MB | ⚡ Fast | ✅ Native | **🏆 Best overall!** Excellent tool usage |
+| **`BitNet-b1.58-2B-4T`** | **2B** | **~1.3GB** | **⚡ Medium** | **⚠️ ReAct** | **🥈 2nd place!** CPU-efficient ternary weights |
 | `granite3.1-moe:1b` | 1B MoE | ~1.4GB | ⚡ Medium | ✅ Native | Strong knowledge, HTTP 500 on long context |
 | `llama3.2:1b` | 1.2B | ~1.3GB | 🐢 Slow | ✅ Native | **128k context!** Thorough but slow |
 | `gemma3:270m` | 270M | ~292MB | ⚡⚡ Fastest | ⚠️ ReAct JSON | Uses JSON ReAct format, Math & Code champion |
@@ -325,10 +327,10 @@ The following models have been tested with a **15-test benchmark** (3 tests per 
 
 | Category | Champion | Score | Notes |
 |----------|----------|-------|-------|
-| **Math** | `qwen2.5-coder:0.5b`, `granite3.1-moe:1b` | 3/3 | Also gemma3:270m |
+| **Math** | `qwen2.5-coder:0.5b`, `granite3.1-moe:1b`, `BitNet-b1.58-2B` | 3/3 | Also gemma3:270m |
 | **Reasoning** | `qwen2.5:0.5b`, `qwen3:0.6b`, `qwen2-math` | 3/3 | Multiple tied |
 | **Knowledge** | `granite3.1-moe:1b`, `qwen2-math` | 3/3 | Multiple tied at 3/3 |
-| **Calc** | `qwen2.5-coder:0.5b`, `llama3.2:1b` | 3/3 | Only models with 100% tool usage |
+| **Calc** | `qwen2.5-coder:0.5b`, `llama3.2:1b`, `BitNet-b1.58-2B` | 3/3 | 100% tool usage with ReAct |
 | **Code** | Many models | 3/3 | Code generation is easy for small models! |
 
 ### Test Categories
