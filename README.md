@@ -1,6 +1,6 @@
-# 🦞 LocalClaw R02
+# 🦞 LocalClaw R03
 
-A minimal, hackable agentic framework engineered to run **entirely locally** with [Ollama](https://ollama.com).
+A minimal, hackable agentic framework engineered to run **entirely locally** with [Ollama](https://ollama.com) or [BitNet](https://github.com/microsoft/BitNet).
 
 Inspired by the architecture of OpenClaw, rebuilt from scratch for local-first operation.
 
@@ -21,10 +21,14 @@ localclaw/
 ├── skills/
 │   ├── loader.py          # Agent Skills specification loader (progressive disclosure)
 │   ├── skill-creator/     # OpenClaw skill-creator for generating new skills
+│   ├── acp/               # ACP (Agent Control Panel) skill
 │   ├── datetime/          # Datetime utilities skill
 │   └── web_search/        # Web search skill
 ├── tools/
 │   └── builtins.py        # Ready-to-use tools: calculator, shell, file I/O, HTTP, REPL
+├── bitnet_client.py       # R03: BitNet backend client (Microsoft 1.58-bit quantization)
+├── bitnet_setup.py        # R03: BitNet setup/compilation helper
+├── acp_plugin.py          # ACP integration for activity tracking and A2A messaging
 └── examples/
     ├── 01_basic_agent.py      # Simple Q&A demo
     ├── 02_tool_agent.py       # Tool calling demo
@@ -55,12 +59,14 @@ run.cmd          # Batch: Interactive menu for single example (Windows)
 | Concern | Approach |
 |---|---|
 | **HTTP Client** | Zero external dependencies — uses Python stdlib `urllib` only |
+| **Backends** | Ollama (default) or BitNet (R03) — switch via `--backend` flag |
 | **Tool calling** | Native Ollama tool-call protocol when supported; automatic ReAct text-parsing fallback for other models |
 | **Memory** | Sliding window — older turns are archived and optionally compressed via LLM summarization |
 | **Tools** | Decorator-based, auto-generates JSON schemas from Python type hints |
 | **Orchestration** | Router (LLM picks agent), Pipeline (chain), or Parallel (concurrent + merge) |
 | **Streaming** | First-class via generator interface |
 | **Error handling** | Automatic retry with exponential backoff for transient network/server errors |
+| **Security** | Path validation, command blocklist, SSRF protection (R03) |
 
 ---
 
@@ -76,6 +82,33 @@ ollama serve
 # Pull a model:
 ollama pull qwen2.5-coder:0.5b-instruct-q4_k_m
 ```
+
+### BitNet Backend (R03)
+
+For BitNet support, you need to set up Microsoft's BitNet:
+
+```bash
+# Clone and compile BitNet
+python localclaw/bitnet_setup.py
+
+# Or manually:
+git clone --recursive https://github.com/microsoft/BitNet.git
+cd BitNet
+python setup_env.py --hf-repo microsoft/BitNet-b1.58-2B-4T --quant-type i2_s
+
+# Start the BitNet server (in a separate terminal)
+./build/bin/llama-server -m models/BitNet-b1.58-2B-4T/ggml-model-i2_s.gguf
+```
+
+Then use the BitNet backend:
+
+```bash
+# Use BitNet instead of Ollama
+python cli.py chat --backend bitnet --model bitnet-b1.58-2b-4t --force-react
+```
+
+> **Note**: BitNet models require `--force-react` as they don't support native tool calling.
+> BitNet testing is pending — all current benchmarks are with Ollama backend.
 
 ---
 
@@ -348,7 +381,7 @@ The following models have been tested with a **15-test benchmark** (3 tests per 
 
 ## Skills (Agent Skills Specification)
 
-🦞 LocalClaw R02 supports the **[Agent Skills](https://agentskills.io/)** specification for reusable instruction bundles.
+🦞 LocalClaw R03 supports the **[Agent Skills](https://agentskills.io/)** specification for reusable instruction bundles.
 
 ### Skill Structure
 
@@ -467,7 +500,7 @@ python examples/11_skill_creator_test.py
 
 ## ACP Integration (Agent Control Panel)
 
-🦞 LocalClaw R02 supports **[ACP (Agent Control Panel)](https://github.com/VTSTech/ACP-Agent-Control-Panel)** for centralized activity tracking, token monitoring, and multi-agent coordination.
+🦞 LocalClaw R03 supports **[ACP (Agent Control Panel)](https://github.com/VTSTech/ACP-Agent-Control-Panel)** for centralized activity tracking, token monitoring, and multi-agent coordination.
 
 ### What is ACP?
 
@@ -710,9 +743,35 @@ python cli.py chat --model qwen2.5-coder:0.5b --debug --verbose --tools python_r
 
 ## Recent Improvements
 
+### R03: BitNet Backend
+
+🦞 LocalClaw R03 adds **BitNet backend support** for running Microsoft's 1.58-bit quantized models:
+
+- **New backend**: Switch between Ollama and BitNet via `--backend` flag
+- **Zero-cost inference**: BitNet models run efficiently on CPU
+- **Setup helper**: `bitnet_setup.py` handles cloning and compilation
+- **Note**: BitNet requires ReAct fallback (no native tool support)
+
+### R03: Enhanced Security
+
+Built-in tools now have comprehensive security:
+
+- **Path validation**: Restrict file access to allowed directories
+- **Command blocklist**: Block dangerous commands (`rm`, `sudo`, `chmod`, etc.)
+- **Pattern detection**: Detect dangerous shell patterns (pipes to bash, command substitution)
+- **SSRF protection**: Block private IPs and cloud metadata endpoints in `http_get`
+- **Configurable modes**: `strict`, `permissive`, or `disabled`
+
+```bash
+# Set security mode
+export LOCALCLAW_SECURITY_MODE=strict
+export LOCALCLAW_ALLOWED_PATHS=/home/user/projects:/tmp
+export LOCALCLAW_BLOCKED_COMMANDS=rm,sudo,dd
+```
+
 ### Zero Dependencies
 
-🦞 LocalClaw R02 now uses **only Python stdlib** — no pip install required! The HTTP client uses `urllib` instead of `httpx`.
+🦞 LocalClaw R03 continues to use **only Python stdlib** — no pip install required! The HTTP client uses `urllib` instead of `httpx`.
 
 ### Automatic Error Recovery
 
@@ -722,7 +781,7 @@ python cli.py chat --model qwen2.5-coder:0.5b --debug --verbose --tools python_r
 
 ### Small Model Support
 
-🦞 LocalClaw R02 handles quirks of small models (≤1.5B parameters):
+🦞 LocalClaw R03 handles quirks of small models (≤1.5B parameters):
 
 - **Fuzzy tool name matching**: Hallucinated tool names like `calculate_expression` are automatically mapped to `calculator`
 - **Argument auto-fixing**: Common wrong argument patterns are corrected (e.g., `{"base": 2, "exponent": 10}` → `{"expression": "2 ** 10"}`)
@@ -764,8 +823,12 @@ Key insights for small model prompt engineering:
 
 ## About
 
-**🦞 LocalClaw R02** is written and maintained by **VTSTech**.
+**🦞 LocalClaw R03** is written and maintained by **VTSTech**.
 
 - 🌐 Website: [https://www.vts-tech.org](https://www.vts-tech.org)
 - 📦 GitHub: [https://github.com/VTSTech/LocalClaw](https://github.com/VTSTech/LocalClaw)
 - 💻 More projects: [https://github.com/VTSTech](https://github.com/VTSTech)
+
+---
+
+> **Testing Status**: All benchmarks and test results shown are with **Ollama backend**. BitNet backend testing is pending and will be added in a future update.
