@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-🦞 LocalClaw R02 — CLI
+🦞 LocalClaw R03 — CLI
 Entry point: localclaw <command> [options]
 
 Commands:
@@ -199,7 +199,46 @@ def _build_agent(args, client: OllamaClient):
                 sys.exit(1)
 
     # Build system prompt
-    system_prompt = getattr(args, "system", None) or "You are the AI Agent: LocalClaw, You have access to tools."
+    if getattr(args, "system", None):
+        system_prompt = args.system
+    else:
+        # Structured prompt for small models (0.5b-1.5b).
+        # Explicitly lists tools, shows exact JSON format, gives a
+        # concrete example, and forbids markdown fences around tool calls.
+        tool_lines = ""
+        if tools_registry:
+            for t in tools_registry.all():
+                params = ", ".join(
+                    p.name + ("?" if not p.required else "")
+                    for p in t.params
+                )
+                tool_lines += f"  - {t.name}({params}): {t.description}\n"
+        else:
+            tool_lines = "  (no tools loaded)\n"
+
+        system_prompt = (
+            "You are LocalClaw, a helpful AI assistant that can use tools.\n"
+            "\n"
+            "TOOLS AVAILABLE:\n"
+            + tool_lines +
+            "\n"
+            "RULES:\n"
+            "1. To use a tool, reply with ONLY raw JSON on a single line — "
+            "no markdown, no explanation before or after:\n"
+            '   {"name": "tool_name", "arguments": {"param": "value"}}\n'
+            "2. Wait for the tool result before continuing.\n"
+            "3. If you do NOT need a tool, reply normally in plain text.\n"
+            "4. Never invent tool names. Only use the tools listed above.\n"
+            "5. Never wrap JSON in ```json``` fences.\n"
+            "\n"
+            "EXAMPLE:\n"
+            "User: What files are in the current directory?\n"
+            'Assistant: {"name": "list_directory", "arguments": {"path": "."}}\n'
+            "Tool result: file1.py  file2.txt  README.md\n"
+            "Assistant: The directory contains: file1.py, file2.txt, and README.md.\n"
+            "\n"
+            "Now help the user with their request."
+        )
     
     # Add skill instructions if skills are loaded
     if len(skill_registry) > 0:
@@ -278,7 +317,7 @@ def cmd_models(args):
         print(yellow("No models found. Pull one with: ollama pull llama3.2:3b"))
         return
 
-    print(bold("\n🦞 LocalClaw R02 Models") + dim(" · Written by VTSTech · https://www.vts-tech.org · https://github.com/VTSTech/LocalClaw"))
+    print(bold("\n🦞 LocalClaw R03 Models") + dim(" · Written by VTSTech · https://www.vts-tech.org · https://github.com/VTSTech/LocalClaw"))
     print(bold(f"{'Model':<40} {'Tool support':>12}"))
     print(dim("─" * 54))
     for m in sorted(models):
@@ -289,7 +328,7 @@ def cmd_models(args):
 
 def cmd_tools(args):
     tools = BUILTIN_REGISTRY.all()
-    print(bold("\n🦞 LocalClaw R02 Tools") + dim(" · Written by VTSTech · https://www.vts-tech.org · https://github.com/VTSTech/LocalClaw"))
+    print(bold("\n🦞 LocalClaw R03 Tools") + dim(" · Written by VTSTech · https://www.vts-tech.org · https://github.com/VTSTech/LocalClaw"))
     print(bold(f"{'Tool':<20} Description"))
     print(dim("─" * 70))
     for t in tools:
@@ -309,7 +348,7 @@ def cmd_skills(args):
     loader = SkillLoader()
     skills = loader.list_skills()
     
-    print(bold("\n🦞 LocalClaw R02 Skills") + dim(" · Written by VTSTech · https://www.vts-tech.org · https://github.com/VTSTech/LocalClaw"))
+    print(bold("\n🦞 LocalClaw R03 Skills") + dim(" · Written by VTSTech · https://www.vts-tech.org · https://github.com/VTSTech/LocalClaw"))
     
     if not skills:
         print(yellow("  No skills found."))
@@ -358,7 +397,7 @@ def cmd_run(args):
     if acp_plugin:
         bootstrap_result = acp_plugin.bootstrap(claim_primary=False)  # LocalClaw is secondary
 
-    print(bold("🦞 LocalClaw R02") + dim(" · Written by VTSTech · https://www.vts-tech.org · https://github.com/VTSTech/LocalClaw"))
+    print(bold("🦞 LocalClaw R03") + dim(" · Written by VTSTech · https://www.vts-tech.org · https://github.com/VTSTech/LocalClaw"))
     print(f"Prompt: {args.prompt}")
 
     # Log user message to ACP
@@ -443,7 +482,7 @@ def cmd_chat(args):
     parts.append("]")
     status = " ".join(parts)
     
-    print(bold(f"\n🦞 LocalClaw R02 chat") + dim(f"  {status} · Written by VTSTech · https://www.vts-tech.org · https://github.com/VTSTech/LocalClaw"))
+    print(bold(f"\n🦞 LocalClaw R03 chat") + dim(f"  {status} · Written by VTSTech · https://www.vts-tech.org · https://github.com/VTSTech/LocalClaw"))
     print(dim("  Type 'exit', 'quit', or Ctrl+C to quit."))
     print(dim("  Type '/reset' to clear conversation history."))
     print(dim("  Type '/tools' to list available tools."))
@@ -915,7 +954,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     parser = argparse.ArgumentParser(
         prog="localclaw",
-        description="🦞 LocalClaw R02 — local agentic AI powered by Ollama · Written by VTSTech · https://www.vts-tech.org · https://github.com/VTSTech/LocalClaw",
+        description="🦞 LocalClaw R03 — local agentic AI powered by Ollama · Written by VTSTech · https://www.vts-tech.org · https://github.com/VTSTech/LocalClaw",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=textwrap.dedent("""
         options (for 'run' and 'chat' commands):

@@ -484,6 +484,50 @@ def _looks_like_tool_schema_dump(text: str) -> bool:
     return matches >= 2
 
 
+def _is_simple_answered_query(user_input: str, successful_results: list[str]) -> bool:
+    """
+    Return True when a single successful tool result is sufficient to answer
+    the user's question and the agent should synthesize immediately.
+
+    Targets the most common small-model looping patterns:
+      - Date/time queries ("what is the date", "what time is it")
+      - Simple arithmetic ("what is 2+2", "sqrt of 144")
+      - Single-file reads ("show me file.py")
+      - Single directory listings
+
+    Deliberately conservative — returns False for anything that might
+    genuinely need multiple tool calls (multi-step tasks, comparisons, etc.)
+    """
+    if not successful_results:
+        return False
+
+    lower = user_input.lower().strip()
+
+    # Date/time patterns
+    date_time_keywords = [
+        "date", "time", "day", "today", "now", "current date",
+        "what day", "what time", "year", "month",
+    ]
+    if any(kw in lower for kw in date_time_keywords):
+        return True
+
+    # Simple arithmetic / single calculation
+    math_keywords = ["what is", "calculate", "compute", "sqrt", "square root",
+                     "result of", "value of", "evaluate"]
+    math_ops = ["+", "-", "*", "/", "^", "**", "%"]
+    if any(kw in lower for kw in math_keywords) and len(lower) < 60:
+        return True
+    if sum(1 for op in math_ops if op in lower) >= 1 and len(lower) < 40:
+        return True
+
+    # Single file read / single dir listing
+    single_file_keywords = ["read", "show", "display", "print", "list", "ls"]
+    if any(kw in lower for kw in single_file_keywords) and len(lower.split()) <= 6:
+        return True
+
+    return False
+
+
 def _is_greeting_or_simple(text: str) -> bool:
     """
     Check if the user input is a simple greeting or short message
@@ -733,6 +777,40 @@ IMPORTANT: Action Input must be valid JSON. Only use tools listed below.
 """
 
 
+def _sanitize_model_json(text: str) -> str:
+    """
+    Fix common JSON mistakes made by small (0.5b-3b) models before parsing.
+
+    1. Python bool/None literals to JSON equivalents:
+       True -> true,  False -> false,  None -> null
+
+    2. Python string concatenation in values - keep only the string literal:
+       "Today: " + datetime.now().strftime(...)  becomes  "Today: "
+       This is the most common failure mode with 0.5b models.
+
+    3. Trailing commas before } or ] (technically invalid JSON)
+    """
+    # 1. Python booleans / None - simple word replacement
+    # Using explicit replace chains to avoid regex escaping issues
+    # Only replace as whole words preceded by : or [ or space
+    import re as _re
+    text = _re.sub(r':\s*True',  ': true',  text)
+    text = _re.sub(r':\s*False', ': false', text)
+    text = _re.sub(r':\s*None',  ': null',  text)
+    text = _re.sub(r'\[\s*True',  '[true',  text)
+    text = _re.sub(r'\[\s*False', '[false', text)
+    text = _re.sub(r'\[\s*None',  '[null',  text)
+
+    # 2. Python string concatenation: "literal" + anything -> "literal"
+    # Match a JSON string followed by + and non-JSON content up to , } ] or newline
+    text = _re.sub(r'("(?:[^"\\]|\\.)*")\s*\+\s*[^,\'"}\]\n]+', r'\1', text)
+
+    # 3. Trailing commas before } or ]
+    text = _re.sub(r',\s*([}\]])', r'\1', text)
+
+    return text
+
+
 def _parse_json_tool_call(text: str) -> tuple[str | None, dict | None]:
     """
     Fallback for models that output tool calls as JSON text instead of
@@ -760,8 +838,17 @@ def _parse_json_tool_call(text: str) -> tuple[str | None, dict | None]:
     if start == -1 or end == -1:
         return None, None
 
+    json_str = cleaned[start:end + 1]
+
+    # Sanitize common small-model JSON mistakes before parsing:
+    #   1. Python bool/None literals  →  JSON equivalents
+    #   2. Python string concatenation  →  keep only the string literal part
+    #      e.g. "Today: " + datetime.now()...  →  "Today: "
+    #   3. Trailing commas before } or ]
+    json_str = _sanitize_model_json(json_str)
+
     try:
-        obj = json.loads(cleaned[start:end + 1])
+        obj = json.loads(json_str)
     except json.JSONDecodeError:
         return None, None
 
@@ -1170,6 +1257,16 @@ class Agent:
 
                 continue  # back to top of while loop after processing all tool calls
 
+            # ── Immediate synthesize after successful tool result ───────────── #
+            # Prevents small models re-invoking tools when the answer is in hand.
+            # Triggered when: a tool succeeded AND the query is simple (date, math, etc.)
+            if _successful_results and _is_simple_answered_query(user_input, _successful_results):
+                final_answer = self._synthesize(user_input, _successful_results)
+                final_step = StepResult(type="final", content=final_answer, elapsed_ms=elapsed)
+                run.steps.append(final_step)
+                self._emit(final_step)
+                run.final_answer = final_answer
+                break
 
             # Some models (e.g. llama3.2:1b) output JSON in the message body
             # instead of using the tool_calls field.
