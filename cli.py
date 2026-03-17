@@ -1045,7 +1045,8 @@ def build_parser() -> argparse.ArgumentParser:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=textwrap.dedent("""
         options (for 'run' and 'chat' commands):
-          -m, --model MODEL      Ollama model to use (default: auto-detect)
+          -m, --model MODEL      Model to use (default: auto-detect for Ollama, bitnet-b1.58-2b-4t for BitNet)
+          --backend BACKEND      Inference backend: ollama (default) or bitnet (bitnet.cpp llama-server)
           -t, --tools TOOLS      Comma-separated tools: calculator,shell,python_repl,read_file,write_file,http_get
           -k, --skills SKILLS    Comma-separated skills: skill-creator,datetime,web_search
           -s, --system PROMPT    Override system prompt
@@ -1069,7 +1070,9 @@ def build_parser() -> argparse.ArgumentParser:
           localclaw chat --skills skill-creator --tools write_file,shell
           localclaw chat --fast --stream --verbose
           localclaw chat --acp --tools shell,read_file,write_file
+          localclaw chat --backend bitnet --model bitnet-b1.58-2b-4t --force-react
           localclaw models
+          localclaw models --backend bitnet
           localclaw tools
           localclaw skills
 

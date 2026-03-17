@@ -2,6 +2,13 @@ import json
 import urllib.request
 from .config import BITNET_BASE_URL
 
+# Known BitNet model identifiers
+KNOWN_MODELS = [
+    "bitnet-b1.58-2b-4t",
+    "BitNet-b1.58-2B-4T",
+    "bitnet-b1.58-large",
+]
+
 class BitnetClient:
     def __init__(self, base_url=None, timeout=120):
         # Prioritize passed URL, fallback to config
