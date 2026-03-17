@@ -40,6 +40,7 @@ if _root not in sys.path:
     sys.path.insert(0, _root)
 
 from localclaw import Agent, OllamaClient, StepResult
+from localclaw.config import OLLAMA_BASE_URL, ACP_BASE_URL, BITNET_BASE_URL  # Add BITNET_BASE_URL here
 from localclaw.core.memory import Message
 from localclaw.tools.builtins import BUILTIN_REGISTRY
 from localclaw.skills import SkillLoader, SkillRegistry
@@ -405,10 +406,9 @@ def _build_client(args):
     """Return OllamaClient or BitnetClient based on --backend flag."""
     backend = getattr(args, "backend", "ollama")
     if backend == "bitnet":
-        if not _BITNET_AVAILABLE:
-            print(red("✗  bitnet_client.py not found in localclaw/."))
-            print(dim("   Copy bitnet_client.py into the localclaw/ directory."))
-            sys.exit(1)
+        from localclaw.bitnet_client import BitnetClient
+        # No longer passing a directory here, just the URL from config or args
+        return BitnetClient(base_url=BITNET_BASE_URL)
         bitnet_dir = getattr(args, "bitnet_dir", None) or os.environ.get("BITNET_DIR")
         if not bitnet_dir:
             for candidate in ["./BitNet", "./bitnet", os.path.expanduser("~/BitNet"), "/content/BitNet"]:
@@ -491,9 +491,14 @@ def cmd_run(args):
 
 def cmd_chat(args):
     client = _build_client(args)
+    backend = getattr(args, "backend", "ollama")
+
     if not client.is_running():
-        if getattr(args, "backend", "ollama") == "bitnet":
-            print(red("✗  BitNet backend failed to start. Check --bitnet-dir."))
+        if backend == "bitnet":
+            # Accessing the base_url we just added to the Client
+            url = getattr(client, "base_url", "http://localhost:8765")
+            print(red(f"✗  BitNet backend not found at {url}"))
+            print(dim("   Ensure llama-server.exe is running in a separate terminal."))
         else:
             print(red("✗  Ollama is not running. Start it with: ollama serve"))
         sys.exit(1)

@@ -25,7 +25,17 @@ _ollama_env = os.environ.get("OLLAMA_BASE_URL")
 if _ollama_env:
     OLLAMA_BASE_URL = _ollama_env
 
+# ═══════════════════════════════════════════════════════════════════════════════
+# BITNET CONFIGURATION
+# ═══════════════════════════════════════════════════════════════════════════════
+# Default for local bitnet.cpp llama-server
+BITNET_BASE_URL = "http://localhost:8765"
 
+# Override via environment variable (useful for Colab/ngrok)
+_bitnet_env = os.environ.get("BITNET_BASE_URL")
+if _bitnet_env:
+    BITNET_BASE_URL = _bitnet_env
+    
 # ═══════════════════════════════════════════════════════════════════════════════
 # ACP CONFIGURATION
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -35,7 +45,7 @@ if _ollama_env:
 # ACP_BASE_URL = "http://localhost:8766"
 
 # REMOTE ACP (cloudflare tunnel):
-ACP_BASE_URL = "https://aaa.trycloudflare.com"
+ACP_BASE_URL = "https://aaa.trycloudflare.com/"
 
 # Override via environment variable (takes precedence if set)
 _acp_env = os.environ.get("ACP_BASE_URL")
