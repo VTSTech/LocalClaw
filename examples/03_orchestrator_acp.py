@@ -16,24 +16,27 @@ import sys
 import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from localclaw import Agent, Orchestrator, AgentCard, OllamaClient
+from localclaw import Agent, Orchestrator, AgentCard, get_default_client, LOCALCLAW_BACKEND
 from localclaw.tools.builtins import BUILTIN_REGISTRY
 from localclaw.acp_plugin import ACPPlugin
+from localclaw.model_discovery import pick_best_model
+
+BACKEND_NAME = LOCALCLAW_BACKEND.upper()
 
 # ── Detect which model to use ──────────────────────────────────────
-_client = OllamaClient()
+_client = get_default_client()
 _models = _client.list_models()
 
-def _pick(preferences):
-    """Pick the best available model from a preference list."""
-    for p in preferences:
-        for m in _models:
-            if p in m.lower():
-                return m
-    return _models[0] if _models else "qwen2.5-coder:0.5b-instruct-q4_k_m"
+MAIN_MODEL = pick_best_model(preferred=os.environ.get("LOCALCLAW_MODEL"), client=_client)
+ROUTER_MODEL = MAIN_MODEL  # Use same model for router in simple cases
 
-MAIN_MODEL   = _pick(["qwen2.5-coder", "llama3.1:8b", "llama3.2:3b", "qwen2.5:7b", "mistral", "qwen3.5:0.8b"])
-ROUTER_MODEL = _pick(["qwen2.5-coder", "llama3.2:3b", "qwen3.5:0.8b", "qwen2.5", MAIN_MODEL])
+if not MAIN_MODEL:
+    print(f"❌ {BACKEND_NAME} is not running or has no models.")
+    if LOCALCLAW_BACKEND == "bitnet":
+        print("   Start llama-server from bitnet.cpp directory")
+    else:
+        print("   Start it with: ollama serve")
+    sys.exit(1)
 
 print(f"Using model: {MAIN_MODEL}  |  router: {ROUTER_MODEL}\n")
 

@@ -20,9 +20,12 @@ import shutil
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from localclaw.skills import SkillLoader, SkillRegistry
-from localclaw import Agent, OllamaClient, StepResult
+from localclaw import Agent, get_default_client, LOCALCLAW_BACKEND, StepResult
 from localclaw.tools.builtins import make_builtin_registry
 from localclaw.acp_plugin import ACPPlugin
+from localclaw.model_discovery import pick_best_model, get_available_models
+
+BACKEND_NAME = LOCALCLAW_BACKEND.upper()
 
 
 def main():
@@ -76,10 +79,14 @@ def main():
     print("\n" + "=" * 60)
     print("🤖 Step 3: Creating Agent with tools")
     
-    client = OllamaClient()
+    client = get_default_client()
     
     if not client.is_running():
-        print("   ❌ Ollama is not running!")
+        print(f"   ❌ {BACKEND_NAME} is not running!")
+        if LOCALCLAW_BACKEND == "bitnet":
+            print("   Start llama-server from bitnet.cpp directory")
+        else:
+            print("   Start with: ollama serve")
         return
     
     models = client.list_models()
@@ -97,18 +104,8 @@ def main():
                 return False
         return True
 
-    model = None
-    # Prefer models known to work well with tools
-    preferred = ["llama3.2:3b", "qwen2.5:3b", "granite3.1-moe", "qwen2.5-coder:1.5b", "llama3.2:1b", "qwen2.5:1.5b", "qwen2.5-coder:0.5b"]
-    for pref in preferred:
-        for m in models:
-            if pref in m and supports_tools(m):
-                model = m
-                break
-        if model:
-            break
-
-    # Fallback: find any model that supports tools
+    # Pick best model dynamically, preferring tool-supporting models
+    model = pick_best_model(preferred=os.environ.get("LOCALCLAW_MODEL"), client=client)
     if not model:
         for m in models:
             if supports_tools(m):

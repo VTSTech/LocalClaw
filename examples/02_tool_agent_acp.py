@@ -5,26 +5,18 @@ import re
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from localclaw import Agent, ToolRegistry, StepResult, OllamaClient
+from localclaw import Agent, ToolRegistry, StepResult, get_default_client, LOCALCLAW_BACKEND
 from localclaw.tools.builtins import BUILTIN_REGISTRY
 from localclaw.acp_plugin import ACPPlugin
+
+BACKEND_NAME = LOCALCLAW_BACKEND.upper()
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # CONFIGURATION & MODELS
 # ═══════════════════════════════════════════════════════════════════════════════
 
-MODELS_TO_TEST = [
-    "gemma3:270m",
-    "granite4:350m",
-    "qwen2.5:0.5b",
-    "AgentricAi/AgentricAI_TLM:latest",
-    "qwen2.5-coder:0.5b-instruct-q4_k_m",
-    "nchapman/dolphin3.0-qwen2.5:0.5b",
-    "nchapman/dolphin3.0-llama3:1b",
-    "deepseek-coder:1.3b",
-    "driaforall/tiny-agent-a:1.5b",
-    "nemotron-3-nano:4b",
-]
+# Models discovered dynamically at runtime
+MODELS_TO_TEST = []  # Will be populated from available models
 
 QUERIES = [
     "Convert 500 JPY to EUR",
@@ -131,10 +123,25 @@ def run_tool_benchmark(model_name, client):
             print(f"    ❌ Execution Error: {e}")
 
 if __name__ == "__main__":
-    ollama = OllamaClient()
-    if not ollama.is_running():
-        print("❌ Ollama not detected.")
+    client = get_default_client()
+    if not client.is_running():
+        print(f"❌ {BACKEND_NAME} is not running.")
+        if LOCALCLAW_BACKEND == "bitnet":
+            print("   Start llama-server from bitnet.cpp directory")
+        else:
+            print("   Start it with: ollama serve")
         sys.exit(1)
 
+    # Get available models dynamically
+    from localclaw.model_discovery import get_available_models
+    available_models = get_available_models(client)
+    MODELS_TO_TEST = available_models[:10] if available_models else []
+    
+    if not MODELS_TO_TEST:
+        print(f"❌ No models available in {BACKEND_NAME}.")
+        sys.exit(1)
+    
+    print(f"Testing {len(MODELS_TO_TEST)} models: {MODELS_TO_TEST}")
+
     for model in MODELS_TO_TEST:
-        run_tool_benchmark(model, ollama)
+        run_tool_benchmark(model, client)

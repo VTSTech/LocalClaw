@@ -20,7 +20,7 @@ import os
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from localclaw.core.ollama_client import OllamaClient
+from localclaw.core.ollama_client import get_default_client
 from localclaw.core.tools import ToolRegistry, Tool, ToolParam
 from localclaw.core.agent import Agent, StepResult
 from localclaw.core.math_prompts import (
@@ -31,9 +31,10 @@ from localclaw.core.math_prompts import (
 )
 from localclaw.model_discovery import pick_models_for_benchmark
 from localclaw.acp_plugin import ACPPlugin
-from localclaw import OLLAMA_BASE_URL
+from localclaw import LOCALCLAW_BACKEND
 
-OLLAMA_URL = OLLAMA_BASE_URL
+BACKEND_NAME = LOCALCLAW_BACKEND.upper()
+
 RESULTS_FILE = "/home/z/my-project/download/gsm8k_agent_acp_results.jsonl"
 LOG_FILE = "/home/z/my-project/download/gsm8k_agent_acp_progress.log"
 
@@ -113,7 +114,7 @@ def create_calculator_tool():
     return registry
 
 
-def test_model_with_agent(model: str, question: str, expected: str, client: OllamaClient, acp: ACPPlugin) -> dict:
+def test_model_with_agent(model: str, question: str, expected: str, client, acp: ACPPlugin) -> dict:
     try:
         is_small = any(x in model.lower() for x in ["270m", "135m", "350m", "0.5b", "tiny", "1b"])
         system_prompt = MATH_SYSTEM_PROMPT_COMPACT if is_small else MATH_SYSTEM_PROMPT
@@ -168,10 +169,14 @@ def main():
     open(RESULTS_FILE, "w").close()
     open(LOG_FILE, "w").close()
     
-    client = OllamaClient()
+    client = get_default_client()
     
     if not client.is_running():
-        log("ERROR: Ollama is not running!")
+        log(f"ERROR: {BACKEND_NAME} is not running!")
+        if LOCALCLAW_BACKEND == "bitnet":
+            log("Start llama-server from bitnet.cpp directory")
+        else:
+            log("Start with: ollama serve")
         sys.exit(1)
     
     # Setup ACP

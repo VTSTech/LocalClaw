@@ -17,9 +17,11 @@ import json
 import unicodedata
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from localclaw import Agent, OllamaClient
+from localclaw import Agent, get_default_client, LOCALCLAW_BACKEND
 from localclaw.tools.builtins import make_builtin_registry
-from localclaw.model_discovery import get_ollama_models
+from localclaw.model_discovery import get_available_models
+
+BACKEND_NAME = LOCALCLAW_BACKEND.upper()
 
 
 def normalize_text(text: str) -> str:
@@ -35,7 +37,7 @@ def normalize_text(text: str) -> str:
 VERBOSITY = 2
 
 # Models discovered dynamically at runtime
-MODELS = []  # Will be populated from available Ollama models
+MODELS = []  # Will be populated from available models
 
 # System prompts for different test types
 SYSTEM_PROMPT_NO_TOOLS = """You are a helpful assistant. Follow these rules:
@@ -82,7 +84,7 @@ TESTS = [
 ]
 
 
-def test_model(client: OllamaClient, model: str) -> dict:
+def test_model(client, model: str) -> dict:
     """Test a single model and return results."""
     print(f"\n{'='*60}")
     print(f"🧪 Testing: {model}")
@@ -195,14 +197,19 @@ def test_model(client: OllamaClient, model: str) -> dict:
 
 
 def main():
-    client = OllamaClient()
+    client = get_default_client()
     
     if not client.is_running():
-        print("❌ Ollama is not running.")
+        print(f"❌ {BACKEND_NAME} is not running.")
+        if LOCALCLAW_BACKEND == "bitnet":
+            print("   Start llama-server from bitnet.cpp directory")
+        else:
+            print("   Start it with: ollama serve")
         return
     
-    available = client.list_models()
+    available = get_available_models(client)
     print(f"\n🦞 LocalClaw Model Comparison")
+    print(f"   Backend: {BACKEND_NAME}")
     print(f"   Available models: {', '.join(available)}")
     
     # Filter to available models

@@ -2,6 +2,7 @@
 examples/03_orchestrator.py
 ----------------------------
 A three-agent team with a router that dispatches tasks.
+Backend-agnostic (works with Ollama or BitNet).
 
 Run from the project root:   python examples/03_orchestrator.py
 Or from the examples folder: python 03_orchestrator.py
@@ -11,23 +12,50 @@ import sys
 import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from localclaw import Agent, Orchestrator, AgentCard, OllamaClient
+from localclaw import (
+    Agent,
+    Orchestrator,
+    AgentCard,
+    get_default_client,
+    get_available_models,
+    DEFAULT_MODEL,
+    LOCALCLAW_BACKEND,
+)
 from localclaw.tools.builtins import BUILTIN_REGISTRY
 
-# ── Detect which model to use ──────────────────────────────────────
-_client = OllamaClient()
-_models = _client.list_models()
+BACKEND_NAME = LOCALCLAW_BACKEND.upper()
 
+# ── Verify backend is running ──────────────────────────────────────
+client = get_default_client()
+if not client.is_running():
+    print(f"❌  {BACKEND_NAME} is not running.")
+    if LOCALCLAW_BACKEND == "bitnet":
+        print("   Start llama-server from bitnet.cpp directory")
+    else:
+        print("   Start it with: ollama serve")
+    sys.exit(1)
+
+models = get_available_models(client)
+if not models:
+    print(f"❌  No models available.")
+    sys.exit(1)
+
+# ── Pick models ────────────────────────────────────────────────────
 def _pick(preferences):
     """Pick the best available model from a preference list."""
     for p in preferences:
-        for m in _models:
+        for m in models:
             if p in m.lower():
                 return m
-    return _models[0] if _models else "qwen2.5-coder:0.5b-instruct-q4_k_m"
+    return models[0]
 
-MAIN_MODEL   = _pick(["qwen2.5-coder", "llama3.1:8b", "llama3.2:3b", "qwen2.5:7b", "mistral", "qwen3.5:0.8b"])
-ROUTER_MODEL = _pick(["qwen2.5-coder", "llama3.2:3b", "qwen3.5:0.8b", "qwen2.5", MAIN_MODEL])
+# For BitNet, just use whatever model is available
+if LOCALCLAW_BACKEND == "bitnet":
+    MAIN_MODEL = models[0]
+    ROUTER_MODEL = models[0]
+else:
+    MAIN_MODEL   = _pick(["qwen2.5-coder", "llama3.1:8b", "llama3.2:3b", "qwen2.5:7b", "mistral", "qwen3.5:0.8b"])
+    ROUTER_MODEL = _pick(["qwen2.5-coder", "llama3.2:3b", "qwen3.5:0.8b", "qwen2.5", MAIN_MODEL])
 
 print(f"Using model: {MAIN_MODEL}  |  router: {ROUTER_MODEL}\n")
 

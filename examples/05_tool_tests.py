@@ -18,11 +18,16 @@ import time
 import re
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from localclaw import Agent, OllamaClient, StepResult
+from localclaw import Agent, get_default_client, LOCALCLAW_BACKEND, StepResult
 from localclaw.tools.builtins import make_builtin_registry
+from localclaw.model_discovery import pick_best_model, get_available_models
+
+BACKEND_NAME = LOCALCLAW_BACKEND.upper()
 
 
-MODEL = os.environ.get("LOCALCLAW_MODEL", "qwen2.5-coder:0.5b-instruct-q4_k_m")
+# Model to test (discovered dynamically or set via environment)
+preferred = os.environ.get("LOCALCLAW_MODEL")
+MODEL = None  # Will be set in main()
 VERBOSE = os.environ.get("LOCALCLAW_VERBOSE", "1") == "1"
 TIMEOUT = int(os.environ.get("LOCALCLAW_TIMEOUT", "120"))  # seconds per test
 
@@ -83,7 +88,22 @@ def run_test(agent, prompt: str, timeout: int = TIMEOUT):
 
 def test_calculator():
     """Test calculator tool - models must figure out how to use it."""
-    client = OllamaClient()
+    global MODEL
+    client = get_default_client()
+    
+    if not client.is_running():
+        print(f"❌ {BACKEND_NAME} is not running.")
+        return 0, 0
+    
+    # Pick best model dynamically
+    MODEL = pick_best_model(preferred=preferred, client=client)
+    if not MODEL:
+        models = get_available_models(client)
+        MODEL = models[0] if models else None
+    
+    if not MODEL:
+        print(f"❌ No models available in {BACKEND_NAME}.")
+        return 0, 0
     
     print(f"\n{'='*60}")
     print(f"🧮 Calculator Tool Tests")
@@ -162,7 +182,7 @@ def test_calculator():
 
 def test_shell():
     """Test shell tool - models must figure out how to use it."""
-    client = OllamaClient()
+    client = get_default_client()
     
     print(f"\n{'='*60}")
     print(f"🖥️  Shell Tool Tests")
@@ -238,7 +258,7 @@ def test_shell():
 
 def test_python_repl():
     """Test Python REPL tool - models must figure out how to use it."""
-    client = OllamaClient()
+    client = get_default_client()
     
     print(f"\n{'='*60}")
     print(f"🐍 Python REPL Tool Tests")
@@ -316,9 +336,10 @@ def test_python_repl():
 
 
 def main():
+    global MODEL
     print(f"\n{'='*60}")
     print(f"🔧 LocalClaw Tool Tests")
-    print(f"   Model: {MODEL}")
+    print(f"   Backend: {BACKEND_NAME}")
     print(f"   Verbose: {VERBOSE}")
     print(f"   Timeout: {TIMEOUT}s")
     print(f"{'='*60}")

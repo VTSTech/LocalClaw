@@ -4,25 +4,18 @@ import time
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from localclaw import Agent, OllamaClient
+from localclaw import Agent, get_default_client, LOCALCLAW_BACKEND
 from localclaw.acp_plugin import ACPPlugin
+from localclaw.model_discovery import pick_best_model, get_available_models
+
+BACKEND_NAME = LOCALCLAW_BACKEND.upper()
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # CONFIGURATION
 # ═══════════════════════════════════════════════════════════════════════════════
 
-# List extracted from your comments for iteration
-MODELS_TO_TEST = [
-    #"gemma3:270m",
-    #"granite4:350m",
-    #"qwen2.5:0.5b",
-    "qwen2.5-coder:0.5b-instruct-q4_k_m",
-    #"nchapman/dolphin3.0-qwen2.5:0.5b",
-    #"nchapman/dolphin3.0-llama3:1b",
-    #"driaforall/tiny-agent-a:1.5b",
-    "deepseek-coder:1.3b",
-    "AgentricAi/AgentricAI_TLM:latest",
-]
+# Models discovered dynamically at runtime
+MODELS_TO_TEST = []  # Will be populated from available models
 
 TESTS = {
     "basic": [
@@ -73,7 +66,7 @@ def run_tests(model_name, client):
     
     available_models = client.list_models()
     if model_name not in available_models:
-        print(f"\n⚠️  Skipping '{model_name}': Not found in Ollama.")
+        print(f"\n⚠️  Skipping '{model_name}': Not found in {BACKEND_NAME}.")
         return
 
     # Create ACP plugin
@@ -143,15 +136,27 @@ def run_tests(model_name, client):
         acp.add_note("context", f"Completed {model_name}: {pass_rate:.0f}% pass rate.")
 
 if __name__ == "__main__":
-    ollama_client = OllamaClient()
+    client = get_default_client()
     
-    if not ollama_client.is_running():
-        print("❌ Ollama is not running. Please start Ollama and try again.")
+    if not client.is_running():
+        print(f"❌ {BACKEND_NAME} is not running.")
+        if LOCALCLAW_BACKEND == "bitnet":
+            print("   Start llama-server from bitnet.cpp directory")
+        else:
+            print("   Start it with: ollama serve")
         sys.exit(1)
-
+    
+    # Get available models dynamically
+    available_models = get_available_models(client)
+    MODELS_TO_TEST = available_models[:5] if available_models else []
+    
+    if not MODELS_TO_TEST:
+        print(f"❌ No models available in {BACKEND_NAME}.")
+        sys.exit(1)
+    
     print(f"🚀 Starting comprehensive benchmark for {len(MODELS_TO_TEST)} models...")
     
     for model in MODELS_TO_TEST:
-        run_tests(model, ollama_client)
+        run_tests(model, client)
         
     print("\n✅ All scheduled model tests complete.")

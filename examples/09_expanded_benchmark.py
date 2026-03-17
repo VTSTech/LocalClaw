@@ -17,8 +17,11 @@ import json
 import unicodedata
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from localclaw import Agent, OllamaClient
+from localclaw import Agent, get_default_client, LOCALCLAW_BACKEND
 from localclaw.tools.builtins import make_builtin_registry
+from localclaw.model_discovery import get_available_models, pick_best_model
+
+BACKEND_NAME = LOCALCLAW_BACKEND.upper()
 
 
 def normalize_text(text: str) -> str:
@@ -87,7 +90,7 @@ def save_results(results):
         json.dump(results, f, indent=2)
 
 
-def test_model(client: OllamaClient, model: str, results: dict) -> dict:
+def test_model(client, model: str, results: dict) -> dict:
     """Test a single model, saving progress after each test."""
     if model not in results:
         results[model] = {
@@ -175,14 +178,19 @@ def test_model(client: OllamaClient, model: str, results: dict) -> dict:
 
 
 def main():
-    client = OllamaClient()
+    client = get_default_client()
 
     if not client.is_running():
-        print("❌ Ollama is not running.")
+        print(f"❌ {BACKEND_NAME} is not running.")
+        if LOCALCLAW_BACKEND == "bitnet":
+            print("   Start llama-server from bitnet.cpp directory")
+        else:
+            print("   Start it with: ollama serve")
         return
 
-    available = client.list_models()
+    available = get_available_models(client)
     print(f"🦞 LocalClaw Expanded Benchmark (25 tests)")
+    print(f"   Backend: {BACKEND_NAME}")
     print(f"   Available: {', '.join(available)}")
 
     # Clear old results
@@ -190,9 +198,9 @@ def main():
     if os.path.exists(RESULTS_FILE):
         os.remove(RESULTS_FILE)
 
-    # Models to test (in order)
-    models_to_test = ['qwen2.5-coder:0.5b-instruct-q4_k_m', 'llama3.2:1b', 'gemma3:270m']
-    models_to_test = [m for m in models_to_test if any(m.split(':')[0] in a for a in available)]
+    # Models to test (dynamically discovered)
+    models_to_test = get_available_models(client)
+    models_to_test = models_to_test[:5] if models_to_test else []
     print(f"   Testing: {', '.join(models_to_test)}")
 
     for model in models_to_test:

@@ -25,21 +25,18 @@ import yaml
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from localclaw.skills import SkillLoader, SkillRegistry
-from localclaw import Agent, OllamaClient, StepResult
+from localclaw import Agent, get_default_client, LOCALCLAW_BACKEND, StepResult
 from localclaw.tools.builtins import make_builtin_registry
+from localclaw.model_discovery import pick_best_model, get_available_models
+
+BACKEND_NAME = LOCALCLAW_BACKEND.upper()
 
 
-# Configuration - ONLY models that support tools
-MODEL_ORDER = [
-    # Fast and reliable (≤500M)
-    "functiongemma:270m",    # 270M - Best for tool calling
-    "qwen2.5:0.5b",          # 494M - Good reliability
-    "granite4:350m",         # 352M - Works
-    
-    # Larger models (for comparison)
-    "llama3.2:1b",           # 1.2B - Larger
-    "qwen2.5:1.5b",          # 1.5B - Good
-]
+# Configuration - models discovered dynamically
+MODEL_ORDER = []  # Will be populated from available models
+
+# Models known to work well with tools (for reference)
+PREFERRED_TOOL_MODELS = ["functiongemma:270m", "qwen2.5:0.5b", "granite4:350m", "llama3.2:1b", "qwen2.5:1.5b"]
 
 # Skill to create - we describe WHAT we want, not the content
 SKILL_REQUESTS = [
@@ -162,7 +159,7 @@ def validate_skill(content: str, skill_name: str, expected_sections: list) -> di
     return result
 
 
-def test_model_with_skill(client: OllamaClient, model: str, skill_request: dict, skills_dir: str, skill_creator_instructions: str) -> dict:
+def test_model_with_skill(client, model: str, skill_request: dict, skills_dir: str, skill_creator_instructions: str) -> dict:
     """Test if a model can CREATE a skill autonomously."""
     
     skill_name = skill_request["name"]
@@ -327,23 +324,31 @@ description: What the skill does
 Instructions here.
 """
     
-    client = OllamaClient()
+    client = get_default_client()
     
     if not client.is_running():
-        print("❌ Ollama is not running!")
+        print(f"❌ {BACKEND_NAME} is not running!")
+        if LOCALCLAW_BACKEND == "bitnet":
+            print("   Start llama-server from bitnet.cpp directory")
+        else:
+            print("   Start with: ollama serve")
         return False
     
     available = client.list_models()
     print(f"\nAvailable models: {len(available)}")
     
-    # Find models to test
+    # Find models to test (prefer tool-supporting models)
     models_to_test = []
-    for m in MODEL_ORDER:
+    for m in PREFERRED_TOOL_MODELS:
         for avail in available:
             if m.split(":")[0] in avail or m in avail:
                 if avail not in models_to_test:
                     models_to_test.append(avail)
                     break
+    
+    # If no preferred models, use any available
+    if not models_to_test:
+        models_to_test = available[:5]
     
     print(f"Testing order: {models_to_test}")
     

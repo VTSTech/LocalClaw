@@ -20,12 +20,17 @@ import time
 import re
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from localclaw import Agent, OllamaClient, StepResult
+from localclaw import Agent, get_default_client, LOCALCLAW_BACKEND, StepResult
 from localclaw.tools.builtins import make_builtin_registry
 from localclaw.acp_plugin import ACPPlugin
+from localclaw.model_discovery import pick_best_model, get_available_models
+
+BACKEND_NAME = LOCALCLAW_BACKEND.upper()
 
 
-MODEL = os.environ.get("LOCALCLAW_MODEL", "qwen2.5-coder:0.5b-instruct-q4_k_m")
+# Model to test (discovered dynamically or set via environment)
+preferred = os.environ.get("LOCALCLAW_MODEL")
+MODEL = None  # Will be set in main()
 VERBOSE = os.environ.get("LOCALCLAW_VERBOSE", "1") == "1"
 TIMEOUT = int(os.environ.get("LOCALCLAW_TIMEOUT", "120"))
 
@@ -75,7 +80,8 @@ def run_test(agent, prompt: str, timeout: int = TIMEOUT):
 
 def test_calculator(acp: ACPPlugin):
     """Test calculator tool with ACP logging."""
-    client = OllamaClient()
+    global MODEL
+    client = get_default_client()
     
     print(f"\n{'='*60}")
     print(f"🧮 Calculator Tool Tests (ACP)")
@@ -168,7 +174,7 @@ def test_calculator(acp: ACPPlugin):
 
 def test_shell(acp: ACPPlugin):
     """Test shell tool with ACP logging (shell commands logged to /api/shell/add)."""
-    client = OllamaClient()
+    client = get_default_client()
     
     print(f"\n{'='*60}")
     print(f"🖥️  Shell Tool Tests (ACP)")
@@ -258,7 +264,7 @@ def test_shell(acp: ACPPlugin):
 
 def test_python_repl(acp: ACPPlugin):
     """Test Python REPL tool with ACP logging."""
-    client = OllamaClient()
+    client = get_default_client()
     
     print(f"\n{'='*60}")
     print(f"🐍 Python REPL Tool Tests (ACP)")
@@ -350,12 +356,31 @@ def test_python_repl(acp: ACPPlugin):
 
 
 def main():
+    global MODEL
     print(f"\n{'='*60}")
     print(f"🔧 LocalClaw Tool Tests (ACP Enabled)")
-    print(f"   Model: {MODEL}")
+    print(f"   Backend: {BACKEND_NAME}")
     print(f"   Verbose: {VERBOSE}")
     print(f"   Timeout: {TIMEOUT}s")
     print(f"{'='*60}")
+    
+    # Get client and pick model
+    client = get_default_client()
+    if not client.is_running():
+        print(f"❌ {BACKEND_NAME} is not running.")
+        return False
+    
+    # Pick best model dynamically
+    MODEL = pick_best_model(preferred=preferred, client=client)
+    if not MODEL:
+        models = get_available_models(client)
+        MODEL = models[0] if models else None
+    
+    if not MODEL:
+        print(f"❌ No models available in {BACKEND_NAME}.")
+        return False
+    
+    print(f"   Model: {MODEL}")
     
     # ── Create and bootstrap ACP ─────────────────────────────────
     acp = ACPPlugin(

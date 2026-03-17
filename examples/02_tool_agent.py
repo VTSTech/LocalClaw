@@ -4,6 +4,7 @@ examples/02_tool_agent.py
 An agent with custom + built-in tools.
 Demonstrates the decorator-based tool registry.
 Uses dynamic model discovery.
+Backend-agnostic (works with Ollama or BitNet).
 
 Run from the project root:   python examples/02_tool_agent.py
 Or from the examples folder: python 02_tool_agent.py
@@ -13,23 +14,42 @@ import sys
 import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from localclaw import Agent, ToolRegistry, StepResult, OllamaClient
+from localclaw import (
+    Agent,
+    ToolRegistry,
+    StepResult,
+    get_default_client,
+    get_available_models,
+    DEFAULT_MODEL,
+    LOCALCLAW_BACKEND,
+)
 from localclaw.tools.builtins import BUILTIN_REGISTRY
 from localclaw.model_discovery import pick_best_model
 
-# ── 1. Verify Ollama and pick model ──────────────────────────────────
-client = OllamaClient()
+BACKEND_NAME = LOCALCLAW_BACKEND.upper()
+
+# ── 1. Verify backend and pick model ──────────────────────────────────
+client = get_default_client()
 if not client.is_running():
-    print("❌  Ollama is not running. Start it with: ollama serve")
+    print(f"❌  {BACKEND_NAME} is not running.")
+    if LOCALCLAW_BACKEND == "bitnet":
+        print("   Start llama-server from bitnet.cpp directory")
+    else:
+        print("   Start it with: ollama serve")
     sys.exit(1)
 
 preferred = os.environ.get("LOCALCLAW_MODEL")
 MODEL = pick_best_model(preferred=preferred, client=client)
 if not MODEL:
-    print("❌  No models available. Pull one with: ollama pull qwen2.5-coder:0.5b")
-    sys.exit(1)
+    models = get_available_models(client)
+    if models:
+        MODEL = models[0]
+    else:
+        print(f"❌  No models available.")
+        sys.exit(1)
 
-print(f"✓  Using model: {MODEL}\n")
+print(f"✓  {BACKEND_NAME} is running")
+print(f"   Using model: {MODEL}\n")
 
 # ── 2. Define custom tools ─────────────────────────────────────────
 registry = ToolRegistry()

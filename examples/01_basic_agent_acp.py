@@ -9,6 +9,7 @@ Demonstrates:
 - Logging chat messages to ACP
 - Graceful shutdown
 - Dynamic model discovery
+- Backend-agnostic (Ollama or BitNet)
 
 Run from the project root:   python examples/01_basic_agent_acp.py
 Or from the examples folder: python 01_basic_agent_acp.py
@@ -19,18 +20,31 @@ import os
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from localclaw import Agent, OllamaClient
-from localclaw.acp_plugin import ACPPlugin
+from localclaw import (
+    Agent,
+    get_default_client,
+    get_available_models,
+    DEFAULT_MODEL,
+    LOCALCLAW_BACKEND,
+    ACPPlugin,
+)
 from localclaw.model_discovery import pick_best_model
 
-# ── 1. Verify Ollama is running ────────────────────────────────────
-client = OllamaClient()
+BACKEND_NAME = LOCALCLAW_BACKEND.upper()
+
+# ── 1. Verify backend is running ────────────────────────────────────
+client = get_default_client()
 if not client.is_running():
-    print("❌  Ollama is not running. Start it with: ollama serve")
+    print(f"❌  {BACKEND_NAME} is not running.")
+    if LOCALCLAW_BACKEND == "bitnet":
+        print("   Start llama-server from bitnet.cpp directory")
+    else:
+        print("   Start it with: ollama serve")
     sys.exit(1)
 
-print("✓  Ollama is running")
-print(f"   Available models: {client.list_models()}\n")
+print(f"✓  {BACKEND_NAME} is running")
+models = get_available_models(client)
+print(f"   Available models: {models}\n")
 
 # ── 2. Create ACP plugin and bootstrap ─────────────────────────────
 # Dynamically pick model
@@ -38,8 +52,11 @@ preferred = os.environ.get("LOCALCLAW_MODEL")
 MODEL = pick_best_model(preferred=preferred, client=client)
 
 if not MODEL:
-    print("❌  No models available. Pull one with: ollama pull qwen2.5-coder:0.5b")
-    sys.exit(1)
+    if models:
+        MODEL = models[0]
+    else:
+        print(f"❌  No models available.")
+        sys.exit(1)
 
 acp = ACPPlugin(
     agent_name="LocalClaw-Basic",

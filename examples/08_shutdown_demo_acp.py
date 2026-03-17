@@ -19,8 +19,10 @@ import sys
 import time
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from localclaw import Agent, OllamaClient
+from localclaw import Agent, get_default_client, LOCALCLAW_BACKEND
 from localclaw.acp_plugin import ACPPlugin
+
+BACKEND_NAME = LOCALCLAW_BACKEND.upper()
 
 
 def main():

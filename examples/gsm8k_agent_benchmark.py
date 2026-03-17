@@ -20,7 +20,7 @@ import os
 # Add LocalClaw package to path (parent directory)
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from localclaw.core.ollama_client import OllamaClient
+from localclaw.core.ollama_client import get_default_client
 from localclaw.core.tools import ToolRegistry, Tool, ToolParam
 from localclaw.core.agent import Agent
 from localclaw.core.math_prompts import (
@@ -29,11 +29,10 @@ from localclaw.core.math_prompts import (
     extract_number,
     calculator_tool,
 )
-from localclaw.model_discovery import get_ollama_models, pick_models_for_benchmark
-from localclaw import OLLAMA_BASE_URL
+from localclaw.model_discovery import get_available_models, pick_models_for_benchmark
+from localclaw import LOCALCLAW_BACKEND
 
-# Ollama URL from centralized config
-OLLAMA_URL = OLLAMA_BASE_URL
+BACKEND_NAME = LOCALCLAW_BACKEND.upper()
 
 RESULTS_FILE = "/home/z/my-project/download/gsm8k_agent_results.jsonl"
 LOG_FILE = "/home/z/my-project/download/gsm8k_agent_progress.log"
@@ -121,7 +120,7 @@ def create_calculator_tool():
     return registry
 
 
-def test_model_with_agent(model: str, question: str, expected: str, client: OllamaClient) -> dict:
+def test_model_with_agent(model: str, question: str, expected: str, client) -> dict:
     """
     Test a model using the full Agent system with calculator tool.
     """
@@ -184,15 +183,18 @@ def main():
     open(LOG_FILE, "w").close()
     
     # Shared client
-    client = OllamaClient()
+    client = get_default_client()
     
     # Discover available models dynamically
     log("Discovering available models...")
     MODELS = pick_models_for_benchmark(max_models=6, prefer_small=True, client=client)
     
     if not MODELS:
-        log("ERROR: No models found! Make sure Ollama is running with models pulled.")
-        log("Run: ollama pull qwen2.5-coder:0.5b-instruct-q4_k_m")
+        log(f"ERROR: No models found! Make sure {BACKEND_NAME} is running with models pulled.")
+        if LOCALCLAW_BACKEND == "bitnet":
+            log("Start llama-server from bitnet.cpp directory")
+        else:
+            log("Run: ollama pull qwen2.5-coder:0.5b-instruct-q4_k_m")
         sys.exit(1)
     
     log(f"Found {len(MODELS)} models: {MODELS}")

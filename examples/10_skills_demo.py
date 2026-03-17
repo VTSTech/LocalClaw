@@ -22,8 +22,11 @@ import shutil
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from localclaw.skills import SkillLoader, SkillRegistry
-from localclaw import Agent, OllamaClient
+from localclaw import Agent, get_default_client, LOCALCLAW_BACKEND
 from localclaw.tools.builtins import make_builtin_registry
+from localclaw.model_discovery import pick_best_model, get_available_models
+
+BACKEND_NAME = LOCALCLAW_BACKEND.upper()
 
 
 def main():
@@ -78,27 +81,21 @@ def main():
     print("🤖 Step 3: Creating Agent with tools")
     print("=" * 60)
     
-    client = OllamaClient()
+    client = get_default_client()
     
     if not client.is_running():
-        print("   ❌ Ollama is not running!")
-        print("   Start with: ollama serve")
+        print(f"   ❌ {BACKEND_NAME} is not running!")
+        if LOCALCLAW_BACKEND == "bitnet":
+            print("   Start llama-server from bitnet.cpp directory")
+        else:
+            print("   Start with: ollama serve")
         return
     
     models = client.list_models()
     print(f"   Models: {len(models)} available")
     
-    # Find best model - prefer larger models for creative tasks
-    model = None
-    preferred = ["llama3.2:3b", "qwen2.5:3b", "qwen2.5-coder:1.5b", "llama3.2:1b", "qwen2.5:1.5b"]
-    for pref in preferred:
-        for m in models:
-            if pref in m:
-                model = m
-                break
-        if model:
-            break
-    
+    # Pick best model dynamically
+    model = pick_best_model(preferred=os.environ.get("LOCALCLAW_MODEL"), client=client)
     if not model:
         model = models[0] if models else None
     

@@ -19,20 +19,40 @@ import sys
 import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from localclaw import Agent, OllamaClient, StepResult
+from localclaw import Agent, get_default_client, LOCALCLAW_BACKEND, StepResult
 from localclaw.tools.builtins import make_builtin_registry
 from localclaw.acp_plugin import ACPPlugin
+from localclaw.model_discovery import pick_best_model, get_available_models
+
+BACKEND_NAME = LOCALCLAW_BACKEND.upper()
 
 
-MODEL = os.environ.get("LOCALCLAW_MODEL", "qwen2.5-coder:0.5b-instruct-q4_k_m")
+# Model to test (discovered dynamically or set via environment)
+preferred = os.environ.get("LOCALCLAW_MODEL")
+MODEL = None  # Will be set in main()
 TOOLS = ["calculator", "shell", "python_repl", "read_file", "write_file"]
 
 
 def main():
-    client = OllamaClient()
+    global MODEL
+    client = get_default_client()
     
     if not client.is_running():
-        print("❌ Ollama is not running.")
+        print(f"❌ {BACKEND_NAME} is not running.")
+        if LOCALCLAW_BACKEND == "bitnet":
+            print("   Start llama-server from bitnet.cpp directory")
+        else:
+            print("   Start it with: ollama serve")
+        return
+    
+    # Pick best model dynamically
+    MODEL = pick_best_model(preferred=preferred, client=client)
+    if not MODEL:
+        models = get_available_models(client)
+        MODEL = models[0] if models else None
+    
+    if not MODEL:
+        print(f"❌ No models available in {BACKEND_NAME}.")
         return
     
     # ── Create and bootstrap ACP ─────────────────────────────────
@@ -84,6 +104,7 @@ def main():
     
     print(f"\n{'='*60}")
     print(f"💬 LocalClaw Interactive Chat (ACP Enabled)")
+    print(f"   Backend: {BACKEND_NAME}")
     print(f"   Model: {MODEL}")
     print(f"   Tools: {', '.join(TOOLS)}")
     print(f"   ACP: {'connected' if acp_connected else 'unavailable'}")

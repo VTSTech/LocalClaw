@@ -17,9 +17,11 @@ import re
 import unicodedata
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from localclaw import Agent, OllamaClient
+from localclaw import Agent, get_default_client, LOCALCLAW_BACKEND
 from localclaw.tools.builtins import make_builtin_registry
-from localclaw.model_discovery import get_ollama_models
+from localclaw.model_discovery import get_available_models
+
+BACKEND_NAME = LOCALCLAW_BACKEND.upper()
 
 
 def normalize_text(text: str) -> str:
@@ -48,9 +50,9 @@ SYSTEM_PROMPT_WITH_TOOLS = """You are a helpful assistant with access to tools.
 SMALL_MODEL_INDICATORS = ["0.5b", "270m", "135m", "350m", "0.6b", "1b", "1.5b", "tiny", "mini", "micro", "small", "moe"]
 
 
-def get_small_models(client: OllamaClient) -> list[str]:
-    """Get list of small models from Ollama."""
-    available = get_ollama_models(client)
+def get_small_models(client) -> list[str]:
+    """Get list of small models."""
+    available = get_available_models(client)
     small_models = []
     for model in available:
         model_lower = model.lower()
@@ -98,7 +100,7 @@ def save_results(results):
         json.dump(results, f, indent=2)
 
 
-def test_model(client: OllamaClient, model: str, results: dict) -> dict:
+def test_model(client, model: str, results: dict) -> dict:
     """Test a single model, saving progress after each test."""
     if model not in results:
         results[model] = {
@@ -200,14 +202,19 @@ def test_model(client: OllamaClient, model: str, results: dict) -> dict:
 
 
 def main():
-    client = OllamaClient()
+    client = get_default_client()
 
     if not client.is_running():
-        print("❌ Ollama is not running.")
+        print(f"❌ {BACKEND_NAME} is not running.")
+        if LOCALCLAW_BACKEND == "bitnet":
+            print("   Start llama-server from bitnet.cpp directory")
+        else:
+            print("   Start it with: ollama serve")
         return
 
-    available = client.list_models()
+    available = get_available_models(client)
     print(f"🦞 LocalClaw Robust Model Comparison")
+    print(f"   Backend: {BACKEND_NAME}")
     print(f"   Available: {', '.join(available)}")
 
     # Load existing results for resumability (don't delete!)
