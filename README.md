@@ -29,18 +29,22 @@ localclaw/
 ├── bitnet_client.py       # R03: BitNet backend client (Microsoft 1.58-bit quantization)
 ├── bitnet_setup.py        # R03: BitNet setup/compilation helper
 ├── acp_plugin.py          # ACP integration for activity tracking and A2A messaging
+├── model_discovery.py     # R03: Dynamic model discovery for both backends
 └── examples/
-    ├── 01_basic_agent.py      # Simple Q&A demo
-    ├── 02_tool_agent.py       # Tool calling demo
-    ├── 03_orchestrator.py     # Multi-agent routing demo
-    ├── 04_comprehensive_test.py  # Full test suite
-    ├── 05_tool_tests.py       # Tool-specific tests
-    ├── 06_interactive_chat.py # Interactive CLI chat
-    ├── 07_model_comparison.py # Compare models on 15 tests (3 per category)
-    ├── 08_robust_comparison.py # Progress-saving comparison for unstable connections
-    ├── 09_expanded_benchmark.py # 25 tests across 8 categories
-    ├── 10_skills_demo.py      # Agent Skills system demo
-    └── 11_skill_creator_test.py # Skill creation benchmark across models
+    ├── 01_basic_agent.py           # Simple Q&A demo
+    ├── 02_tool_agent.py            # Tool calling demo
+    ├── 03_orchestrator.py          # Multi-agent routing demo
+    ├── 04_comprehensive_test.py    # Full test suite (supports BitNet)
+    ├── 04_comprehensive_test_acp.py # ACP-tracked version
+    ├── 05_tool_tests.py            # Tool-specific tests
+    ├── 06_interactive_chat.py      # Interactive CLI chat
+    ├── 07_model_comparison.py      # Compare models on 15 tests (3 per category)
+    ├── 07_model_comparison_acp.py  # ACP-tracked version with model logging
+    ├── 08_robust_comparison.py     # Progress-saving comparison for unstable connections
+    ├── 08_robust_comparison_acp.py # ACP-tracked version with resumability
+    ├── 09_expanded_benchmark.py    # 25 tests across 8 categories
+    ├── 10_skills_demo.py           # Agent Skills system demo
+    └── 11_skill_creator_test.py    # Skill creation benchmark across models
 ```
 
 ### Test Scripts
@@ -49,9 +53,11 @@ localclaw/
 test.sh          # Bash: Run all 11 examples (Linux/macOS/Colab)
 test-quick.sh    # Bash: Run 7 quick tests (skips benchmarks)
 run.sh           # Bash: Interactive menu for single example
+test-bitnet.sh   # Bash: Run BitNet benchmark tests
 test.cmd         # Batch: Run all 11 examples (Windows)
 test-quick.cmd   # Batch: Run 7 quick tests (Windows)
 run.cmd          # Batch: Interactive menu for single example (Windows)
+test-bitnet.cmd  # Batch: Run BitNet benchmark tests (Windows)
 ```
 
 ### Core design decisions
