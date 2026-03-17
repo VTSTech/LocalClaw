@@ -24,11 +24,11 @@ class BitnetClient:
 
     def list_models(self):
         try:
-            response = requests.get(f"{self.base_url}/v1/models", timeout=5)
-            if response.status_code == 200:
-                data = response.json()
-                # Return the ID of the model(s) from the data you verified
-                return [m['id'] for m in data.get('data', [])]
+            with urllib.request.urlopen(f"{self.base_url}/v1/models", timeout=5) as resp:
+                if resp.getcode() == 200:
+                    data = json.loads(resp.read().decode("utf-8"))
+                    # Return the ID of the model(s) from the data
+                    return [m['id'] for m in data.get('data', [])]
         except:
             return []
     def chat(
