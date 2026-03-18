@@ -78,7 +78,7 @@ for t in BUILTIN_REGISTRY.subset(["calculator"]).all():
 # BENCHMARK RUNNER
 # ═══════════════════════════════════════════════════════════════════════════════
 
-def run_tool_benchmark(model_name, client):
+def run_tool_benchmark(model_name, client, force_react: bool = False):
     available = client.list_models()
     if model_name not in available:
         print(f"⏩ Skipping {model_name} (not found)")
@@ -105,6 +105,10 @@ def run_tool_benchmark(model_name, client):
     print(f"🛠️  TOOL TEST: {model_name}")
     print(f"{'='*60}")
 
+    # Determine if model is small (needs ReAct)
+    is_small = any(x in model_name.lower() for x in ["270m", "135m", "350m", "0.5b", "tiny", "1b"])
+    use_react = force_react or is_small
+
     agent = Agent(
         model=model_name,
         client=client,
@@ -112,6 +116,7 @@ def run_tool_benchmark(model_name, client):
         system_prompt="You have tools. Use them to answer. Be concise.",
         on_step=print_step,
         model_options={"temperature": 0.0, "num_ctx": 2048},
+        force_react=use_react,
     )
 
     for q in QUERIES:
@@ -124,6 +129,9 @@ def run_tool_benchmark(model_name, client):
             print(f"    ❌ Execution Error: {e}")
 
 if __name__ == "__main__":
+    # Check for force_react env var
+    force_react = os.environ.get("LOCALCLAW_FORCE_REACT", "").lower() in ("1", "true", "yes")
+    
     client = get_default_client()
     if not client.is_running():
         print(f"❌ {BACKEND_NAME} is not running.")
@@ -143,6 +151,8 @@ if __name__ == "__main__":
         sys.exit(1)
     
     print(f"Testing {len(MODELS_TO_TEST)} models: {MODELS_TO_TEST}")
+    if force_react:
+        print(f"Force ReAct: YES (all models will use text-based tool calling)")
 
     for model in MODELS_TO_TEST:
-        run_tool_benchmark(model, client)
+        run_tool_benchmark(model, client, force_react=force_react)

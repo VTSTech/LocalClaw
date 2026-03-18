@@ -25,6 +25,7 @@ from localclaw.core.agent import StepResult
 from localclaw.core.math_prompts import (
     MATH_SYSTEM_PROMPT,
     MATH_SYSTEM_PROMPT_COMPACT,
+    MATH_SYSTEM_PROMPT_REACT,
     extract_number,
     calculator_tool,
 )
@@ -114,11 +115,26 @@ def create_calculator_tool():
     return registry
 
 
-def test_model_with_agent(model: str, question: str, expected: str, client, acp: ACPPlugin) -> dict:
+def test_model_with_agent(model: str, question: str, expected: str, client, acp: ACPPlugin, force_react: bool = False) -> dict:
+    """
+    Test a model using the full Agent system with calculator tool.
+    """
     try:
+        # Choose prompt based on model size and force_react setting
         is_small = any(x in model.lower() for x in ["270m", "135m", "350m", "0.5b", "tiny", "1b"])
-        system_prompt = MATH_SYSTEM_PROMPT_COMPACT if is_small else MATH_SYSTEM_PROMPT
         
+        # Use ReAct-specific prompt when forcing ReAct mode
+        if force_react:
+            system_prompt = MATH_SYSTEM_PROMPT_REACT
+        elif is_small:
+            system_prompt = MATH_SYSTEM_PROMPT_COMPACT
+        else:
+            system_prompt = MATH_SYSTEM_PROMPT
+        
+        # Create agent with tools
+        # Use force_react for small models - native tool calling is unreliable
+        # Or force_react if explicitly requested via env var
+        use_react = force_react or is_small
         agent = Agent(
             model=model,
             tools=create_calculator_tool(),
@@ -127,6 +143,7 @@ def test_model_with_agent(model: str, question: str, expected: str, client, acp:
             client=client,
             model_options={"num_predict": 150},
             on_step=acp.on_step,
+            force_react=use_react,  # Small models need ReAct format
         )
         
         start = time.time()
@@ -168,6 +185,9 @@ def test_model_with_agent(model: str, question: str, expected: str, client, acp:
 def main():
     open(RESULTS_FILE, "w").close()
     open(LOG_FILE, "w").close()
+    
+    # Check for force_react env var
+    force_react = os.environ.get("LOCALCLAW_FORCE_REACT", "").lower() in ("1", "true", "yes")
     
     # Create a main ACP instance for the benchmark controller
     main_acp = ACPPlugin(
@@ -211,6 +231,9 @@ def main():
     
     log(f"\nStarting GSM8K Agent Benchmark (ACP)")
     log(f"Models: {len(available)}, Questions: {len(QUESTIONS)}, Total: {total_tests}")
+    log(f"Using: Agent system with calculator tool")
+    if force_react:
+        log(f"Force ReAct: YES (all models will use text-based tool calling)")
     log("=" * 50)
     
     overall_start = time.time()
@@ -228,7 +251,7 @@ def main():
         acp.bootstrap(claim_primary=False)
         
         for i, (question, expected) in enumerate(QUESTIONS):
-            result = test_model_with_agent(model, question, expected, client, main_acp)
+            result = test_model_with_agent(model, question, expected, client, main_acp, force_react=force_react)
             results.append(result)
             
             status = "✓" if result["correct"] else "✗"

@@ -54,6 +54,28 @@ SYSTEM_PROMPT_WITH_TOOLS = """You are a helpful assistant with access to tools.
 - After using tools, report the results clearly and concisely
 - Always execute tools rather than describing how to use them"""
 
+# ReAct-specific prompt for text-based tool calling
+SYSTEM_PROMPT_REACT = """You are a helpful assistant with access to tools.
+
+When you need to use a tool, follow this EXACT format:
+
+Thought: I need to [what you want to do]
+Action: tool_name
+Action Input: {"param": "value"}
+Observation: [result will appear here]
+... (repeat as needed)
+Final Answer: [your answer]
+
+IMPORTANT: Always use the calculator tool for arithmetic.
+
+Example:
+Question: What is 15 times 8?
+Thought: I need to multiply 15 by 8
+Action: calculator
+Action Input: {"expression": "15 * 8"}
+Observation: 120
+Final Answer: 120"""
+
 
 # Test cases - 3 tests per category (15 total)
 # Prompts optimized for small models (≤1.5B parameters)
@@ -85,7 +107,7 @@ TESTS = [
 ]
 
 
-def test_model(client, model: str) -> dict:
+def test_model(client, model: str, force_react: bool = False) -> dict:
     """Test a single model and return results."""
     print(f"\n{'='*60}")
     print(f"🧪 Testing: {model}")
@@ -115,7 +137,16 @@ def test_model(client, model: str) -> dict:
         
         try:
             registry = make_builtin_registry().subset(tools) if tools else None
-            system_prompt = SYSTEM_PROMPT_WITH_TOOLS if tools else SYSTEM_PROMPT_NO_TOOLS
+            
+            # Choose system prompt based on tools and force_react setting
+            if tools and force_react:
+                system_prompt = SYSTEM_PROMPT_REACT
+            else:
+                system_prompt = SYSTEM_PROMPT_WITH_TOOLS if tools else SYSTEM_PROMPT_NO_TOOLS
+            
+            # Determine if model is small (needs ReAct)
+            is_small = any(x in model.lower() for x in ["270m", "135m", "350m", "0.5b", "tiny", "1b"])
+            use_react = force_react or (tools is not None and is_small)
             
             agent = Agent(
                 model=model,
@@ -128,6 +159,7 @@ def test_model(client, model: str) -> dict:
                     "num_ctx": 512,        # Small context for short answers
                     "num_predict": 64,     # Most answers are 1-10 tokens
                 },
+                force_react=use_react,
             )
             
             t0 = time.time()
@@ -198,6 +230,9 @@ def test_model(client, model: str) -> dict:
 
 
 def main():
+    # Check for force_react env var
+    force_react = os.environ.get("LOCALCLAW_FORCE_REACT", "").lower() in ("1", "true", "yes")
+    
     client = get_default_client()
     
     if not client.is_running():
@@ -212,6 +247,8 @@ def main():
     print(f"\n🦞 LocalClaw Model Comparison")
     print(f"   Backend: {BACKEND_NAME}")
     print(f"   Available models: {', '.join(available)}")
+    if force_react:
+        print(f"   Force ReAct: YES (all models will use text-based tool calling)")
     
     # Use all available models if MODELS not specified
     if MODELS is None:
@@ -232,7 +269,7 @@ def main():
     for model in models_to_test:
         # Find the exact model name from available
         exact_name = next((a for a in available if model.split(':')[0] in a), model)
-        result = test_model(client, exact_name)
+        result = test_model(client, exact_name, force_react=force_react)
         all_results.append(result)
     
     # Rankings

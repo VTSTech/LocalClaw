@@ -38,6 +38,9 @@ if not client.is_running():
         print("   Start it with: ollama serve")
     sys.exit(1)
 
+# Check for force_react env var
+force_react = os.environ.get("LOCALCLAW_FORCE_REACT", "").lower() in ("1", "true", "yes")
+
 preferred = os.environ.get("LOCALCLAW_MODEL")
 MODEL = pick_best_model(preferred=preferred, client=client)
 if not MODEL:
@@ -49,7 +52,10 @@ if not MODEL:
         sys.exit(1)
 
 print(f"✓  {BACKEND_NAME} is running")
-print(f"   Using model: {MODEL}\n")
+print(f"   Using model: {MODEL}")
+if force_react:
+    print(f"   Force ReAct: YES (text-based tool calling)")
+print()
 
 # ── 2. Define custom tools ─────────────────────────────────────────
 registry = ToolRegistry()
@@ -139,6 +145,10 @@ def print_step(step: StepResult):
 
 
 # ── 5. Build the agent ─────────────────────────────────────────────
+# Determine if model is small (needs ReAct)
+is_small = any(x in MODEL.lower() for x in ["270m", "135m", "350m", "0.5b", "tiny", "1b"])
+use_react = force_react or is_small
+
 agent = Agent(
     model=MODEL,
     client=client,
@@ -153,6 +163,7 @@ agent = Agent(
         "num_ctx": 1024,
         "num_predict": 256,
     },
+    force_react=use_react,
 )
 
 print(f"=== Multi-tool agent demo ({agent.model}) ===\n")

@@ -44,6 +44,28 @@ SYSTEM_PROMPT_WITH_TOOLS = """You are a helpful assistant with access to tools.
 - After using tools, report the results clearly and concisely
 - Always execute tools rather than describing how to use them"""
 
+# ReAct-specific prompt for text-based tool calling
+SYSTEM_PROMPT_REACT = """You are a helpful assistant with access to tools.
+
+When you need to use a tool, follow this EXACT format:
+
+Thought: I need to [what you want to do]
+Action: tool_name
+Action Input: {"param": "value"}
+Observation: [result will appear here]
+... (repeat as needed)
+Final Answer: [your answer]
+
+IMPORTANT: Always use the calculator tool for arithmetic.
+
+Example:
+Question: What is 15 times 8?
+Thought: I need to multiply 15 by 8
+Action: calculator
+Action Input: {"expression": "15 * 8"}
+Observation: 120
+Final Answer: 120"""
+
 
 # Models discovered dynamically at runtime
 # Filter for small models (indicators: 0.5b, 1b, 1.5b, 2b, 270m, 135m, 0.6b, etc.)
@@ -105,7 +127,7 @@ def save_results(results):
         json.dump(results, f, indent=2)
 
 
-def test_model(client, model: str, results: dict) -> dict:
+def test_model(client, model: str, results: dict, force_react: bool = False) -> dict:
     """Test a single model, saving progress after each test."""
     if model not in results:
         results[model] = {
@@ -128,7 +150,16 @@ def test_model(client, model: str, results: dict) -> dict:
 
         try:
             registry = make_builtin_registry().subset(tools) if tools else None
-            system_prompt = SYSTEM_PROMPT_WITH_TOOLS if tools else SYSTEM_PROMPT_NO_TOOLS
+            
+            # Choose system prompt based on tools and force_react setting
+            if tools and force_react:
+                system_prompt = SYSTEM_PROMPT_REACT
+            else:
+                system_prompt = SYSTEM_PROMPT_WITH_TOOLS if tools else SYSTEM_PROMPT_NO_TOOLS
+            
+            # Determine if model is small (needs ReAct)
+            is_small = any(x in model.lower() for x in ["270m", "135m", "350m", "0.5b", "tiny", "1b"])
+            use_react = force_react or (tools is not None and is_small)
             
             agent = Agent(
                 model=model,
@@ -141,6 +172,7 @@ def test_model(client, model: str, results: dict) -> dict:
                     "num_ctx": 512,         # Small context for short answers
                     "num_predict": 64,      # Very short answers
                 },
+                force_react=use_react,
             )
 
             t0 = time.time()
@@ -207,6 +239,9 @@ def test_model(client, model: str, results: dict) -> dict:
 
 
 def main():
+    # Check for force_react env var
+    force_react = os.environ.get("LOCALCLAW_FORCE_REACT", "").lower() in ("1", "true", "yes")
+    
     client = get_default_client()
 
     if not client.is_running():
@@ -221,6 +256,8 @@ def main():
     print(f"🦞 LocalClaw Robust Model Comparison")
     print(f"   Backend: {BACKEND_NAME}")
     print(f"   Available: {', '.join(available)}")
+    if force_react:
+        print(f"   Force ReAct: YES (all models will use text-based tool calling)")
 
     # Load existing results for resumability (don't delete!)
     results = {}
@@ -250,7 +287,7 @@ def main():
         print(f"🧪 Testing: {model}")
         print(f"{'='*50}")
 
-        test_model(client, model, results)
+        test_model(client, model, results, force_react=force_react)
 
     # Print rankings
     print(f"\n{'='*50}")
