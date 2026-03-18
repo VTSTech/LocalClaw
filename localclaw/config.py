@@ -1,5 +1,5 @@
 """
-🦞 LocalClaw R02 — Central Configuration
+🦞 LocalClaw R03 — Central Configuration
 
 Single source of truth for Ollama and ACP server URLs.
 Change these values once to update all tests and examples.

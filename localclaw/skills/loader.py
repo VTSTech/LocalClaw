@@ -1,5 +1,5 @@
 """
-🦞 LocalClaw R01 - Skills Loader
+🦞 LocalClaw R03 - Skills Loader
 
 Implements the Agent Skills specification for loading SKILL.md files.
 See: https://agentskills.io/

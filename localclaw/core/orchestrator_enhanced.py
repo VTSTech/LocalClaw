@@ -1,5 +1,5 @@
 """
-🦞 LocalClaw R02 — Enhanced Orchestrator with Parallel Execution
+🦞 LocalClaw R03 — Enhanced Orchestrator with Parallel Execution
 
 Enhanced orchestrator with:
   • True parallel execution mode (all agents run simultaneously)

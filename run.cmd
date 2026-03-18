@@ -2,7 +2,7 @@
 setlocal
 
 echo ============================================================
-echo         LocalClaw R01 - Run Single Example
+echo         LocalClaw R03 - Run Single Example
 echo ============================================================
 echo.
 echo Available examples:

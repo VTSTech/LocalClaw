@@ -122,7 +122,7 @@ def test_model(client, model: str, results: dict) -> dict:
     
     # Create a new ACP instance for this model (like 02_tool_agent_acp.py does)
     acp = ACPPlugin(
-        agent_name=f"LocalClaw",
+        agent_name=f"LocalClaw-{model_short}",
         model_name=model,
         debug=os.environ.get("ACP_DEBUG", "").lower() in ("1", "true"),
     )

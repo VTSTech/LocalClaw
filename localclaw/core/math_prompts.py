@@ -1,5 +1,5 @@
 """
-🦞 LocalClaw R02 — Math Prompts and Utilities
+🦞 LocalClaw R03 — Math Prompts and Utilities
 
 Math-specific prompts and utilities for GSM8K-style benchmarks:
   • System prompts optimized for math reasoning

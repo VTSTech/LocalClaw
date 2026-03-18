@@ -26,7 +26,7 @@ BACKEND_NAME = LOCALCLAW_BACKEND.upper()
 
 
 def main():
-    print("🦞 LocalClaw R02 - Batch Operations Demo (ACP)")
+    print("🦞 LocalClaw R03 - Batch Operations Demo (ACP)")
     print("=" * 60)
     
     # ── Create and bootstrap ACP ─────────────────────────────────

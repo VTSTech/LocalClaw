@@ -1,5 +1,5 @@
 """
-🦞 LocalClaw R02 — Orchestrator
+🦞 LocalClaw R03 — Orchestrator
 Coordinates multiple agents via a router agent or explicit hand-off rules.
 
 Two modes:

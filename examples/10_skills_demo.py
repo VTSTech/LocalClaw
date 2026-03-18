@@ -30,7 +30,7 @@ BACKEND_NAME = LOCALCLAW_BACKEND.upper()
 
 
 def main():
-    print("🦞 LocalClaw R02 - Skills Demo")
+    print("🦞 LocalClaw R03 - Skills Demo")
     print("=" * 60)
     
     base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))

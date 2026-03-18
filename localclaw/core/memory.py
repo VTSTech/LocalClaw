@@ -1,5 +1,5 @@
 """
-🦞 LocalClaw R02 — Memory
+🦞 LocalClaw R03 — Memory
 Manages conversation history with a configurable sliding window and
 optional LLM-based summarization to compress older turns.
 

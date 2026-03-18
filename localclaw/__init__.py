@@ -82,7 +82,7 @@ def get_available_models(client=None):
     
     return client.list_models() or []
 
-# R02/R03 Enhancements
+# R03 Enhancements
 from .core.orchestrator_enhanced import Orchestrator as EnhancedOrchestrator, AgentCard as EnhancedAgentCard
 
 __all__ = [
@@ -92,7 +92,7 @@ __all__ = [
     "OllamaClient", "Orchestrator", "AgentCard",
     # Skills
     "SkillLoader", "Skill", "SkillRegistry",
-    # R02/R03 Enhancements
+    # R03 Enhancements
     "EnhancedOrchestrator", "EnhancedAgentCard",
     "ACPPlugin",
     # R03: Backend-agnostic helpers

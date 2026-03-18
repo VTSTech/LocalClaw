@@ -295,7 +295,7 @@ Call write_file now."""
 
 
 def main():
-    print("🦞 LocalClaw R02 - Skill Creator Test (Autonomous Creation)")
+    print("🦞 LocalClaw R03 - Skill Creator Test (Autonomous Creation)")
     print("=" * 60)
     print("Testing if models can CREATE skills autonomously.")
     print("The skill content is NOT provided - models must generate it!")

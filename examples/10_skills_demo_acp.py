@@ -29,7 +29,7 @@ BACKEND_NAME = LOCALCLAW_BACKEND.upper()
 
 
 def main():
-    print("🦞 LocalClaw R02 - Skills Demo (ACP Enabled)")
+    print("🦞 LocalClaw R03 - Skills Demo (ACP Enabled)")
     print("=" * 60)
     
     # ── Create and bootstrap ACP ─────────────────────────────────

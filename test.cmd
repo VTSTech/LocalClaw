@@ -2,7 +2,7 @@
 setlocal enabledelayedexpansion
 
 echo ============================================================
-echo              LocalClaw R01 - Running All Examples
+echo              LocalClaw R03 - Running All Examples
 echo ============================================================
 echo.
 

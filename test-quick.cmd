@@ -2,7 +2,7 @@
 setlocal enabledelayedexpansion
 
 echo ============================================================
-echo         LocalClaw R01 - Quick Test (Non-Interactive)
+echo         LocalClaw R03 - Quick Test (Non-Interactive)
 echo ============================================================
 echo.
 echo Skips: 06_interactive_chat, 07-09 benchmarks (long running)

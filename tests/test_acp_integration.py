@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """
-LocalClaw R02 + ACP Integration Test
+LocalClaw R03 + ACP Integration Test
 ====================================
 
 Tests sub-agent orchestration with ACP monitoring.
 
 Uses centralized config from localclaw/config.py
 
-Written for VTSTech LocalClaw R02 + ACP v1.0.2
+Written for VTSTech LocalClaw R03 + ACP v1.0.2
 """
 
 import sys
@@ -26,7 +26,7 @@ from localclaw.tools.builtins import BUILTIN_REGISTRY
 
 print(f"""
 ╔═══════════════════════════════════════════════════════════════════╗
-║     🦞 LocalClaw R02 + ACP Integration Test                        ║
+║     🦞 LocalClaw R03 + ACP Integration Test                        ║
 ╠═══════════════════════════════════════════════════════════════════╣
 ║  Using centralized config from localclaw/config.py                ║
 ║  Model:  {DEFAULT_MODEL:<48} ║
