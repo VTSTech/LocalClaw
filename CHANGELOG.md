@@ -6,6 +6,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [R03.0.4] - 2026-03-18
+
+### Fixed
+- **Argparse help display in Google Colab** - Shortened description and moved URLs to epilog to prevent truncation in environments with non-standard terminals
+- Added `WideHelpFormatter` with forced width of 200 characters for better compatibility
+- URLs now display correctly in the help epilog section
+
+---
+
+## [R03.0.3] - 2026-03-18
+
+### Fixed
+- **Argparse help display in Google Colab** - Added `WideHelpFormatter` with minimum width of 120 characters to fix truncation issues in environments with non-standard terminals (Google Colab, some Docker containers)
+- Removed unnecessary Colab color detection - ANSI colors work fine in Colab, the issue was argparse width calculation
+
+---
+
 ## [R03.0.2] - 2026-03-18
 
 ### Changed
