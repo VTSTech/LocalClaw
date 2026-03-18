@@ -120,7 +120,7 @@ def create_calculator_tool():
     return registry
 
 
-def test_model_with_agent(model: str, question: str, expected: str, client) -> dict:
+def test_model_with_agent(model: str, question: str, expected: str, client, force_react: bool = False) -> dict:
     """
     Test a model using the full Agent system with calculator tool.
     """
@@ -130,6 +130,9 @@ def test_model_with_agent(model: str, question: str, expected: str, client) -> d
         system_prompt = MATH_SYSTEM_PROMPT_COMPACT if is_small else MATH_SYSTEM_PROMPT
         
         # Create agent with tools
+        # Use force_react for small models - native tool calling is unreliable
+        # Or force_react if explicitly requested via env var
+        use_react = force_react or is_small
         agent = Agent(
             model=model,
             tools=create_calculator_tool(),
@@ -137,6 +140,7 @@ def test_model_with_agent(model: str, question: str, expected: str, client) -> d
             max_steps=5,
             client=client,
             model_options={"num_predict": 150},
+            force_react=use_react,  # Small models need ReAct format
         )
         
         start = time.time()
@@ -182,6 +186,9 @@ def main():
     open(RESULTS_FILE, "w").close()
     open(LOG_FILE, "w").close()
     
+    # Check for force_react env var
+    force_react = os.environ.get("LOCALCLAW_FORCE_REACT", "").lower() in ("1", "true", "yes")
+    
     # Shared client
     client = get_default_client()
     
@@ -208,6 +215,8 @@ def main():
     log(f"Questions per model: {len(QUESTIONS)}")
     log(f"Total tests: {total_tests}")
     log(f"Using: Agent system with calculator tool")
+    if force_react:
+        log(f"Force ReAct: YES (all models will use text-based tool calling)")
     log("=" * 50)
     
     overall_start = time.time()
@@ -218,7 +227,7 @@ def main():
         model_start = time.time()
         
         for i, (question, expected) in enumerate(QUESTIONS):
-            result = test_model_with_agent(model, question, expected, client)
+            result = test_model_with_agent(model, question, expected, client, force_react=force_react)
             results.append(result)
             completed += 1
             
