@@ -1105,8 +1105,21 @@ def cmd_test(args):
     for i, test_id in enumerate(to_run, 1):
         # Find the example file
         example_file = None
-        for pattern in [f"{test_id}_*.py", f"0{test_id}_*.py", f"{test_id}*.py"]:
+        
+        # Special handling for _acp suffix tests
+        if test_id.endswith("_acp"):
+            # For gsm8k_acp, match files like gsm8k_*_acp.py
+            base = test_id[:-4]  # Remove _acp suffix
+            patterns = [f"{base}_*_acp.py", f"{base}_*_acp*.py", f"0{base}_*_acp.py"]
+        else:
+            # For non-acp tests, use standard patterns
+            patterns = [f"{test_id}_*.py", f"0{test_id}_*.py", f"{test_id}*.py"]
+        
+        for pattern in patterns:
             matches = list(examples_dir.glob(pattern))
+            # Filter out _acp files for non-acp tests to avoid wrong matches
+            if not test_id.endswith("_acp"):
+                matches = [m for m in matches if "_acp" not in m.stem]
             if matches:
                 example_file = matches[0]
                 break
