@@ -1,5 +1,27 @@
 # 🦞 LocalClaw R03
 
+## GSM8K Benchmark Results (with Calculator Tool)
+
+The following models have been tested on a **50-question GSM8K-style benchmark** using the Agent system with a calculator tool.
+
+### With `--force-react` (Text-based ReAct)
+
+| Rank | Model | Score | Time | Avg/Question | Notes |
+|:----:|-------|------:|-----:|-------------:|-------|
+| 🥇 | **`granite4:350m`** | **41/50 (82%)** | 960s | ~19s | **Best sub-500M model!** |
+| 🥈 | `qwen2.5-coder:0.5b-instruct-q4_k_m` | 30/50 (60%) | 705s | ~14s | Faster but less accurate |
+
+### Key Finding: ReAct Mode Dramatically Improves Small Model Performance
+
+| Model | Native Tools | With `--force-react` | Improvement |
+|-------|--------------|---------------------|-------------|
+| `granite4:350m` | ~53% | **82%** | **+29%** |
+| `qwen2.5-coder:0.5b` | ~93% | 60% | -33% |
+
+**Recommendation**: Use `--force-react` for models that struggle with native tool calling. It provides explicit formatting guidance that helps small models understand how to use tools correctly.
+
+---
+
 ## Tested Small Models (≤1.5B parameters)
 
 The following models have been tested with a **15-test benchmark** (3 tests per category: Math, Reasoning, Knowledge, Calc Tool, Code).
@@ -61,6 +83,7 @@ LocalClaw has been tested with **Microsoft BitNet-b1.58-2B-4T** — a 2B paramet
 | Use Case | Recommended Model | Why |
 |----------|-------------------|-----|
 | **General use** | `qwen2.5-coder:0.5b-instruct-q4_k_m` | Best all-around, fast, great tool usage |
+| **Smallest capable** | **`granite4:350m` + `--force-react`** | **82% GSM8K - best sub-500M model!** |
 | **Large context** | `llama3.2:1b` | **128k context window** - handles long conversations |
 | **Math tasks** | `qwen2.5-coder:0.5b` or `qwen2-math:1.5b` | Perfect math scores |
 | **Reasoning tasks** | `qwen2.5:0.5b` or `qwen3:0.6b` | Perfect reasoning |

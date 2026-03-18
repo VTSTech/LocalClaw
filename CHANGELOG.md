@@ -6,6 +6,37 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [R03.0.8] - 2026-03-18
+
+### Added
+- **`--force-react` flag for test command** - Forces text-based ReAct tool calling for all models
+  - Usage: `localclaw test gsm8k --force-react`
+  - Passes `LOCALCLAW_FORCE_REACT=1` environment variable to test scripts
+  - Essential for models without native tool support (BitNet, some small models)
+- **`LOCALCLAW_FORCE_REACT` environment variable** - Controls ReAct mode across all examples
+  - Values: `1`, `true`, `yes` to enable
+  - Auto-detected by all benchmark and tool examples
+  - Forces text-based "Thought/Action/Action Input/Observation" format
+- **`MATH_SYSTEM_PROMPT_REACT` prompt** - ReAct-optimized math prompt in `math_prompts.py`
+  - Includes explicit format examples for calculator tool usage
+  - Shows exact "Action: calculator" / "Action Input: {"expression": ...}" format
+
+### Changed
+- **Updated all benchmark examples** to respect `LOCALCLAW_FORCE_REACT`:
+  - `gsm8k_agent_benchmark_acp.py` - Full force_react support
+  - `07_model_comparison.py` / `_acp.py` - Added force_react parameter
+  - `08_robust_comparison.py` / `_acp.py` - Added force_react parameter
+  - `09_expanded_benchmark.py` - Added force_react parameter
+  - `02_tool_agent.py` / `_acp.py` - Added force_react support
+- **Small model auto-detection** - Models with indicators (270m, 350m, 0.5b, 1b, tiny) auto-enable ReAct
+
+### Benchmark Results
+- **`granite4:350m` with `--force-react`**: 82% on GSM8K (41/50) - **NEW TOP PERFORMER** for sub-500M models
+- **`qwen2.5-coder:0.5b` with `--force-react`**: 60% on GSM8K (30/50)
+- ReAct mode significantly outperforms native tool calling for models <1B parameters
+
+---
+
 ## [R03.0.7] - 2026-03-18
 
 ### Added
