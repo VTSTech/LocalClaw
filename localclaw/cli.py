@@ -1075,21 +1075,14 @@ def cmd_test(args):
         print()
         return
     
-    # Find examples directory
+    # Find examples directory (inside localclaw package)
     localclaw_dir = Path(__file__).parent
-    examples_dir = localclaw_dir.parent / "examples"
-    
-    if not examples_dir.exists():
-        # Try installed package location
-        spec = importlib.util.find_spec("localclaw")
-        if spec and spec.origin:
-            localclaw_dir = Path(spec.origin).parent
-            examples_dir = localclaw_dir.parent / "examples"
+    examples_dir = localclaw_dir / "examples"
     
     if not examples_dir.exists():
         print(red("✗  Examples directory not found."))
-        print(dim("   Examples are included in the source repository."))
-        print(dim("   Clone from: https://github.com/VTSTech/LocalClaw"))
+        print(dim("   Examples are included in the localclaw package."))
+        print(dim("   Reinstall with: pip install --upgrade localclaw"))
         sys.exit(1)
     
     # Determine which tests to run
@@ -1377,17 +1370,3 @@ def build_parser() -> argparse.ArgumentParser:
     p_test.set_defaults(func=cmd_test)
 
     return parser
-
-
-# ------------------------------------------------------------------ #
-#  Entry point                                                       #
-# ------------------------------------------------------------------ #
-
-def main():
-    parser = build_parser()
-    args = parser.parse_args()
-    args.func(args)
-
-
-if __name__ == "__main__":
-    main()
