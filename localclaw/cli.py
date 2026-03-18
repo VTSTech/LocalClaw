@@ -1179,7 +1179,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     parser = argparse.ArgumentParser(
         prog="localclaw",
-        description="LocalClaw R03 - local agentic AI powered by Ollama",
+        description="🦞 LocalClaw R03 - local agentic AI powered by Ollama",
     )
 
     sub = parser.add_subparsers(dest="command", metavar="command")
