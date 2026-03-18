@@ -99,7 +99,7 @@ def test_model(client, model: str) -> dict:
     else:
         model_short = model.split(':')[0]  # For Ollama-style "model:tag"
     model_short = model_short[:25]  # Truncate if needed
-    model_agent_name = f"LocalClaw-{model_short}"
+    model_agent_name = f"LocalClaw"
     
     # Create a new ACP instance for this model (like 02_tool_agent_acp.py does)
     acp = ACPPlugin(
