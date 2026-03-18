@@ -26,6 +26,7 @@ from localclaw.core.agent import Agent
 from localclaw.core.math_prompts import (
     MATH_SYSTEM_PROMPT,
     MATH_SYSTEM_PROMPT_COMPACT,
+    MATH_SYSTEM_PROMPT_REACT,
     extract_number,
     calculator_tool,
 )
@@ -125,9 +126,16 @@ def test_model_with_agent(model: str, question: str, expected: str, client, forc
     Test a model using the full Agent system with calculator tool.
     """
     try:
-        # Choose prompt based on model size
+        # Choose prompt based on model size and force_react setting
         is_small = any(x in model.lower() for x in ["270m", "135m", "350m", "0.5b", "tiny", "1b"])
-        system_prompt = MATH_SYSTEM_PROMPT_COMPACT if is_small else MATH_SYSTEM_PROMPT
+        
+        # Use ReAct-specific prompt when forcing ReAct mode
+        if force_react:
+            system_prompt = MATH_SYSTEM_PROMPT_REACT
+        elif is_small:
+            system_prompt = MATH_SYSTEM_PROMPT_COMPACT
+        else:
+            system_prompt = MATH_SYSTEM_PROMPT
         
         # Create agent with tools
         # Use force_react for small models - native tool calling is unreliable
