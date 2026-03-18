@@ -1192,7 +1192,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     parser = argparse.ArgumentParser(
         prog="localclaw",
-        description="🦞 LocalClaw R03 — local agentic AI powered by Ollama",
+        description="LocalClaw R03 - local agentic AI powered by Ollama",
         formatter_class=WideHelpFormatter,
         epilog=textwrap.dedent("""
         Website: https://www.vts-tech.org
