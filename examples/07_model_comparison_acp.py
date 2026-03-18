@@ -93,7 +93,12 @@ def test_model(client, model: str, acp: ACPPlugin) -> dict:
     print(f"{'='*60}")
     
     # Create model-specific ACP agent name
-    model_short = model.split('/')[-1].split(':')[0][:20]  # Short name for agent
+    # For paths like "Falcon3-1B-Instruct-1.58bit/ggml-model-i2_s.gguf", use the directory name
+    if '/' in model:
+        model_short = model.split('/')[0]  # "Falcon3-1B-Instruct-1.58bit"
+    else:
+        model_short = model.split(':')[0]  # For Ollama-style "model:tag"
+    model_short = model_short[:25]  # Truncate if needed
     model_agent_name = f"LocalClaw-{model_short}"
     
     # Note: We log activities with agent_name in metadata - ACP will track per-agent tokens
