@@ -136,7 +136,7 @@ def _count_messages(history) -> dict:
 # ------------------------------------------------------------------ #
 
 # Disable colors entirely - ANSI codes cause issues in some environments
-_NO_COLOR = True
+_NO_COLOR = False
 
 def _c(code: str, text: str) -> str:
     if _NO_COLOR:
