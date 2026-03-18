@@ -47,19 +47,6 @@ localclaw/
     └── 11_skill_creator_test.py    # Skill creation benchmark across models
 ```
 
-### Test Scripts
-
-```
-test.sh          # Bash: Run all 11 examples (Linux/macOS/Colab)
-test-quick.sh    # Bash: Run 7 quick tests (skips benchmarks)
-run.sh           # Bash: Interactive menu for single example
-test-bitnet.sh   # Bash: Run BitNet benchmark tests
-test.cmd         # Batch: Run all 11 examples (Windows)
-test-quick.cmd   # Batch: Run 7 quick tests (Windows)
-run.cmd          # Batch: Interactive menu for single example (Windows)
-test-bitnet.cmd  # Batch: Run BitNet benchmark tests (Windows)
-```
-
 ### Core design decisions
 
 | Concern | Approach |
@@ -334,6 +321,7 @@ localclaw run "What is 2+2?" --acp
 | `models` | List available Ollama models |
 | `tools` | List built-in tools |
 | `skills` | List available Agent Skills |
+| `test [example]` | Run example/test scripts (`--list` to see all) |
 
 ### CLI Flags
 
@@ -607,32 +595,24 @@ Skills follow a three-level loading system:
 # Make sure Ollama is serving and you have a model pulled
 ollama pull qwen2.5-coder:0.5b-instruct-q4_k_m
 
-# Or use a remote Ollama instance by editing localclaw/core/ollama_client.py
+# List all available examples
+localclaw test --list
 
-# Quick test suite (recommended first run)
-bash test-quick.sh      # Linux/macOS/Colab
-test-quick.cmd          # Windows
+# Quick test suite (recommended first run - skips long benchmarks)
+localclaw test quick
 
-# Full test suite (all 11 examples)
-bash test.sh            # Linux/macOS/Colab
-test.cmd                # Windows
+# Full test suite (all examples)
+localclaw test all
 
-# Interactive menu
-bash run.sh             # Linux/macOS/Colab
-run.cmd                 # Windows
+# Run a specific example
+localclaw test 01          # Basic agent demo
+localclaw test 02          # Tool agent demo
+localclaw test 04_acp      # Comprehensive test with ACP tracking
 
-# Run individual examples
+# Or run examples directly with Python
 python examples/01_basic_agent.py
 python examples/02_tool_agent.py
 python examples/03_orchestrator.py
-python examples/04_comprehensive_test.py
-python examples/05_tool_tests.py
-python examples/06_interactive_chat.py
-python examples/07_model_comparison.py
-python examples/08_robust_comparison.py
-python examples/09_expanded_benchmark.py
-python examples/10_skills_demo.py
-python examples/11_skill_creator_test.py
 ```
 
 ---
