@@ -6,6 +6,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [R03.0.2] - 2026-03-18
+
+### Changed
+- **Documentation restructure** - README.md split into modular documentation files
+  - `README.md` now serves as concise entry point (~180 lines, down from ~420)
+  - `Architecture.md` - Technical documentation for developers (directory structure, design decisions, orchestrator modes)
+  - `CHANGELOG.md` - Version history and release notes
+  - `TESTS.md` - Benchmark results, model recommendations, and testing guide
+  - Added Documentation table in README with clear links to all supporting files
+- **Fixed version mismatch** - `__init__.py` now correctly shows 0.3.0.2 (was behind at 0.3.0)
+
+---
+
 ## [R03] - 2026-03-17
 
 ### Added
