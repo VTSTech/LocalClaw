@@ -21,6 +21,7 @@ Supported models (as of bitnet.cpp 2025):
   - tiiuae/Falcon3-1B-Instruct-1.58bit
   - tiiuae/Falcon3-3B-Instruct-1.58bit
   - tiiuae/Falcon3-7B-Instruct-1.58bit
+"""
 
 import json
 import urllib.request
