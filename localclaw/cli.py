@@ -1172,20 +1172,6 @@ def _default_model(client: OllamaClient) -> str:
     return models[0] if models else "llama3.2:1b"
 
 
-class WideHelpFormatter(argparse.RawDescriptionHelpFormatter):
-    """HelpFormatter with minimum width to fix display issues in some terminals (e.g., Google Colab)."""
-    
-    def __init__(self, *args, **kwargs):
-        # Force minimum width of 120 to fix truncation in environments like Google Colab
-        # that may report incorrect terminal dimensions
-        if 'prog' in kwargs:
-            # When used as main parser formatter
-            kwargs['width'] = 200
-        super().__init__(*args, **kwargs)
-        self._width = 200
-        self._action_max_length = 40  # Allow longer option names
-
-
 def build_parser() -> argparse.ArgumentParser:
     client = OllamaClient()
     default_model = _default_model(client) if client.is_running() else "llama3.2:1b"
@@ -1193,11 +1179,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="localclaw",
         description="LocalClaw R03 - local agentic AI powered by Ollama",
-        formatter_class=WideHelpFormatter,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=textwrap.dedent("""
-        Website: https://www.vts-tech.org
-        GitHub:  https://github.com/VTSTech/LocalClaw
-
         options (for 'run' and 'chat' commands):
           -m, --model MODEL      Model to use (default: auto-detect for Ollama, bitnet-b1.58-2b-4t for BitNet)
           --backend BACKEND      Inference backend: ollama (default) or bitnet (bitnet.cpp llama-server)
@@ -1237,7 +1220,7 @@ def build_parser() -> argparse.ArgumentParser:
     sub.required = True
 
     # ── Shared flags ──────────────────────────────────────────────────
-    shared = argparse.ArgumentParser(add_help=False, formatter_class=WideHelpFormatter)
+    shared = argparse.ArgumentParser(add_help=False)
     shared.add_argument(
         "--model", "-m",
         default=default_model,
