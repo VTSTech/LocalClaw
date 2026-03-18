@@ -1370,3 +1370,17 @@ def build_parser() -> argparse.ArgumentParser:
     p_test.set_defaults(func=cmd_test)
 
     return parser
+
+
+# ------------------------------------------------------------------ #
+#  Entry point                                                       #
+# ------------------------------------------------------------------ #
+
+def main():
+    parser = build_parser()
+    args = parser.parse_args()
+    args.func(args)
+
+
+if __name__ == "__main__":
+    main()
