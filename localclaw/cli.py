@@ -9,6 +9,7 @@ Commands:
   models  List models available in Ollama
   tools   List available built-in tools
   skills  List available Agent Skills
+  test    Run example/test scripts
 
 Examples:
   localclaw run "What is the capital of France?"
@@ -18,6 +19,9 @@ Examples:
   localclaw models
   localclaw tools
   localclaw skills
+  localclaw test --list
+  localclaw test quick
+  localclaw test 01
 
 Written by VTSTech · https://www.vts-tech.org · https://github.com/VTSTech/LocalClaw — https://www.vts-tech.org — https://github.com/VTSTech/LocalClaw
 """
@@ -1021,6 +1025,145 @@ def cmd_chat(args):
         print(f"\n{dim('Interrupted.')}")
 
 
+def cmd_test(args):
+    """Run example/test scripts from the localclaw package."""
+    import subprocess
+    import importlib.util
+    
+    # Available examples with descriptions
+    EXAMPLES = {
+        "01": "Basic agent - simple Q&A without tools",
+        "01_acp": "Basic agent with ACP tracking",
+        "02": "Tool agent - calculator, shell, file tools",
+        "02_acp": "Tool agent with ACP tracking",
+        "03": "Orchestrator - multi-agent routing demo",
+        "03_acp": "Orchestrator with ACP tracking",
+        "04": "Comprehensive test - basic + reasoning + code",
+        "04_acp": "Comprehensive test with ACP tracking",
+        "05": "Tool tests - individual tool demonstrations",
+        "05_acp": "Tool tests with ACP tracking",
+        "06": "Interactive chat demo",
+        "06_acp": "Interactive chat with ACP tracking",
+        "07": "Model comparison - 15 tests across models",
+        "07_acp": "Model comparison with ACP tracking",
+        "07_batch": "Batch operations with ACP",
+        "08": "Robust comparison - progress-saving benchmark",
+        "08_acp": "Robust comparison with ACP tracking",
+        "08_shutdown": "Shutdown demo with ACP",
+        "09": "Expanded benchmark - 25 tests, 8 categories",
+        "10": "Skills demo - Agent Skills system",
+        "10_acp": "Skills demo with ACP tracking",
+        "11": "Skill creator test - benchmark across models",
+        "gsm8k": "GSM8K agent benchmark",
+        "gsm8k_acp": "GSM8K benchmark with ACP tracking",
+        "backend": "Backend demo - Ollama/BitNet switching",
+    }
+    
+    # Quick test set (skips long-running benchmarks)
+    QUICK_TESTS = ["01", "02", "03", "04", "05", "10", "11"]
+    
+    if args.list:
+        print(bold("\n🦞 LocalClaw Test Examples"))
+        print(dim("─" * 70))
+        for num, desc in sorted(EXAMPLES.items()):
+            marker = green("quick") if num in QUICK_TESTS else dim("full")
+            print(f"  {cyan(num):<12} {desc}")
+            print(f"              {dim('[')}{marker}{dim(']')}")
+        print()
+        print(dim("  Use --test quick to run quick tests only"))
+        print(dim("  Use --test all to run all tests"))
+        print()
+        return
+    
+    # Find examples directory
+    localclaw_dir = Path(__file__).parent
+    examples_dir = localclaw_dir.parent / "examples"
+    
+    if not examples_dir.exists():
+        # Try installed package location
+        spec = importlib.util.find_spec("localclaw")
+        if spec and spec.origin:
+            localclaw_dir = Path(spec.origin).parent
+            examples_dir = localclaw_dir.parent / "examples"
+    
+    if not examples_dir.exists():
+        print(red("✗  Examples directory not found."))
+        print(dim("   Examples are included in the source repository."))
+        print(dim("   Clone from: https://github.com/VTSTech/LocalClaw"))
+        sys.exit(1)
+    
+    # Determine which tests to run
+    if args.example == "quick":
+        to_run = QUICK_TESTS
+    elif args.example == "all":
+        to_run = list(EXAMPLES.keys())
+    else:
+        to_run = [args.example]
+    
+    print(bold("\n🦞 LocalClaw Test Runner"))
+    print(dim(f"  Examples directory: {examples_dir}"))
+    print()
+    
+    passed = 0
+    failed = 0
+    total = len(to_run)
+    
+    for i, test_id in enumerate(to_run, 1):
+        # Find the example file
+        example_file = None
+        for pattern in [f"{test_id}_*.py", f"0{test_id}_*.py", f"{test_id}*.py"]:
+            matches = list(examples_dir.glob(pattern))
+            if matches:
+                example_file = matches[0]
+                break
+        
+        if not example_file:
+            print(yellow(f"  [{i}/{total}] {test_id}: NOT FOUND"))
+            failed += 1
+            continue
+        
+        print(bold(f"  [{i}/{total}] Running: {example_file.name}"))
+        print(dim(f"         {example_file}"))
+        print()
+        
+        try:
+            result = subprocess.run(
+                [sys.executable, str(example_file)],
+                cwd=examples_dir,
+                capture_output=True,
+                text=True,
+                timeout=300  # 5 minute timeout
+            )
+            
+            if result.returncode == 0:
+                passed += 1
+                print(green(f"  ✓ PASSED"))
+            else:
+                failed += 1
+                print(red(f"  ✗ FAILED (exit code {result.returncode})"))
+                if result.stderr:
+                    print(dim(f"    {result.stderr[:200]}"))
+        except subprocess.TimeoutExpired:
+            failed += 1
+            print(red(f"  ✗ TIMEOUT (>5 min)"))
+        except Exception as e:
+            failed += 1
+            print(red(f"  ✗ ERROR: {e}"))
+        
+        print()
+    
+    # Summary
+    print(dim("─" * 70))
+    print(bold("  SUMMARY"))
+    print(f"    Total:  {total}")
+    print(green(f"    Passed: {passed}"))
+    if failed > 0:
+        print(red(f"    Failed: {failed}"))
+    print()
+    
+    sys.exit(0 if failed == 0 else 1)
+
+
 # ------------------------------------------------------------------ #
 #  Argument parser                                                    #
 # ------------------------------------------------------------------ #
@@ -1216,6 +1359,22 @@ def build_parser() -> argparse.ArgumentParser:
     # ── skills ──────────────────────────────────────────────────────
     p_skills = sub.add_parser("skills", parents=[shared], help="List available skills")
     p_skills.set_defaults(func=cmd_skills)
+
+    # ── test ────────────────────────────────────────────────────────
+    p_test = sub.add_parser("test", help="Run example/test scripts")
+    p_test.add_argument(
+        "example",
+        nargs="?",
+        default="quick",
+        metavar="EXAMPLE",
+        help="Example to run: 'quick' (default), 'all', or specific ID (e.g., '01', '04_acp')",
+    )
+    p_test.add_argument(
+        "--list", "-l",
+        action="store_true",
+        help="List all available examples",
+    )
+    p_test.set_defaults(func=cmd_test)
 
     return parser
 
