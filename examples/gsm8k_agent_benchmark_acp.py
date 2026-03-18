@@ -20,7 +20,7 @@ import os
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from localclaw.core.ollama_client import get_default_client
+#from localclaw.core.ollama_client import get_default_client
 from localclaw.core.tools import ToolRegistry, Tool, ToolParam
 from localclaw.core.agent import Agent, StepResult
 from localclaw.core.math_prompts import (
@@ -29,14 +29,15 @@ from localclaw.core.math_prompts import (
     extract_number,
     calculator_tool,
 )
-from localclaw.model_discovery import pick_models_for_benchmark
+from localclaw import Agent, get_default_client, LOCALCLAW_BACKEND
+from localclaw.tools.builtins import make_builtin_registry
+from localclaw.model_discovery import get_available_models
 from localclaw.acp_plugin import ACPPlugin
-from localclaw import LOCALCLAW_BACKEND
 
 BACKEND_NAME = LOCALCLAW_BACKEND.upper()
 
-RESULTS_FILE = "/home/z/my-project/download/gsm8k_agent_acp_results.jsonl"
-LOG_FILE = "/home/z/my-project/download/gsm8k_agent_acp_progress.log"
+RESULTS_FILE = "./gsm8k_agent_acp_results.jsonl"
+LOG_FILE = "./gsm8k_agent_acp_progress.log"
 
 # 50 GSM8K-style questions
 QUESTIONS = [
@@ -169,54 +170,66 @@ def main():
     open(RESULTS_FILE, "w").close()
     open(LOG_FILE, "w").close()
     
-    client = get_default_client()
-    
-    if not client.is_running():
-        log(f"ERROR: {BACKEND_NAME} is not running!")
-        if LOCALCLAW_BACKEND == "bitnet":
-            log("Start llama-server from bitnet.cpp directory")
-        else:
-            log("Start with: ollama serve")
-        sys.exit(1)
-    
-    # Setup ACP
-    acp = ACPPlugin(
-        agent_name="LocalClaw-GSM8K",
+    # Create a main ACP instance for the benchmark controller
+    main_acp = ACPPlugin(
+        agent_name="LocalClaw",
+        model_name="comparison",
         debug=os.environ.get("ACP_DEBUG", "").lower() in ("1", "true"),
     )
     
-    log(f"ACP URL: {acp.base_url}")
-    bootstrap = acp.bootstrap(claim_primary=False)
-    if bootstrap.get("stop_flag"):
-        log(f"ACP STOP flag set: {bootstrap.get('stop_reason')}")
-        sys.exit(0)
+    bootstrap = main_acp.bootstrap(claim_primary=False)
+    acp_connected = bootstrap.get("status") is not None
+    print(f"ACP: {'connected' if acp_connected else 'unavailable'}\n")
     
-    # Discover models
-    log("Discovering available models...")
-    MODELS = pick_models_for_benchmark(max_models=6, prefer_small=True, client=client)
+    client = get_default_client()
     
-    if not MODELS:
-        log("ERROR: No models found!")
-        sys.exit(1)
+    if not client.is_running():
+        print(f"❌ {BACKEND_NAME} is not running.")
+        if LOCALCLAW_BACKEND == "bitnet":
+            print("   Start llama-server from bitnet.cpp directory")
+        else:
+            print("   Start it with: ollama serve")
+        return
     
-    log(f"Found {len(MODELS)} models: {MODELS}")
+    available = get_available_models(client)
+    print(f"   Backend: {BACKEND_NAME}")
+    print(f"   Available models: {', '.join(available)}")
+    
+    # Use all available models if MODELS not specified
+    if available is None:
+        models_to_test = available
+    else:
+        models_to_test = [m for m in available if any(m.split(':')[0] in a for a in available)]
+    
+    if not models_to_test:
+        print("   ⚠️ No models to test!")
+        return
+    
+    log(f"Found {len(available)} models: {available}")
     
     results = []
-    total_tests = len(MODELS) * len(QUESTIONS)
+    total_tests = len(models_to_test) * len(QUESTIONS)
     
     log(f"\nStarting GSM8K Agent Benchmark (ACP)")
-    log(f"Models: {len(MODELS)}, Questions: {len(QUESTIONS)}, Total: {total_tests}")
+    log(f"Models: {len(available)}, Questions: {len(QUESTIONS)}, Total: {total_tests}")
     log("=" * 50)
     
     overall_start = time.time()
     
-    for model in MODELS:
+    for model in models_to_test:
         log(f"\nTesting: {model}")
         correct_count = 0
         model_start = time.time()
+        # Create a new ACP instance for this model (like 02_tool_agent_acp.py does)
+        acp = ACPPlugin(
+            agent_name='LocalClaw',
+            model_name=model,
+            debug=os.environ.get("ACP_DEBUG", "").lower() in ("1", "true"),
+        )
+        acp.bootstrap(claim_primary=False)
         
         for i, (question, expected) in enumerate(QUESTIONS):
-            result = test_model_with_agent(model, question, expected, client, acp)
+            result = test_model_with_agent(model, question, expected, client, main_acp)
             results.append(result)
             
             status = "✓" if result["correct"] else "✗"
@@ -224,7 +237,7 @@ def main():
             steps = result.get("steps", 0)
             extracted = result.get("extracted", "?")
             log(f"  Q{i+1:2d}: {status} ({elapsed}s, {steps} steps) - Expected: {expected}, Got: {extracted}")
-            
+            acp.log_assistant_message(f"  Q{i+1:2d}: {status} ({elapsed}s, {steps} steps) - Expected: {expected}, Got: {extracted}")
             if result["correct"]:
                 correct_count += 1
             
@@ -245,7 +258,7 @@ def main():
     log(f"COMPLETED: {total_tests} tests in {total_time:.1f}s")
     log(f"Results saved to: {RESULTS_FILE}")
     
-    summarize_results(MODELS)
+    summarize_results(available)
 
 
 def summarize_results(models: list[str]):
