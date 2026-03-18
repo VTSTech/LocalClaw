@@ -10,10 +10,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added
 - **BitNet Backend Support** - Alternative inference backend using Microsoft's BitNet b1.58 2-bit quantization
-  - New `BitnetClient` class in `localclaw/bitnet_client.py`
+  - New `BitnetClient` class in `localclaw/bitnet_client.py` (simplified from 667 to 149 lines)
   - Setup helper in `localclaw/bitnet_setup.py` for cloning and compiling BitNet
   - CLI flag `--backend bitnet` to switch from Ollama to BitNet
-  - Known models: `bitnet-b1.58-2b-4t`, `BitNet-b1.58-2B-4T`
+  - Supported models: `BitNet-b1.58-2B-4T`, `Falcon3-1B-Instruct-1.58bit`, `Falcon3-3B-Instruct-1.58bit`, `Falcon3-7B-Instruct-1.58bit`
+  - Model download via `huggingface-cli` or `wget` with automatic safetensors→GGUF conversion
 - **Enhanced Security in Built-in Tools**
   - Path validation with configurable allowed directories (`LOCALCLAW_ALLOWED_PATHS`)
   - Command blocklist with dangerous commands blocked (`LOCALCLAW_BLOCKED_COMMANDS`)
@@ -31,24 +32,33 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   - Redundant calculator call detection to avoid unnecessary tool invocations
   - Enhanced few-shot prompting for small models
   - Improved date/time query handling with automatic Python code synthesis
+- **Test Scripts for BitNet**
+  - `test-bitnet.sh` / `test-bitnet.cmd` - Run benchmark tests with BitNet backend
 
 ### Changed
 - Version tags updated from R02 to R03 across all files
 - CLI now supports `--backend ollama|bitnet` flag for backend selection
 - Tool system now has comprehensive security validation layer
 - ACP streaming functionality consolidated into main plugin
+- README.md rewritten with CLI command examples instead of Python code
+- README.md added comprehensive BitNet section with model download instructions
+- ACP benchmark tests (`07_model_comparison_acp.py`, `08_robust_comparison_acp.py`) now display proper model names for path-style BitNet models
+
+### Fixed
+- **ACP model name display** - Path-style model names (e.g., `Falcon3-1B-Instruct-1.58bit/ggml-model-i2_s.gguf`) now show directory name instead of GGUF filename in activity log
 
 ### Removed
 - `localclaw/acp_streaming.py` - merged into `acp_plugin.py`
 
-### Pending Testing
-- BitNet backend testing with `bitnet-b1.58-2b-4t` model
-- Tool calling compatibility with BitNet models (currently requires ReAct fallback)
-- Benchmark comparison between Ollama and BitNet backends
+### Tested
+- BitNet backend with `Falcon3-1B-Instruct-1.58bit` model - ✅ Working
+- Model conversion from safetensors to GGUF via `setup_env.py` - ✅ Working
+- ACP benchmark tests with BitNet models - ✅ Working
 
 ### Known Issues
 - BitNet models require `--force-react` as they don't support native tool calling
 - BitNet backend requires separate `llama-server` process running
+- Intermediate conversion files (~8GB) should be deleted after model setup: `model.safetensors`, `ggml-model-f32.gguf`
 
 ---
 
