@@ -91,30 +91,100 @@ ollama pull qwen2.5-coder:0.5b-instruct-q4_k_m
 
 ### BitNet Backend (R03)
 
-For BitNet support, you need to set up Microsoft's BitNet:
+LocalClaw supports Microsoft's BitNet for 1.58-bit ternary weight models — highly efficient CPU inference.
+
+#### Supported Models
+
+| Model | Size | HuggingFace Repo |
+|-------|------|------------------|
+| **BitNet-b1.58-2B-4T** | ~0.4 GB | `microsoft/BitNet-b1.58-2B-4T` |
+| **Falcon3-1B-Instruct** | ~1 GB | `tiiuae/Falcon3-1B-Instruct-1.58bit` |
+| **Falcon3-3B-Instruct** | ~3 GB | `tiiuae/Falcon3-3B-Instruct-1.58bit` |
+| **Falcon3-7B-Instruct** | ~7 GB | `tiiuae/Falcon3-7B-Instruct-1.58bit` |
+| **Falcon3-10B-Instruct** | ~10 GB | `tiiuae/Falcon3-10B-Instruct-1.58bit` |
+
+#### Setup (One Command)
+
+BitNet's `setup_env.py` handles everything: download, convert to GGUF, quantize, and compile kernels.
 
 ```bash
-# Clone and compile BitNet
-python localclaw/bitnet_setup.py
-
-# Or manually:
+# Clone BitNet
 git clone --recursive https://github.com/microsoft/BitNet.git
 cd BitNet
-python setup_env.py --hf-repo microsoft/BitNet-b1.58-2B-4T --quant-type i2_s
+pip install -r requirements.txt
 
-# Start the BitNet server (in a separate terminal)
-./build/bin/llama-server -m models/BitNet-b1.58-2B-4T/ggml-model-i2_s.gguf
+# Download, convert, and prepare a model (choose one):
+python setup_env.py --hf-repo microsoft/BitNet-b1.58-2B-4T -q i2_s      # Recommended
+python setup_env.py --hf-repo tiiuae/Falcon3-1B-Instruct-1.58bit -q i2_s  # Smallest Falcon
+python setup_env.py --hf-repo tiiuae/Falcon3-3B-Instruct-1.58bit -q i2_s  # Best balance
+python setup_env.py --hf-repo tiiuae/Falcon3-7B-Instruct-1.58bit -q i2_s  # Most capable
 ```
 
-Then use the BitNet backend:
+This automatically:
+1. Downloads the model from HuggingFace (safetensors format)
+2. Converts to GGUF format
+3. Quantizes to `i2_s` (1.58-bit ternary)
+4. Compiles optimized CPU kernels
+
+#### Start the Server
 
 ```bash
-# Use BitNet instead of Ollama
-python cli.py chat --backend bitnet --model bitnet-b1.58-2b-4t --force-react
+# Start BitNet server (separate terminal)
+./build/bin/llama-server -m models/BitNet-b1.58-2B-4T/ggml-model-i2_s.gguf
+
+# Or for Falcon models:
+./build/bin/llama-server -m models/Falcon3-1B-Instruct-1.58bit/ggml-model-i2_s.gguf
+```
+
+#### Use with LocalClaw
+
+```bash
+# Set BitNet URL (default: http://localhost:8080)
+export BITNET_BASE_URL=http://localhost:8080
+
+# Chat with BitNet backend
+python cli.py chat --backend bitnet --force-react
+
+# With tools
+python cli.py chat --backend bitnet --force-react --tools calculator,shell
 ```
 
 > **Note**: BitNet models require `--force-react` as they don't support native tool calling.
-> BitNet benchmark results are now available — see **BitNet Benchmark Results** section below.
+
+#### Colab Quick Start
+
+```bash
+# Cell 1: Setup BitNet with Falcon3-1B (fastest option)
+!git clone --recursive https://github.com/microsoft/BitNet.git
+%cd BitNet
+!pip install -r requirements.txt
+!python setup_env.py --hf-repo tiiuae/Falcon3-1B-Instruct-1.58bit -q i2_s
+
+# Cell 2: Start server in background
+import subprocess, time
+server = subprocess.Popen(
+    ['./build/bin/llama-server', '-m', 'models/Falcon3-1B-Instruct-1.58bit/ggml-model-i2_s.gguf', '--port', '8080'],
+    stdout=subprocess.PIPE, stderr=subprocess.PIPE
+)
+time.sleep(5)  # Wait for server startup
+
+# Cell 3: Clone and run LocalClaw
+%cd /content
+!git clone https://github.com/VTSTech/LocalClaw.git
+%cd LocalClaw
+!python cli.py chat --backend bitnet --force-react
+```
+
+#### Model Comparison
+
+| Model | Speed | Quality | Best For |
+|-------|-------|---------|----------|
+| BitNet-b1.58-2B-4T | ⚡⚡⚡ | Good | Quick tasks, testing |
+| Falcon3-1B-Instruct | ⚡⚡⚡ | Good | Fastest inference |
+| Falcon3-3B-Instruct | ⚡⚡ | Better | Balanced performance |
+| Falcon3-7B-Instruct | ⚡ | Best | Complex reasoning |
+
+> **BitNet Benchmark Results**: BitNet-b1.58-2B-4T achieved **87%** on the LocalClaw benchmark — see **BitNet Benchmark Results** section below.
 
 ---
 
