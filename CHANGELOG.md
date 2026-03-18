@@ -9,6 +9,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [R03.0.4] - 2026-03-18
 
 ### Fixed
+- **Argparse help display in Google Colab** - Disabled all ANSI color codes by default
+  - Set `_NO_COLOR = True` unconditionally to eliminate any ANSI escape sequence issues
+  - Colors were causing terminal output truncation in Colab's `TERM=screen` environment
+  
+### Fixed
+- **Argparse help display in Google Colab** - Final fix: removed emoji from argparse description entirely
+  - Emojis in argparse description cause terminal width calculation issues in Colab's `TERM=screen` environment
+  - Removed custom `WideHelpFormatter` class - standard `RawDescriptionHelpFormatter` works fine
+  - Help now displays correctly: description, positional arguments, options, examples
+
+### Fixed
+- **Argparse help display in Google Colab** - Removed emoji from description (emojis break argparse's width calculation in Colab's terminal)
+- Help now displays correctly with positional arguments section visible
+
+### Fixed
 - **Argparse help display in Google Colab** - Shortened description and moved URLs to epilog to prevent truncation in environments with non-standard terminals
 - Added `WideHelpFormatter` with forced width of 200 characters for better compatibility
 - URLs now display correctly in the help epilog section
