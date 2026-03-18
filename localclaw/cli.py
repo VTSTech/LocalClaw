@@ -1172,6 +1172,16 @@ def _default_model(client: OllamaClient) -> str:
     return models[0] if models else "llama3.2:1b"
 
 
+class WideHelpFormatter(argparse.RawDescriptionHelpFormatter):
+    """HelpFormatter with minimum width to fix display issues in some terminals (e.g., Google Colab)."""
+    
+    def __init__(self, *args, **kwargs):
+        # Ensure minimum width of 120 for proper formatting
+        # This fixes truncation issues in environments like Google Colab
+        kwargs['width'] = max(kwargs.get('width', 120), 120)
+        super().__init__(*args, **kwargs)
+
+
 def build_parser() -> argparse.ArgumentParser:
     client = OllamaClient()
     default_model = _default_model(client) if client.is_running() else "llama3.2:1b"
@@ -1179,7 +1189,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="localclaw",
         description="🦞 LocalClaw R03 — local agentic AI powered by Ollama · Written by VTSTech · https://www.vts-tech.org · https://github.com/VTSTech/LocalClaw",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
+        formatter_class=WideHelpFormatter,
         epilog=textwrap.dedent("""
         options (for 'run' and 'chat' commands):
           -m, --model MODEL      Model to use (default: auto-detect for Ollama, bitnet-b1.58-2b-4t for BitNet)
