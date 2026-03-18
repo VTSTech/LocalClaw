@@ -15,10 +15,10 @@ import os
 # Uncomment ONE of the following to switch between local and remote Ollama:
 
 # LOCAL OLLAMA:
-# OLLAMA_BASE_URL = "http://localhost:11434"
+OLLAMA_BASE_URL = "http://localhost:11434"
 
 # REMOTE OLLAMA (cloudflare tunnel):
-OLLAMA_BASE_URL = "https://ooo.trycloudflare.com/"
+# OLLAMA_BASE_URL = "https://ooo.trycloudflare.com/"
 
 # Override via environment variable (takes precedence if set)
 _ollama_env = os.environ.get("OLLAMA_BASE_URL")
@@ -47,10 +47,10 @@ if _remote_bitnet:
 # Uncomment ONE of the following to switch between local and remote ACP:
 
 # LOCAL ACP:
-# ACP_BASE_URL = "http://localhost:8766"
+ACP_BASE_URL = "http://localhost:8766"
 
 # REMOTE ACP (cloudflare tunnel):
-ACP_BASE_URL = "https://aaa.trycloudflare.com/"
+# ACP_BASE_URL = "https://aaa.trycloudflare.com/"
 
 # Override via environment variable (takes precedence if set)
 _acp_env = os.environ.get("ACP_BASE_URL")
