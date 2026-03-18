@@ -8,17 +8,24 @@ The following models have been tested on a **50-question GSM8K-style benchmark**
 
 | Rank | Model | Score | Time | Avg/Question | Notes |
 |:----:|-------|------:|-----:|-------------:|-------|
-| 🥇 | **`granite4:350m`** | **41/50 (82%)** | 960s | ~19s | **Best sub-500M model!** |
-| 🥈 | `qwen2.5-coder:0.5b-instruct-q4_k_m` | 30/50 (60%) | 705s | ~14s | Faster but less accurate |
+| 🥇 | **`driaforall/tiny-agent-a:1.5b`** | **47/50 (94%)** | 1470s | ~29s | **Top performer!** |
+| 🥈 | `granite4:350m` | 41/50 (82%) | 960s | ~19s | **Best sub-500M!** |
+| 🥉 | `nchapman/dolphin3.0-llama3:1b` | 33/50 (66%) | 847s | ~17s | Good reasoning |
+| 4 | `qwen2.5-coder:0.5b-instruct-q4_k_m` | 30/50 (60%) | 705s | ~14s | Fastest |
+| - | `AgentricAi/AgentricAI_TLM:latest` | 0/50 (0%) | — | — | Needs native tools |
 
 ### Key Finding: ReAct Mode Dramatically Improves Small Model Performance
 
 | Model | Native Tools | With `--force-react` | Improvement |
 |-------|--------------|---------------------|-------------|
+| `driaforall/tiny-agent-a:1.5b` | ? | **94%** | ? |
 | `granite4:350m` | ~53% | **82%** | **+29%** |
+| `dolphin3.0-llama3:1b` | ? | **66%** | ? |
 | `qwen2.5-coder:0.5b` | ~93% | 60% | -33% |
 
-**Recommendation**: Use `--force-react` for models that struggle with native tool calling. It provides explicit formatting guidance that helps small models understand how to use tools correctly.
+**Key Insight**: ReAct mode is NOT universally better - it depends on the model's training. 
+- Models trained for chat/dialogue (granite4, tiny-agent-a) benefit significantly
+- Models fine-tuned for tool calling (qwen2.5-coder) may perform worse with ReAct
 
 ---
 
@@ -82,13 +89,10 @@ LocalClaw has been tested with **Microsoft BitNet-b1.58-2B-4T** — a 2B paramet
 
 | Use Case | Recommended Model | Why |
 |----------|-------------------|-----|
-| **General use** | `qwen2.5-coder:0.5b-instruct-q4_k_m` | Best all-around, fast, great tool usage |
-| **Smallest capable** | **`granite4:350m` + `--force-react`** | **82% GSM8K - best sub-500M model!** |
-| **Large context** | `llama3.2:1b` | **128k context window** - handles long conversations |
-| **Math tasks** | `qwen2.5-coder:0.5b` or `qwen2-math:1.5b` | Perfect math scores |
-| **Reasoning tasks** | `qwen2.5:0.5b` or `qwen3:0.6b` | Perfect reasoning |
-| **Tool usage** | `qwen2.5-coder:0.5b` | Most reliable tool calling |
-| **Fastest inference** | `gemma3:270m` | 270M params, fastest responses |
+| **Best overall** | **`tiny-agent-a:1.5b` + `--force-react`** | **94% GSM8K - highest score!** |
+| **Smallest capable** | `granite4:350m` + `--force-react` | 82% GSM8K - best sub-500M model |
+| **General use** | `qwen2.5-coder:0.5b-instruct-q4_k_m` | Fast, great native tool calling |
+| **Large context** | `llama3.2:1b` | **128k context window** |
 | **CPU-only** | `BitNet-b1.58-2B-4T` | Efficient ternary weights, no GPU needed |
 
 ---
