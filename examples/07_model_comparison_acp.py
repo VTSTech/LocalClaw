@@ -260,7 +260,7 @@ def main():
     print(f"   Testing: {', '.join(models_to_test)}")
     
     if acp_connected:
-        main_acp.log_chat("system", f"Benchmark started: {len(models_to_test)} models", complete=True)
+        main_acp.log_assistant_message("system", f"Benchmark started: {len(models_to_test)} models", complete=True)
     
     all_results = []
     

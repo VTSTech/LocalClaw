@@ -345,7 +345,7 @@ def main():
     if acp_connected:
         winner = sorted_results[0] if sorted_results else None
         if winner:
-            acp.log_chat("system", f"Benchmark complete. Winner: {winner['model']} ({winner.get('passed', 0)}/{len(TESTS)})", 
+            acp.log_assistant_message("system", f"Benchmark complete. Winner: {winner['model']} ({winner.get('passed', 0)}/{len(TESTS)})", 
                         complete=True)
 
     # Show session stats
