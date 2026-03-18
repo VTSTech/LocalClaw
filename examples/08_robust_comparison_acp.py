@@ -109,24 +109,12 @@ def save_results(results):
         json.dump(results, f, indent=2)
 
 
-def test_model(client, model: str, results: dict) -> dict:
+def test_model(client, model: str, results: dict, acp: ACPPlugin) -> dict:
     """Test a single model, saving progress after each test with ACP logging."""
     
     # Create model-specific agent name
-    # For paths like "Falcon3-1B-Instruct-1.58bit/ggml-model-i2_s.gguf", use the directory name
-    if '/' in model:
-        model_short = model.split('/')[0]  # "Falcon3-1B-Instruct-1.58bit"
-    else:
-        model_short = model.split(':')[0]  # For Ollama-style "model:tag"
-    model_short = model_short[:25]  # Truncate if needed
-    
-    # Create a new ACP instance for this model (like 02_tool_agent_acp.py does)
-    acp = ACPPlugin(
-        agent_name=f"LocalClaw-{model_short}",
-        model_name=model,
-        debug=os.environ.get("ACP_DEBUG", "").lower() in ("1", "true"),
-    )
-    acp.bootstrap(claim_primary=False)
+    model_short = model.split('/')[-1].split(':')[0][:20]
+    model_agent_name = f"LocalClaw-{model_short}"
     
     if model not in results:
         results[model] = {
@@ -135,6 +123,8 @@ def test_model(client, model: str, results: dict) -> dict:
             'total': len(TESTS),
             'time': 0
         }
+        # Note: Activities logged with agent_name in metadata - ACP tracks per-agent tokens
+        # No separate registration needed
 
     model_results = results[model]
 
@@ -147,8 +137,8 @@ def test_model(client, model: str, results: dict) -> dict:
 
         print(f"  Testing {full_name}...", end=' ', flush=True)
 
-        # Log test start - no prefix
-        acp.log_user_message(f"Test: {full_name}")
+        # Log test start
+        acp.log_user_message(f"[{model_short}] Test: {full_name}")
 
         try:
             registry = make_builtin_registry().subset(tools) if tools else None
