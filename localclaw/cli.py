@@ -1134,6 +1134,12 @@ def cmd_test(args):
         print()
         
         timeout = getattr(args, "timeout", 300)
+        force_react = getattr(args, "force_react", False)
+        
+        # Pass force_react via environment variable to scripts
+        env = os.environ.copy()
+        if force_react:
+            env["LOCALCLAW_FORCE_REACT"] = "1"
         
         try:
             result = subprocess.run(
@@ -1141,7 +1147,8 @@ def cmd_test(args):
                 cwd=examples_dir,
                 capture_output=False,
                 text=True,
-                timeout=timeout
+                timeout=timeout,
+                env=env,
             )
             
             if result.returncode == 0:
@@ -1354,6 +1361,11 @@ def build_parser() -> argparse.ArgumentParser:
         default=300,
         metavar="SECONDS",
         help="Timeout per test in seconds (default: 300 = 5 min)",
+    )
+    p_test.add_argument(
+        "--force-react",
+        action="store_true",
+        help="Force ReAct text-based tool calling for all models",
     )
     p_test.set_defaults(func=cmd_test)
 
