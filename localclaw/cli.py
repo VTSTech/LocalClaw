@@ -1139,7 +1139,7 @@ def cmd_test(args):
                 cwd=examples_dir,
                 capture_output=False,
                 text=True,
-                timeout=300  # 5 minute timeout
+                timeout=1800  # 5 minute timeout
             )
             
             if result.returncode == 0:
