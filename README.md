@@ -103,7 +103,7 @@ LocalClaw supports Microsoft's BitNet for 1.58-bit ternary weight models — hig
 | **Falcon3-7B-Instruct** | ~7 GB | `tiiuae/Falcon3-7B-Instruct-1.58bit` |
 | **Falcon3-10B-Instruct** | ~10 GB | `tiiuae/Falcon3-10B-Instruct-1.58bit` |
 
-#### Setup (One Command)
+#### Setup (One Command with huggingface-cli)
 
 BitNet's `setup_env.py` handles everything: download, convert to GGUF, quantize, and compile kernels.
 
@@ -125,6 +125,48 @@ This automatically:
 2. Converts to GGUF format
 3. Quantizes to `i2_s` (1.58-bit ternary)
 4. Compiles optimized CPU kernels
+
+#### Manual Download (wget)
+
+If you prefer not to use huggingface-cli, download directly with wget:
+
+```bash
+# Create model directory
+mkdir -p models/Falcon3-1B-Instruct-1.58bit
+cd models/Falcon3-1B-Instruct-1.58bit
+
+# Download model files (~1.3GB for 1B, ~3.2GB for 3B, ~7.5GB for 7B)
+wget https://huggingface.co/tiiuae/Falcon3-1B-Instruct-1.58bit/resolve/main/model.safetensors
+wget https://huggingface.co/tiiuae/Falcon3-1B-Instruct-1.58bit/resolve/main/config.json
+wget https://huggingface.co/tiiuae/Falcon3-1B-Instruct-1.58bit/resolve/main/tokenizer.json
+wget https://huggingface.co/tiiuae/Falcon3-1B-Instruct-1.58bit/resolve/main/tokenizer_config.json
+wget https://huggingface.co/tiiuae/Falcon3-1B-Instruct-1.58bit/resolve/main/special_tokens_map.json
+wget https://huggingface.co/tiiuae/Falcon3-1B-Instruct-1.58bit/resolve/main/generation_config.json
+
+# Or for BitNet-b1.58-2B-4T (~400MB):
+mkdir -p models/BitNet-b1.58-2B-4T
+cd models/BitNet-b1.58-2B-4T
+wget https://huggingface.co/microsoft/BitNet-b1.58-2B-4T/resolve/main/model.safetensors
+wget https://huggingface.co/microsoft/BitNet-b1.58-2B-4T/resolve/main/config.json
+wget https://huggingface.co/microsoft/BitNet-b1.58-2B-4T/resolve/main/tokenizer.json
+wget https://huggingface.co/microsoft/BitNet-b1.58-2B-4T/resolve/main/tokenizer_config.json
+```
+
+Then run setup_env.py pointing to your downloaded model:
+
+```bash
+cd ../..  # Back to BitNet root
+python setup_env.py --model-dir models/Falcon3-1B-Instruct-1.58bit -q i2_s
+```
+
+#### Model File Sizes
+
+| Model | model.safetensors | Total Download |
+|-------|-------------------|----------------|
+| Falcon3-1B-Instruct | ~1.3 GB | ~1.4 GB |
+| Falcon3-3B-Instruct | ~3.2 GB | ~3.4 GB |
+| Falcon3-7B-Instruct | ~7.5 GB | ~7.8 GB |
+| BitNet-b1.58-2B-4T | ~400 MB | ~500 MB |
 
 #### Start the Server
 
