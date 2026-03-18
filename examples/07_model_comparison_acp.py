@@ -288,8 +288,7 @@ def main():
     print(f"   Passed {winner['passed']}/{winner['total']} tests in {winner['time']:.1f}s")
     
     if acp_connected:
-        main_acp.log_chat("system", f"Benchmark complete. Winner: {winner['model']} ({winner['passed']}/{winner['total']})", 
-                    complete=True)
+        main_acp.log_chat("system", f"Benchmark complete. Winner: {winner['model']} ({winner['passed']}/{winner['total']})", complete=True)
 
 
 if __name__ == "__main__":

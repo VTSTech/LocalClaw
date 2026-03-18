@@ -345,13 +345,13 @@ def main():
     if acp_connected:
         winner = sorted_results[0] if sorted_results else None
         if winner:
-            acp.log_assistant_message("system", f"Benchmark complete. Winner: {winner['model']} ({winner.get('passed', 0)}/{len(TESTS)})", 
+            main_acp.log_chat("system", f"Benchmark complete. Winner: {winner['model']} ({winner.get('passed', 0)}/{len(TESTS)})", 
                         complete=True)
 
     # Show session stats
-    status = acp.get_status()
+    status = main_acp.get_status()
     print(f"\n📊 Session tokens: {status.get('session_tokens', 0)}")
-    agent_tokens = acp.get_agent_tokens()
+    agent_tokens = main_acp.get_agent_tokens()
     if agent_tokens:
         print("   Agent tokens:")
         for name, tokens in sorted(agent_tokens.items(), key=lambda x: -x[1]):
