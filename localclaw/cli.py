@@ -1133,13 +1133,15 @@ def cmd_test(args):
         print(dim(f"         {example_file}"))
         print()
         
+        timeout = getattr(args, "timeout", 300)
+        
         try:
             result = subprocess.run(
                 [sys.executable, str(example_file)],
                 cwd=examples_dir,
                 capture_output=False,
                 text=True,
-                timeout=1800  # 5 minute timeout
+                timeout=timeout
             )
             
             if result.returncode == 0:
@@ -1152,7 +1154,7 @@ def cmd_test(args):
                     print(dim(f"    {result.stderr[:200]}"))
         except subprocess.TimeoutExpired:
             failed += 1
-            print(red(f"  ✗ TIMEOUT (>5 min)"))
+            print(red(f"  ✗ TIMEOUT (>{timeout}s)"))
         except Exception as e:
             failed += 1
             print(red(f"  ✗ ERROR: {e}"))
@@ -1345,6 +1347,13 @@ def build_parser() -> argparse.ArgumentParser:
         "--list", "-l",
         action="store_true",
         help="List all available examples",
+    )
+    p_test.add_argument(
+        "--timeout", "-t",
+        type=int,
+        default=300,
+        metavar="SECONDS",
+        help="Timeout per test in seconds (default: 300 = 5 min)",
     )
     p_test.set_defaults(func=cmd_test)
 

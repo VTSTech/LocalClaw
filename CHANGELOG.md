@@ -6,6 +6,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [R03.0.7] - 2026-03-18
+
+### Added
+- **`--timeout` flag for test command** - Configurable timeout per test
+  - Usage: `localclaw test gsm8k --timeout 900` (15 minutes)
+  - Default remains 300 seconds (5 minutes)
+  - Timeout value shown in error message when exceeded
+
 ## [R03.0.6] - 2026-03-18
 
 ### Fixed
