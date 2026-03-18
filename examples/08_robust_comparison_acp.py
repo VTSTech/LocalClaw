@@ -109,12 +109,24 @@ def save_results(results):
         json.dump(results, f, indent=2)
 
 
-def test_model(client, model: str, results: dict, acp: ACPPlugin) -> dict:
+def test_model(client, model: str, results: dict) -> dict:
     """Test a single model, saving progress after each test with ACP logging."""
     
     # Create model-specific agent name
-    model_short = model.split('/')[-1].split(':')[0][:20]
-    model_agent_name = f"LocalClaw-{model_short}"
+    # For paths like "Falcon3-1B-Instruct-1.58bit/ggml-model-i2_s.gguf", use the directory name
+    if '/' in model:
+        model_short = model.split('/')[0]  # "Falcon3-1B-Instruct-1.58bit"
+    else:
+        model_short = model.split(':')[0]  # For Ollama-style "model:tag"
+    model_short = model_short[:25]  # Truncate if needed
+    
+    # Create a new ACP instance for this model (like 02_tool_agent_acp.py does)
+    acp = ACPPlugin(
+        agent_name=f"LocalClaw-{model_short}",
+        model_name=model,
+        debug=os.environ.get("ACP_DEBUG", "").lower() in ("1", "true"),
+    )
+    acp.bootstrap(claim_primary=False)
     
     if model not in results:
         results[model] = {
@@ -123,8 +135,6 @@ def test_model(client, model: str, results: dict, acp: ACPPlugin) -> dict:
             'total': len(TESTS),
             'time': 0
         }
-        # Note: Activities logged with agent_name in metadata - ACP tracks per-agent tokens
-        # No separate registration needed
 
     model_results = results[model]
 
@@ -137,8 +147,8 @@ def test_model(client, model: str, results: dict, acp: ACPPlugin) -> dict:
 
         print(f"  Testing {full_name}...", end=' ', flush=True)
 
-        # Log test start
-        acp.log_user_message(f"[{model_short}] Test: {full_name}")
+        # Log test start - no prefix
+        acp.log_user_message(f"Test: {full_name}")
 
         try:
             registry = make_builtin_registry().subset(tools) if tools else None
@@ -185,7 +195,7 @@ def test_model(client, model: str, results: dict, acp: ACPPlugin) -> dict:
             model_results['time'] += elapsed
 
             result_status = "PASS" if passed else ("NEAR-MISS" if near_miss else "FAIL")
-            acp.log_assistant_message(f"[{model_short}] [{result_status}] {full_name}")
+            acp.log_assistant_message(f"[{result_status}] {full_name}")
 
             if passed:
                 print(f"✅ ({elapsed:.1f}s)")
@@ -207,7 +217,7 @@ def test_model(client, model: str, results: dict, acp: ACPPlugin) -> dict:
                 'error': str(e)[:100]
             }
             model_results['time'] += 30
-            acp.log_assistant_message(f"[{model_short}] [ERROR] {full_name}: {str(e)[:30]}")
+            acp.log_assistant_message(f"[ERROR] {full_name}: {str(e)[:30]}")
             print(f"❌ ERROR: {str(e)[:50]}")
 
         # Save after each test
@@ -221,14 +231,15 @@ def main():
     print("🦞 LocalClaw Robust Model Comparison (ACP)")
     print("=" * 60)
     
-    # ── Create and bootstrap ACP ─────────────────────────────────
-    acp = ACPPlugin(
-        agent_name="LocalClaw-RobustBenchmark",
+    # Main ACP for session-level tracking
+    # Individual models create their own ACP instances
+    main_acp = ACPPlugin(
+        agent_name="LocalClaw-Session",
         model_name="robust-comparison",
         debug=os.environ.get("ACP_DEBUG", "").lower() in ("1", "true"),
     )
     
-    bootstrap = acp.bootstrap(claim_primary=False)
+    bootstrap = main_acp.bootstrap(claim_primary=False)
     acp_connected = bootstrap.get("status") is not None
     print(f"ACP: {'connected' if acp_connected else 'unavailable'}\n")
 
@@ -269,14 +280,14 @@ def main():
     print(f"   Models to test: {', '.join(models_to_test)}")
     
     if acp_connected:
-        acp.log_chat("system", f"Benchmark started: {len(models_to_test)} models", complete=True)
+        main_acp.log_chat("system", f"Benchmark started: {len(models_to_test)} models", complete=True)
 
     for model in models_to_test:
         print(f"\n{'='*50}")
         print(f"🧪 Testing: {model}")
         print(f"{'='*50}")
 
-        test_model(client, model, results, acp)
+        test_model(client, model, results)
 
     # Print rankings
     print(f"\n{'='*50}")

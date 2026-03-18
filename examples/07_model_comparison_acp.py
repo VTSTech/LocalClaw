@@ -5,7 +5,7 @@ Compare all available models on standard tests with ACP logging.
 
 Demonstrates:
 - Multi-model benchmarking with ACP tracking
-- Per-model activity logging
+- Per-model ACP instance (clean display)
 - Token tracking per agent/model
 - Results aggregation
 
@@ -67,7 +67,7 @@ TESTS = [
     # === REASONING (3 tests) ===
     ("Reasoning: Apples", "I have 10 apples. I give 3 to Bob and 2 to Alice. How many apples do I have left? Answer with just the number.", None, "5"),
     ("Reasoning: Sequence", "What comes next in this sequence: 2, 4, 6, 8, ? Answer with just the number.", None, "10"),
-    ("Reasoning: Logic", "All cats are animals. Fluffy is a cat. What category does Fluffy belong to? Answer with one word.", None, "animal"),
+    ("reasoning: Logic", "All cats are animals. Fluffy is a cat. What category does Fluffy belong to? Answer with one word.", None, "animal"),
 
     # === KNOWLEDGE (3 tests) ===
     ("Knowledge: Japan", "What is the capital of Japan? Answer with one word.", None, "tokyo"),
@@ -86,18 +86,28 @@ TESTS = [
 ]
 
 
-def test_model(client, model: str, acp: ACPPlugin) -> dict:
+def test_model(client, model: str) -> dict:
     """Test a single model and return results with ACP logging."""
     print(f"\n{'='*60}")
     print(f"🧪 Testing: {model}")
     print(f"{'='*60}")
     
-    # Create model-specific ACP agent name
-    model_short = model.split('/')[-1].split(':')[0][:20]  # Short name for agent
+    # Create model-specific agent name
+    # For paths like "Falcon3-1B-Instruct-1.58bit/ggml-model-i2_s.gguf", use the directory name
+    if '/' in model:
+        model_short = model.split('/')[0]  # "Falcon3-1B-Instruct-1.58bit"
+    else:
+        model_short = model.split(':')[0]  # For Ollama-style "model:tag"
+    model_short = model_short[:25]  # Truncate if needed
     model_agent_name = f"LocalClaw-{model_short}"
     
-    # Note: We log activities with agent_name in metadata - ACP will track per-agent tokens
-    # No separate registration needed - activities are attributed by metadata.agent_name
+    # Create a new ACP instance for this model (like 02_tool_agent_acp.py does)
+    acp = ACPPlugin(
+        agent_name=model_agent_name,
+        model_name=model_short,
+        debug=os.environ.get("ACP_DEBUG", "").lower() in ("1", "true"),
+    )
+    acp.bootstrap(claim_primary=False)
     
     results = {"model": model, "passed": 0, "total": len(TESTS), "time": 0, "tests": {}, "categories": {}}
     current_category = None
@@ -118,8 +128,8 @@ def test_model(client, model: str, acp: ACPPlugin) -> dict:
         print(f"    • {test_name.split(': ')[1]}...", end=" ", flush=True)
         category_total += 1
         
-        # Log test start
-        acp.log_user_message(f"[{model_short}] Test: {test_name}")
+        # Log test start - no prefix, just the test name
+        acp.log_user_message(f"Test: {test_name}")
         
         try:
             registry = make_builtin_registry().subset(tools) if tools else None
@@ -163,9 +173,9 @@ def test_model(client, model: str, acp: ACPPlugin) -> dict:
                 "response": response,
             }
             
-            # Log test result
+            # Log test result - no prefix, just the result
             result_status = "PASS" if passed else ("NEAR-MISS" if near_miss else "FAIL")
-            acp.log_assistant_message(f"[{model_short}] [{result_status}] {test_name}: {response[:50]}")
+            acp.log_assistant_message(f"[{result_status}] {test_name}: {response[:50]}")
             
             if passed:
                 print(f"✅ ({elapsed:.1f}s)")
@@ -184,7 +194,7 @@ def test_model(client, model: str, acp: ACPPlugin) -> dict:
         except Exception as e:
             results["time"] += 60
             results["tests"][test_name] = {"passed": False, "error": str(e)[:100]}
-            acp.log_assistant_message(f"[{model_short}] [ERROR] {test_name}: {str(e)[:50]}")
+            acp.log_assistant_message(f"[ERROR] {test_name}: {str(e)[:50]}")
             print(f"❌ ERROR: {str(e)[:50]}")
     
     if current_category is not None:
@@ -212,14 +222,14 @@ def main():
     print("🦞 LocalClaw Model Comparison (ACP)")
     print("=" * 60)
     
-    # ── Create and bootstrap ACP ─────────────────────────────────
-    acp = ACPPlugin(
+    # Create a main ACP instance for the benchmark controller
+    main_acp = ACPPlugin(
         agent_name="LocalClaw-Benchmark",
         model_name="comparison",
         debug=os.environ.get("ACP_DEBUG", "").lower() in ("1", "true"),
     )
     
-    bootstrap = acp.bootstrap(claim_primary=False)
+    bootstrap = main_acp.bootstrap(claim_primary=False)
     acp_connected = bootstrap.get("status") is not None
     print(f"ACP: {'connected' if acp_connected else 'unavailable'}\n")
     
@@ -250,13 +260,13 @@ def main():
     print(f"   Testing: {', '.join(models_to_test)}")
     
     if acp_connected:
-        acp.log_chat("system", f"Benchmark started: {len(models_to_test)} models", complete=True)
+        main_acp.log_chat("system", f"Benchmark started: {len(models_to_test)} models", complete=True)
     
     all_results = []
     
     for model in models_to_test:
         exact_name = next((a for a in available if model.split(':')[0] in a), model)
-        result = test_model(client, exact_name, acp)
+        result = test_model(client, exact_name)
         all_results.append(result)
     
     # Rankings
@@ -278,17 +288,8 @@ def main():
     print(f"   Passed {winner['passed']}/{winner['total']} tests in {winner['time']:.1f}s")
     
     if acp_connected:
-        acp.log_chat("system", f"Benchmark complete. Winner: {winner['model']} ({winner['passed']}/{winner['total']})", 
+        main_acp.log_chat("system", f"Benchmark complete. Winner: {winner['model']} ({winner['passed']}/{winner['total']})", 
                     complete=True)
-    
-    # Show session token usage
-    status = acp.get_status()
-    print(f"\n📊 Session tokens: {status.get('session_tokens', 0)}")
-    agent_tokens = acp.get_agent_tokens()
-    if agent_tokens:
-        print("   Agent tokens:")
-        for name, tokens in sorted(agent_tokens.items(), key=lambda x: -x[1]):
-            print(f"      {name}: {tokens}")
 
 
 if __name__ == "__main__":
