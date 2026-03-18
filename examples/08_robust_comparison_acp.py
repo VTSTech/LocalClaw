@@ -122,7 +122,7 @@ def test_model(client, model: str, results: dict) -> dict:
     
     # Create a new ACP instance for this model (like 02_tool_agent_acp.py does)
     acp = ACPPlugin(
-        agent_name=f"LocalClaw-{model_short}",
+        agent_name=f"LocalClaw",
         model_name=model,
         debug=os.environ.get("ACP_DEBUG", "").lower() in ("1", "true"),
     )
@@ -234,7 +234,7 @@ def main():
     # Main ACP for session-level tracking
     # Individual models create their own ACP instances
     main_acp = ACPPlugin(
-        agent_name="LocalClaw-Session",
+        agent_name="LocalClaw",
         model_name="robust-comparison",
         debug=os.environ.get("ACP_DEBUG", "").lower() in ("1", "true"),
     )
