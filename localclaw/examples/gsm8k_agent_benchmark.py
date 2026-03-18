@@ -34,8 +34,8 @@ from localclaw import LOCALCLAW_BACKEND
 
 BACKEND_NAME = LOCALCLAW_BACKEND.upper()
 
-RESULTS_FILE = "/home/z/my-project/download/gsm8k_agent_results.jsonl"
-LOG_FILE = "/home/z/my-project/download/gsm8k_agent_progress.log"
+RESULTS_FILE = "./gsm8k_agent_results.jsonl"
+LOG_FILE = "./gsm8k_agent_progress.log"
 
 # 50 GSM8K-style questions
 QUESTIONS = [
