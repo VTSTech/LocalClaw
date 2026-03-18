@@ -6,13 +6,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [R03.0.6] - 2026-03-18
+
+### Fixed
+- **Unused imports in benchmark examples** - Cleaned up `gsm8k_agent_benchmark.py` and `gsm8k_agent_benchmark_acp.py`
+  - Removed unused `Tool` and `ToolParam` imports
+  - Removed commented-out legacy import in `_acp` version
+- **Test runner output visibility** - Removed `capture_output=True` from subprocess
+  - Test output now streams directly to terminal in real-time
+  - Users can see benchmark progress and results as tests run
+- **Hardcoded paths in benchmark tests** - Changed from `/home/z/my-project/download/` to `./`
+  - Results and log files now write to current directory
+  
+---
+
 ## [R03.0.5] - 2026-03-18
 
 ### Changed
 - **Re-enabled ANSI colors** - Set `_NO_COLOR = False` in CLI
   - Colors now display correctly in most terminals
   - Lobster emoji 🦞 displays properly across all commands
-
 ### Fixed
 - **Test parser for `_acp` suffix tests** - Glob patterns now correctly match ACP test files
   - `gsm8k_acp` now correctly finds `gsm8k_agent_benchmark_acp.py`

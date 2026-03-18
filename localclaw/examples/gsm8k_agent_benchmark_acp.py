@@ -20,9 +20,8 @@ import os
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-#from localclaw.core.ollama_client import get_default_client
-from localclaw.core.tools import ToolRegistry, Tool, ToolParam
-from localclaw.core.agent import Agent, StepResult
+from localclaw.core.tools import ToolRegistry
+from localclaw.core.agent import StepResult
 from localclaw.core.math_prompts import (
     MATH_SYSTEM_PROMPT,
     MATH_SYSTEM_PROMPT_COMPACT,
