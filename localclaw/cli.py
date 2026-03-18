@@ -33,20 +33,14 @@ import textwrap
 import time
 from pathlib import Path
 
-# Allow running as `python cli.py` or as installed entry point
-_here = os.path.dirname(os.path.abspath(__file__))
-_root = os.path.dirname(_here)
-if _root not in sys.path:
-    sys.path.insert(0, _root)
-
-from localclaw import Agent, OllamaClient, StepResult
-from localclaw.config import OLLAMA_BASE_URL, ACP_BASE_URL, BITNET_BASE_URL  # Add BITNET_BASE_URL here
-from localclaw.core.memory import Message
-from localclaw.tools.builtins import BUILTIN_REGISTRY
-from localclaw.skills import SkillLoader, SkillRegistry
-from localclaw.acp_plugin import ACPPlugin
+from . import Agent, OllamaClient, StepResult
+from .config import OLLAMA_BASE_URL, ACP_BASE_URL, BITNET_BASE_URL
+from .core.memory import Message
+from .tools.builtins import BUILTIN_REGISTRY
+from .skills import SkillLoader, SkillRegistry
+from .acp_plugin import ACPPlugin
 try:
-    from localclaw.bitnet_client import BitnetClient, KNOWN_MODELS
+    from .bitnet_client import BitnetClient, KNOWN_MODELS
     _BITNET_AVAILABLE = True
 except ImportError:
     _BITNET_AVAILABLE = False
@@ -423,7 +417,7 @@ def _build_client(args):
     """Return OllamaClient or BitnetClient based on --backend flag."""
     backend = getattr(args, "backend", "ollama")
     if backend == "bitnet":
-        from localclaw.bitnet_client import BitnetClient
+        from .bitnet_client import BitnetClient
         # No longer passing a directory here, just the URL from config or args
         return BitnetClient(base_url=BITNET_BASE_URL)
         bitnet_dir = getattr(args, "bitnet_dir", None) or os.environ.get("BITNET_DIR")

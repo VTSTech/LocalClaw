@@ -78,15 +78,57 @@ test-bitnet.cmd  # Batch: Run BitNet benchmark tests (Windows)
 
 ## Installation
 
-```bash
-# Clone / copy the localclaw directory into your project
-# No pip install required — uses only Python stdlib!
+### From PyPI (Recommended)
 
+```bash
+pip install localclaw
+
+# Or install from GitHub for the latest development version:
+pip install git+https://github.com/VTSTech/LocalClaw.git
+```
+
+### From Source
+
+```bash
+# Clone the repository
+git clone https://github.com/VTSTech/LocalClaw.git
+cd LocalClaw
+
+# Install in development mode
+pip install -e .
+```
+
+### No Installation Required
+
+LocalClaw uses only Python stdlib — no dependencies! You can also just copy the `localclaw` directory into your project:
+
+```bash
+# Just copy and use
+cp -r localclaw /path/to/your/project/
+```
+
+### Setup Ollama
+
+```bash
 # Make sure Ollama is running:
 ollama serve
 
 # Pull a model:
 ollama pull qwen2.5-coder:0.5b-instruct-q4_k_m
+```
+
+### Usage After Installation
+
+```bash
+# Use the CLI command
+localclaw chat --model llama3.1:8b
+
+# Or use as a module
+python -m localclaw chat --model llama3.1:8b
+
+# Or in Python code
+from localclaw import Agent
+agent = Agent(model="llama3.1:8b")
 ```
 
 ### BitNet Backend (R03)
@@ -185,10 +227,10 @@ python setup_env.py --model-dir models/Falcon3-1B-Instruct-1.58bit -q i2_s
 export BITNET_BASE_URL=http://localhost:8080
 
 # Chat with BitNet backend
-python cli.py chat --backend bitnet --force-react
+localclaw chat --backend bitnet --force-react
 
 # With tools
-python cli.py chat --backend bitnet --force-react --tools calculator,shell
+localclaw chat --backend bitnet --force-react --tools calculator,shell
 ```
 
 > **Note**: BitNet models require `--force-react` as they don't support native tool calling.
@@ -214,7 +256,7 @@ time.sleep(5)  # Wait for server startup
 %cd /content
 !git clone https://github.com/VTSTech/LocalClaw.git
 %cd LocalClaw
-!python cli.py chat --backend bitnet --force-react
+!localclaw chat --backend bitnet --force-react
 ```
 
 #### Model Comparison
@@ -236,49 +278,49 @@ time.sleep(5)  # Wait for server startup
 
 ```bash
 # Simple Q&A
-python cli.py run "What is the capital of Japan?"
+localclaw run "What is the capital of Japan?"
 
 # With streaming output
-python cli.py run "Tell me a joke." --stream
+localclaw run "Tell me a joke." --stream
 
 # Specify a model
-python cli.py run "Explain quantum computing" -m llama3.2:3b
+localclaw run "Explain quantum computing" -m llama3.2:3b
 ```
 
 ### 2. Interactive chat
 
 ```bash
 # Start interactive session
-python cli.py chat -m qwen2.5-coder:0.5b
+localclaw chat -m qwen2.5-coder:0.5b
 
 # With tools enabled
-python cli.py chat -m llama3.1:8b --tools calculator,shell,read_file,write_file
+localclaw chat -m llama3.1:8b --tools calculator,shell,read_file,write_file
 
 # With skills loaded
-python cli.py chat -m llama3.2:3b --skills skill-creator --tools write_file,shell
+localclaw chat -m llama3.2:3b --skills skill-creator --tools write_file,shell
 
 # Fast mode (reduced context for speed)
-python cli.py chat -m qwen2.5-coder:0.5b --fast --verbose
+localclaw chat -m qwen2.5-coder:0.5b --fast --verbose
 ```
 
 ### 3. Using BitNet backend
 
 ```bash
 # BitNet requires --force-react for tool support
-python cli.py chat --backend bitnet --force-react
+localclaw chat --backend bitnet --force-react
 
 # Run single prompt with BitNet
-python cli.py run "Calculate 17 * 23" --backend bitnet --tools calculator
+localclaw run "Calculate 17 * 23" --backend bitnet --tools calculator
 ```
 
 ### 4. With ACP tracking
 
 ```bash
 # Enable ACP for activity monitoring
-python cli.py chat -m qwen2.5-coder:0.5b --acp --tools shell,read_file,write_file
+localclaw chat -m qwen2.5-coder:0.5b --acp --tools shell,read_file,write_file
 
 # Single prompt with ACP
-python cli.py run "What is 2+2?" --acp
+localclaw run "What is 2+2?" --acp
 ```
 
 ---
@@ -345,10 +387,10 @@ python cli.py run "What is 2+2?" --acp
 
 ```bash
 # List all tools
-python cli.py tools
+localclaw tools
 
 # Use specific tools
-python cli.py chat --tools calculator,python_repl,shell
+localclaw chat --tools calculator,python_repl,shell
 ```
 
 ---
@@ -363,10 +405,10 @@ python cli.py chat --tools calculator,python_repl,shell
 
 ```bash
 # List all skills
-python cli.py skills
+localclaw skills
 
 # Use skills in chat
-python cli.py chat --skills skill-creator --tools write_file
+localclaw chat --skills skill-creator --tools write_file
 ```
 
 ---
@@ -525,10 +567,10 @@ Instructions for the model on how to use this skill...
 
 ```bash
 # Load skills via CLI
-python cli.py chat --skills skill-creator --tools write_file,shell
+localclaw chat --skills skill-creator --tools write_file,shell
 
 # Multiple skills
-python cli.py chat --skills datetime,web_search --tools calculator
+localclaw chat --skills datetime,web_search --tools calculator
 ```
 
 ### Progressive Disclosure
@@ -613,10 +655,10 @@ ACP is a monitoring and observability protocol for AI agents. Unlike communicati
 
 ```bash
 # Run with ACP tracking
-python cli.py chat --acp --tools shell,read_file,write_file -m qwen2.5-coder:0.5b
+localclaw chat --acp --tools shell,read_file,write_file -m qwen2.5-coder:0.5b
 
 # Run single prompt with ACP
-python cli.py run --acp "What is 2+2?"
+localclaw run --acp "What is 2+2?"
 ```
 
 ### Configuration
@@ -728,13 +770,13 @@ LocalClaw automatically retries on transient errors with exponential backoff:
 
 ```bash
 # Fast mode - reduces context and output for quicker responses
-python cli.py chat -m qwen2.5-coder:0.5b --fast --verbose
+localclaw chat -m qwen2.5-coder:0.5b --fast --verbose
 
 # Fine-tuned control
-python cli.py chat -m qwen2.5-coder:0.5b --num-ctx 2048 --num-predict 128
+localclaw chat -m qwen2.5-coder:0.5b --num-ctx 2048 --num-predict 128
 
 # Warm up model before chat (useful for remote Ollama with cold starts)
-python cli.py chat -m qwen2.5-coder:0.5b --warmup --fast
+localclaw chat -m qwen2.5-coder:0.5b --warmup --fast
 ```
 
 | Option | Description | Speed Impact |
@@ -750,13 +792,13 @@ Control model behavior via CLI flags:
 
 ```bash
 # Lower temperature = more deterministic
-python cli.py chat -m qwen2.5-coder:0.5b --temperature 0.1
+localclaw chat -m qwen2.5-coder:0.5b --temperature 0.1
 
 # Smaller context = faster
-python cli.py chat -m qwen2.5-coder:0.5b --num-ctx 2048 --num-predict 128
+localclaw chat -m qwen2.5-coder:0.5b --num-ctx 2048 --num-predict 128
 
 # Combined for optimal speed
-python cli.py chat -m qwen2.5-coder:0.5b --fast --temperature 0.3
+localclaw chat -m qwen2.5-coder:0.5b --fast --temperature 0.3
 ```
 
 ### Remote Ollama Tips
@@ -770,7 +812,7 @@ When using a **remote Ollama via Cloudflare tunnel**:
 
 ```bash
 # Recommended for remote Ollama
-python cli.py chat -m qwen2.5-coder:0.5b-instruct-q4_k_m \
+localclaw chat -m qwen2.5-coder:0.5b-instruct-q4_k_m \
     --fast --warmup --verbose \
     --tools python_repl
 ```
