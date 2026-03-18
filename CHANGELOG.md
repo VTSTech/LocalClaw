@@ -6,6 +6,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [R03.0.5] - 2026-03-19
+
+### Changed
+- **Re-enabled ANSI colors** - Set `_NO_COLOR = False` in CLI
+  - Colors now display correctly in most terminals
+  - Lobster emoji 🦞 displays properly across all commands
+
+### Fixed
+- **Test parser for `_acp` suffix tests** - Glob patterns now correctly match ACP test files
+  - `gsm8k_acp` now correctly finds `gsm8k_agent_benchmark_acp.py`
+  - `gsm8k` now correctly finds `gsm8k_agent_benchmark.py` (filters out `_acp` files)
+  - Non-acp tests filter out `_acp` files to prevent wrong matches
+- **Import error in `gsm8k_agent_benchmark.py`** - Updated import statement
+  - Changed `from localclaw.core.ollama_client import get_default_client` to `from localclaw import get_default_client`
+  - Function was moved to main package in earlier release
+
+---
+
 ## [R03.0.4] - 2026-03-18
 
 ### Fixed
