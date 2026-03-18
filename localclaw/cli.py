@@ -135,7 +135,8 @@ def _count_messages(history) -> dict:
 #  Colour helpers                                                     #
 # ------------------------------------------------------------------ #
 
-_NO_COLOR = not sys.stdout.isatty() or os.environ.get("NO_COLOR")
+# Disable colors entirely - ANSI codes cause issues in some environments
+_NO_COLOR = True
 
 def _c(code: str, text: str) -> str:
     if _NO_COLOR:
@@ -1179,41 +1180,6 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="localclaw",
         description="LocalClaw R03 - local agentic AI powered by Ollama",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog=textwrap.dedent("""
-        options (for 'run' and 'chat' commands):
-          -m, --model MODEL      Model to use (default: auto-detect for Ollama, bitnet-b1.58-2b-4t for BitNet)
-          --backend BACKEND      Inference backend: ollama (default) or bitnet (bitnet.cpp llama-server)
-          -t, --tools TOOLS      Comma-separated tools: calculator,shell,python_repl,read_file,write_file,http_get
-          -k, --skills SKILLS    Comma-separated skills: skill-creator,datetime,web_search
-          -s, --system PROMPT    Override system prompt
-          -v, --verbose          Show tool calls, timing, and detailed output
-          --debug                Show debug info: parsed tool calls, fuzzy matching
-          --fast                 Fast mode: num_ctx=2048, num_predict=256
-          --stream               Stream output token-by-token (better UX for slow connections)
-          --warmup               Warm up model before chat (useful for remote Ollama)
-          --num-ctx N            Context window size (smaller = faster)
-          --num-predict N        Max tokens to generate (smaller = faster)
-          --temperature TEMP     Temperature (default: 0.7)
-          --force-react          Force ReAct text-based tool calling
-          --acp                  Enable ACP (Agent Control Panel) integration for activity tracking
-
-        examples:
-          localclaw run "What is the capital of France?"
-          localclaw run "What is sqrt(144)?" --tools calculator
-          localclaw run "Tell me a story" --stream --verbose
-          localclaw chat --model llama3.1:8b
-          localclaw chat --tools calculator,shell,python_repl
-          localclaw chat --skills skill-creator --tools write_file,shell
-          localclaw chat --fast --stream --verbose
-          localclaw chat --acp --tools shell,read_file,write_file
-          localclaw chat --backend bitnet --model bitnet-b1.58-2b-4t --force-react
-          localclaw models
-          localclaw models --backend bitnet
-          localclaw tools
-          localclaw skills
-
-        """),
     )
 
     sub = parser.add_subparsers(dest="command", metavar="command")
