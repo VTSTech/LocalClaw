@@ -1,3 +1,27 @@
+#!/usr/bin/env python3
+"""
+🦞 LocalClaw R03 — BitnetClient
+Drop-in replacement for OllamaClient that uses Microsoft's bitnet.cpp
+(llama-server) as the inference backend instead of Ollama.
+
+Architecture:
+  - Wraps bitnet.cpp's llama-server HTTP process
+  - Exposes the same interface as OllamaClient: chat(), list_models(),
+    model_supports_tools(), is_running()
+  - Normalises OpenAI-format responses → Ollama-format so agent.py is
+    completely unmodified
+  - Manages llama-server lifecycle (start/stop/health-check)
+  - Falls back gracefully to ReAct tool-calling (no native function
+    calling in current bitnet models)
+
+Supported models (as of bitnet.cpp 2025):
+  - microsoft/BitNet-b1.58-2B-4T   (~0.4 GB, recommended)
+  - 1bitLLM/bitnet_b1_58-3B        (~0.7 GB)
+  - HF1BitLLM/Llama3-8B-1.58-100B-tokens
+  - tiiuae/Falcon3-1B-Instruct-1.58bit
+  - tiiuae/Falcon3-3B-Instruct-1.58bit
+  - tiiuae/Falcon3-7B-Instruct-1.58bit
+
 import json
 import urllib.request
 from .config import BITNET_BASE_URL
