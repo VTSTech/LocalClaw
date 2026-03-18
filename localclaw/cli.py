@@ -1137,7 +1137,7 @@ def cmd_test(args):
             result = subprocess.run(
                 [sys.executable, str(example_file)],
                 cwd=examples_dir,
-                capture_output=True,
+                capture_output=False,
                 text=True,
                 timeout=300  # 5 minute timeout
             )
