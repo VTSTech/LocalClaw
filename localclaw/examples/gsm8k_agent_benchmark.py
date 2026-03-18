@@ -20,7 +20,7 @@ import os
 # Add LocalClaw package to path (parent directory)
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from localclaw.core.ollama_client import get_default_client
+from localclaw import get_default_client
 from localclaw.core.tools import ToolRegistry, Tool, ToolParam
 from localclaw.core.agent import Agent
 from localclaw.core.math_prompts import (
