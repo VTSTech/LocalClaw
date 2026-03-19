@@ -6,6 +6,11 @@ Compare all available small models (<=1B parameters) on standard tests.
 Run from the project root:   python examples/07_model_comparison.py
 Or from the examples folder: python 07_model_comparison.py
 
+With CLI:
+  localclaw test 07
+  localclaw test 07 --acp
+  localclaw test 07 --use-mf-sys --model qwen2.5-coder:0.5b
+
 Written by VTSTech — https://www.vts-tech.org — https://github.com/VTSTech/LocalClaw
 """
 
@@ -20,6 +25,18 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from localclaw import Agent, get_default_client, LOCALCLAW_BACKEND
 from localclaw.tools.builtins import make_builtin_registry
 from localclaw.model_discovery import get_available_models
+
+# Check for optional ACP support
+USE_ACP = os.environ.get("LOCALCLAW_ACP", "0") == "1"
+if USE_ACP:
+    try:
+        from localclaw.acp_plugin import ACPPlugin
+    except ImportError:
+        print("⚠️ ACP requested but ACPPlugin not available")
+        USE_ACP = False
+
+# Check for debug mode
+DEBUG = os.environ.get("LOCALCLAW_DEBUG", "0") == "1"
 
 BACKEND_NAME = LOCALCLAW_BACKEND.upper()
 
@@ -107,11 +124,29 @@ TESTS = [
 ]
 
 
-def test_model(client, model: str, force_react: bool = False) -> dict:
+def test_model(client, model: str, force_react: bool = False, acp=None) -> dict:
     """Test a single model and return results."""
     print(f"\n{'='*60}")
     print(f"🧪 Testing: {model}")
     print(f"{'='*60}")
+    
+    # Create model-specific ACP instance if ACP is enabled
+    model_acp = None
+    if USE_ACP and acp is None:
+        # For paths like "Falcon3-1B-Instruct-1.58bit/ggml-model-i2_s.gguf", use the directory name
+        if '/' in model:
+            model_short = model.split('/')[0]
+        else:
+            model_short = model.split(':')[0]
+        model_short = model_short[:25]
+        model_acp = ACPPlugin(
+            agent_name="LocalClaw",
+            model_name=model_short,
+            debug=DEBUG,
+        )
+        model_acp.bootstrap(claim_primary=False)
+    elif acp:
+        model_acp = acp
     
     results = {"model": model, "passed": 0, "total": len(TESTS), "time": 0, "tests": {}, "categories": {}}
     current_category = None
@@ -134,6 +169,10 @@ def test_model(client, model: str, force_react: bool = False) -> dict:
         
         print(f"    • {test_name.split(': ')[1]}...", end=" ", flush=True)
         category_total += 1
+        
+        # Log test start to ACP
+        if model_acp:
+            model_acp.log_user_message(f"Test: {test_name}")
         
         try:
             registry = make_builtin_registry().subset(tools) if tools else None
@@ -191,6 +230,11 @@ def test_model(client, model: str, force_react: bool = False) -> dict:
                 "expected_norm": expected_norm
             }
             
+            # Log test result to ACP
+            if model_acp:
+                result_status = "PASS" if passed else ("NEAR-MISS" if near_miss else "FAIL")
+                model_acp.log_assistant_message(f"[{result_status}] {test_name}: {response[:50]}")
+            
             if passed:
                 print(f"✅ ({elapsed:.1f}s)")
                 if VERBOSITY >= 2:
@@ -209,6 +253,8 @@ def test_model(client, model: str, force_react: bool = False) -> dict:
         except Exception as e:
             results["time"] += 60  # penalty for errors
             results["tests"][test_name] = {"passed": False, "error": str(e)[:100]}
+            if model_acp:
+                model_acp.log_assistant_message(f"[ERROR] {test_name}: {str(e)[:50]}")
             print(f"❌ ERROR: {str(e)[:50]}")
     
     # Save last category
@@ -233,6 +279,19 @@ def main():
     # Check for force_react env var
     force_react = os.environ.get("LOCALCLAW_FORCE_REACT", "").lower() in ("1", "true", "yes")
     
+    # Create main ACP instance for session tracking
+    main_acp = None
+    if USE_ACP:
+        main_acp = ACPPlugin(
+            agent_name="LocalClaw",
+            model_name="comparison",
+            debug=DEBUG,
+        )
+        bootstrap = main_acp.bootstrap(claim_primary=False)
+        acp_connected = bootstrap.get("status") is not None
+    else:
+        acp_connected = False
+    
     client = get_default_client()
     
     if not client.is_running():
@@ -247,6 +306,8 @@ def main():
     print(f"\n🦞 LocalClaw Model Comparison")
     print(f"   Backend: {BACKEND_NAME}")
     print(f"   Available models: {', '.join(available)}")
+    if USE_ACP:
+        print(f"   ACP: {'connected' if acp_connected else 'unavailable'}")
     if force_react:
         print(f"   Force ReAct: YES (all models will use text-based tool calling)")
     
@@ -263,6 +324,9 @@ def main():
     
     print(f"   Testing: {', '.join(models_to_test)}")
     
+    if acp_connected and main_acp:
+        main_acp.log_chat("system", f"Benchmark started: {len(models_to_test)} models", complete=True)
+    
     # Clear old results - start fresh
     all_results = []
     
@@ -271,6 +335,17 @@ def main():
         exact_name = next((a for a in available if model.split(':')[0] in a), model)
         result = test_model(client, exact_name, force_react=force_react)
         all_results.append(result)
+        
+        # Log model result to main ACP
+        if main_acp:
+            if '/' in model:
+                model_short = model.split('/')[0]
+            else:
+                model_short = model.split(':')[0]
+            model_short = model_short[:25]
+            pass_rate = result["passed"] / result["total"] * 100
+            main_acp.add_note("context", f"{model_short}: {result['passed']}/{result['total']} ({pass_rate:.0f}%)", 
+                        importance="high")
     
     # Rankings
     print(f"\n{'='*60}")
@@ -289,6 +364,9 @@ def main():
     print(f"\n{'='*60}")
     print(f"✨ BEST MODEL (<=1B): {winner['model']}")
     print(f"   Passed {winner['passed']}/{winner['total']} tests in {winner['time']:.1f}s")
+    
+    if acp_connected and main_acp:
+        main_acp.log_chat("system", f"Benchmark complete. Winner: {winner['model']} ({winner['passed']}/{winner['total']})", complete=True)
     
     # Category breakdown for winner
     if winner.get("categories"):

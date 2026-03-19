@@ -1,6 +1,6 @@
 """
-examples/08_shutdown_demo_acp.py
--------------------------------
+examples/13_shutdown_demo.py
+-----------------------------
 Demonstrate graceful ACP session shutdown.
 
 Demonstrates:
@@ -9,7 +9,9 @@ Demonstrates:
 - Shutdown nudge handling
 - Session cleanup
 
-Run: python examples/08_shutdown_demo_acp.py
+With CLI:
+  localclaw test 13 --acp
+  localclaw test 13_acp
 
 Written by VTSTech — https://www.vts-tech.org — https://github.com/VTSTech/LocalClaw
 """
@@ -20,9 +22,18 @@ import time
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from localclaw import Agent, get_default_client, LOCALCLAW_BACKEND
+
+# Check for ACP support
+USE_ACP = os.environ.get("LOCALCLAW_ACP", "0") == "1"
+if not USE_ACP:
+    print("⚠️ This demo requires ACP. Run with --acp flag or LOCALCLAW_ACP=1")
+    print("   Example: localclaw test 13 --acp")
+    sys.exit(0)
+
 from localclaw.acp_plugin import ACPPlugin
 
 BACKEND_NAME = LOCALCLAW_BACKEND.upper()
+DEBUG = os.environ.get("LOCALCLAW_DEBUG", "0") == "1"
 
 
 def main():
@@ -33,7 +44,7 @@ def main():
     acp = ACPPlugin(
         agent_name="LocalClaw-ShutdownDemo",
         model_name="shutdown-demo",
-        debug=True,
+        debug=DEBUG,
         on_nudge=lambda n: print(f"   📢 Nudge received: {n.get('message', '')[:80]}"),
     )
     

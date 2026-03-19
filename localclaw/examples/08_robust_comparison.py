@@ -6,6 +6,11 @@ Starts fresh each run - clears old results.
 
 Run: python examples/08_robust_comparison.py
 
+With CLI:
+  localclaw test 08
+  localclaw test 08 --acp
+  localclaw test 08 --use-mf-sys --model qwen2.5-coder:0.5b
+
 Written by VTSTech — https://www.vts-tech.org — https://github.com/VTSTech/LocalClaw
 """
 
@@ -20,6 +25,18 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from localclaw import Agent, get_default_client, LOCALCLAW_BACKEND
 from localclaw.tools.builtins import make_builtin_registry
 from localclaw.model_discovery import get_available_models
+
+# Check for optional ACP support
+USE_ACP = os.environ.get("LOCALCLAW_ACP", "0") == "1"
+if USE_ACP:
+    try:
+        from localclaw.acp_plugin import ACPPlugin
+    except ImportError:
+        print("⚠️ ACP requested but ACPPlugin not available")
+        USE_ACP = False
+
+# Check for debug mode
+DEBUG = os.environ.get("LOCALCLAW_DEBUG", "0") == "1"
 
 BACKEND_NAME = LOCALCLAW_BACKEND.upper()
 
@@ -81,7 +98,8 @@ def get_small_models(client) -> list[str]:
         if any(ind in model_lower for ind in SMALL_MODEL_INDICATORS):
             small_models.append(model)
     
-    # If no small models found by indicators,    if not small_models:
+    # If no small models found by indicators, use all available
+    if not small_models:
         print("   ⚠️ No small models found by indicators, using all available")
         small_models = available
     
@@ -127,8 +145,26 @@ def save_results(results):
         json.dump(results, f, indent=2)
 
 
-def test_model(client, model: str, results: dict, force_react: bool = False) -> dict:
-    """Test a single model, saving progress after each test."""
+def test_model(client, model: str, results: dict, force_react: bool = False, main_acp=None) -> dict:
+    """Test a single model, saving progress after each test with optional ACP logging."""
+    
+    # Create model-specific ACP instance if ACP is enabled
+    model_acp = None
+    if USE_ACP and main_acp is None:
+        if '/' in model:
+            model_short = model.split('/')[0]
+        else:
+            model_short = model.split(':')[0]
+        model_short = model_short[:25]
+        model_acp = ACPPlugin(
+            agent_name="LocalClaw",
+            model_name=model,
+            debug=DEBUG,
+        )
+        model_acp.bootstrap(claim_primary=False)
+    elif main_acp:
+        model_acp = main_acp
+    
     if model not in results:
         results[model] = {
             'model': model,
@@ -147,6 +183,10 @@ def test_model(client, model: str, results: dict, force_react: bool = False) -> 
             continue
 
         print(f"  Testing {full_name}...", end=' ', flush=True)
+        
+        # Log test start to ACP
+        if model_acp:
+            model_acp.log_user_message(f"Test: {full_name}")
 
         try:
             registry = make_builtin_registry().subset(tools) if tools else None
@@ -202,6 +242,11 @@ def test_model(client, model: str, results: dict, force_react: bool = False) -> 
             }
 
             model_results['time'] += elapsed
+            
+            # Log test result to ACP
+            if model_acp:
+                result_status = "PASS" if passed else ("NEAR-MISS" if near_miss else "FAIL")
+                model_acp.log_assistant_message(f"[{result_status}] {full_name}")
 
             if passed:
                 print(f"✅ ({elapsed:.1f}s)")
@@ -228,6 +273,8 @@ def test_model(client, model: str, results: dict, force_react: bool = False) -> 
                 'error': str(e)[:100]
             }
             model_results['time'] += 30  # Penalty
+            if model_acp:
+                model_acp.log_assistant_message(f"[ERROR] {full_name}: {str(e)[:30]}")
             print(f"❌ ERROR: {str(e)[:50]}")
 
         # Save after each test
@@ -241,6 +288,19 @@ def test_model(client, model: str, results: dict, force_react: bool = False) -> 
 def main():
     # Check for force_react env var
     force_react = os.environ.get("LOCALCLAW_FORCE_REACT", "").lower() in ("1", "true", "yes")
+    
+    # Create main ACP instance for session tracking
+    main_acp = None
+    if USE_ACP:
+        main_acp = ACPPlugin(
+            agent_name="LocalClaw",
+            model_name="robust-comparison",
+            debug=DEBUG,
+        )
+        bootstrap = main_acp.bootstrap(claim_primary=False)
+        acp_connected = bootstrap.get("status") is not None
+    else:
+        acp_connected = False
     
     client = get_default_client()
 
@@ -256,6 +316,8 @@ def main():
     print(f"🦞 LocalClaw Robust Model Comparison")
     print(f"   Backend: {BACKEND_NAME}")
     print(f"   Available: {', '.join(available)}")
+    if USE_ACP:
+        print(f"   ACP: {'connected' if acp_connected else 'unavailable'}")
     if force_react:
         print(f"   Force ReAct: YES (all models will use text-based tool calling)")
 
@@ -281,13 +343,16 @@ def main():
         models_to_test = available
     
     print(f"   Models to test: {', '.join(models_to_test)}")
+    
+    if acp_connected and main_acp:
+        main_acp.log_chat("system", f"Benchmark started: {len(models_to_test)} models", complete=True)
 
     for model in models_to_test:
         print(f"\n{'='*50}")
         print(f"🧪 Testing: {model}")
         print(f"{'='*50}")
 
-        test_model(client, model, results, force_react=force_react)
+        test_model(client, model, results, force_react=force_react, main_acp=main_acp)
 
     # Print rankings
     print(f"\n{'='*50}")
