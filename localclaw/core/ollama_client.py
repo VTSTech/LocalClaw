@@ -210,6 +210,20 @@ class OllamaClient:
         payload = {"name": model}
         return self._post("/api/show", payload)
     
+    def get_model_family(self, model: str) -> str | None:
+        """
+        Get the model family from Ollama API.
+        Returns None if model not found or family not available.
+        
+        This queries /api/show endpoint for model details.
+        """
+        try:
+            info = self.get_model_info(model)
+            details = info.get("details", {})
+            return details.get("family")
+        except OllamaError:
+            return None
+    
     def get_modelfile_system_prompt(self, model: str) -> str | None:
         """
         Get the SYSTEM prompt from the model's Modelfile.
@@ -272,8 +286,8 @@ class OllamaClient:
             "functiongemma",  # Specifically designed for function calling
             # "gemma3",  # Uncomment if you want to enable for gemma3
             
-            # IBM Granite family (may refuse due to safety filters)
-            # "granite", "granitemoe",  # Uncomment if needed
+            # IBM Granite family (confirmed tool support)
+            "granite", "granite4", "granitemoe",
             
             # 01.ai Yi family
             "yi-", "yi1.5", "yi34b",
@@ -291,7 +305,22 @@ class OllamaClient:
             "firefunction", "hermes", "nemotron",
             "cogito", "athene",
         )
-        return any(f in model.lower() for f in tool_families)
+        
+        # Check if model name matches known families
+        model_lower = model.lower()
+        if any(f in model_lower for f in tool_families):
+            return True
+        
+        # Fallback: Check API-reported model family
+        # This catches models like "driaforall/tiny-agent-a:1.5b" which has family "qwen2"
+        api_family = self.get_model_family(model)
+        if api_family:
+            # Map API family names to our tool_families patterns
+            api_family_lower = api_family.lower()
+            if any(f in api_family_lower for f in tool_families):
+                return True
+        
+        return False
 
     def __repr__(self):
         return f"OllamaClient(base_url={self.base_url!r})"
