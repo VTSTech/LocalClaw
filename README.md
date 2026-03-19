@@ -19,9 +19,9 @@ Inspired by the architecture of OpenClaw, rebuilt from scratch for local-first o
 
 | Document | Description |
 |----------|-------------|
-| [Architecture.md](Architecture.md) | Technical documentation for developers (directory structure, core design, orchestrator modes) |
-| [CHANGELOG.md](CHANGELOG.md) | Version history and release notes (R00–R03) |
-| [TESTS.md](TESTS.md) | Benchmark results, model recommendations, and testing guide |
+| [Architecture.md](https://github.com/VTSTech/LocalClaw/Architecture.md) | Technical documentation for developers (directory structure, core design, orchestrator modes) |
+| [CHANGELOG.md](https://github.com/VTSTech/LocalClaw/CHANGELOG.md) | Version history and release notes (R00–R03) |
+| [TESTS.md](https://github.com/VTSTech/LocalClaw/TESTS.md) | Benchmark results, model recommendations, and testing guide |
 
 ---
 

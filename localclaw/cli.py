@@ -1361,7 +1361,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="Enable ACP (Agent Control Panel) integration for activity tracking",
     )
     shared.add_argument(
-        "--use-mf-system",
+        "--use-mf-sys",
         action="store_true",
         dest="use_modelfile_system",
         help="Use the system prompt from the model's Modelfile instead of LocalClaw's default",
@@ -1415,7 +1415,6 @@ def build_parser() -> argparse.ArgumentParser:
 
     # ── modelfile ──────────────────────────────────────────────────────
     p_modelfile = sub.add_parser("modelfile", parents=[shared], help="Show model's Modelfile system prompt")
-    p_modelfile.add_argument("model", help="Model name to show Modelfile info for")
     p_modelfile.set_defaults(func=cmd_modelfile)
 
     # ── skills ──────────────────────────────────────────────────────
