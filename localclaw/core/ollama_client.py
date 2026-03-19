@@ -200,6 +200,30 @@ class OllamaClient:
         except Exception:
             return False
 
+    def get_model_info(self, model: str) -> dict:
+        """
+        Get model information including Modelfile details.
+        Returns dict with 'system', 'template', 'parameters', etc.
+        
+        Uses Ollama's /api/show endpoint.
+        """
+        payload = {"name": model}
+        return self._post("/api/show", payload)
+    
+    def get_modelfile_system_prompt(self, model: str) -> str | None:
+        """
+        Get the SYSTEM prompt from the model's Modelfile.
+        Returns None if not set.
+        
+        This is the default system prompt baked into the model
+        when it was created with `ollama create`.
+        """
+        try:
+            info = self.get_model_info(model)
+            return info.get("system", None)
+        except OllamaError:
+            return None
+    
     def model_supports_tools(self, model: str) -> bool:
         """
         Heuristic check for native tool-calling support.
