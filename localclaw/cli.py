@@ -367,11 +367,69 @@ def cmd_models(args):
         return
 
     print(bold("\n🦞 LocalClaw R03 Models") + dim(" · Written by VTSTech · https://www.vts-tech.org · https://github.com/VTSTech/LocalClaw"))
-    print(bold(f"{'Model':<40} {'Tool support':>12}"))
-    print(dim("─" * 54))
+    
+    # Collect model info
+    model_data = []
     for m in sorted(models):
-        support = green("✓ native") if client.model_supports_tools(m) else dim("  ReAct")
-        print(f"  {cyan(m):<49} {support}")
+        try:
+            info = client.get_model_info(m)
+            details = info.get("details", {})
+            family = details.get("family", "-")
+            
+            # Get parameter size (e.g., "7B", "270M")
+            param_size = details.get("parameter_size", "")
+            
+            # Try to get context length from model_info
+            # Different models use different keys (llama.context_length, qwen2.context_length, etc.)
+            model_info = info.get("model_info", {})
+            ctx_length = None
+            
+            # Search for any context_length key
+            for key, value in model_info.items():
+                if "context_length" in key.lower():
+                    ctx_length = value
+                    break
+            
+            # Also check for standard key patterns
+            if not ctx_length:
+                ctx_length = model_info.get("llama.context_length", 
+                            model_info.get("qwen2.context_length",
+                            model_info.get("gemma.context_length",
+                            model_info.get("mistral.context_length",
+                            model_info.get("phi3.context_length", None)))))
+            
+            # Format context size
+            if ctx_length:
+                if ctx_length >= 1000000:
+                    ctx_str = f"{ctx_length // 1000}K"
+                elif ctx_length >= 1000:
+                    ctx_str = f"{ctx_length // 1000}K"
+                else:
+                    ctx_str = str(ctx_length)
+            elif param_size:
+                # Use param size as fallback indicator
+                ctx_str = param_size
+            else:
+                ctx_str = "-"
+            
+            # Tool support
+            supports_tools = client.model_supports_tools(m)
+            
+            model_data.append((m, family, ctx_str, supports_tools))
+        except Exception:
+            # Fallback if we can't get model info
+            model_data.append((m, "-", "-", client.model_supports_tools(m)))
+    
+    # Print table header
+    print(bold(f"  {'Model':<42} {'Family':<12} {'Context':<10} {'Tool Support'}"))
+    print(dim("  " + "─" * 78))
+    
+    for m, family, ctx, supports_tools in model_data:
+        support_str = green("✓ native") if supports_tools else dim("ReAct")
+        # Truncate long model names
+        m_display = m[:40] + ".." if len(m) > 42 else m
+        family_display = family[:10] + ".." if len(family) > 12 else family
+        print(f"  {cyan(m_display):<42} {family_display:<12} {ctx:<10} {support_str}")
     print()
 
 
