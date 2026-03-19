@@ -34,6 +34,7 @@ from localclaw import (
     get_default_client,
     get_available_models,
     get_system_prompt,
+    get_tool_support,  # Tool support detection
     LOCALCLAW_BACKEND,
     StepResult,
 )
@@ -148,6 +149,7 @@ def main():
         return
     
     print(f"   Using: {model}")
+    print(f"   Tool support: {get_tool_support(model, client)}")
     
     # Initialize ACP if enabled
     acp = None

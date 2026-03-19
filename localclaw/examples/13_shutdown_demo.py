@@ -21,7 +21,7 @@ import sys
 import time
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from localclaw import Agent, get_default_client, LOCALCLAW_BACKEND
+from localclaw import Agent, get_default_client, get_tool_support, LOCALCLAW_BACKEND
 
 # Check for ACP support
 USE_ACP = os.environ.get("LOCALCLAW_ACP", "0") == "1"

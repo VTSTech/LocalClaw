@@ -28,6 +28,7 @@ from localclaw import (
     get_default_client,
     get_available_models,
     get_system_prompt,
+    get_tool_support,  # Tool support detection
     LOCALCLAW_BACKEND,
     StepResult,
 )
@@ -162,6 +163,7 @@ def run_tests():
     print(f"🧪 LocalClaw Comprehensive Test Suite")
     print(f"   Model: {MODEL}")
     print(f"   Backend: {BACKEND_NAME}")
+    print(f"   Tool support: {get_tool_support(MODEL, client)}")
     if USE_MF_SYS:
         print(f"   Using Modelfile system prompt: YES")
     if DEBUG:

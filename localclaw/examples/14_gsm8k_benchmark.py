@@ -30,7 +30,7 @@ import os
 # Add LocalClaw package to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from localclaw import get_default_client, LOCALCLAW_BACKEND
+from localclaw import get_default_client, get_tool_support, LOCALCLAW_BACKEND
 from localclaw.core.tools import ToolRegistry
 from localclaw.core.agent import Agent
 from localclaw.core.math_prompts import (

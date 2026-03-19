@@ -31,6 +31,7 @@ from localclaw import (
     get_default_client,
     get_available_models,
     get_system_prompt,
+    get_tool_support,  # Tool support detection
     LOCALCLAW_BACKEND,
     StepResult,
 )
@@ -159,6 +160,7 @@ def test_calculator():
     print(f"\n{'='*60}")
     print(f"🧮 Calculator Tool Tests")
     print(f"   Model: {MODEL}")
+    print(f"   Tool support: {get_tool_support(MODEL, client)}")
     print(f"   Timeout: {TIMEOUT}s per test")
     if USE_ACP:
         print(f"   ACP: enabled")

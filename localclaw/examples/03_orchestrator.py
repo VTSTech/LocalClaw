@@ -27,6 +27,7 @@ from localclaw import (
     get_default_client,
     get_available_models,
     get_system_prompt,
+    get_tool_support,  # Tool support detection
     DEFAULT_MODEL,
     LOCALCLAW_BACKEND,
 )
@@ -84,6 +85,7 @@ else:
 
 print(f"✓  {BACKEND_NAME} is running")
 print(f"   Using model: {MAIN_MODEL}  |  router: {ROUTER_MODEL}")
+print(f"   Tool support: {get_tool_support(MAIN_MODEL, client)}")
 if USE_ACP:
     print(f"   ACP: enabled")
 if DEBUG:

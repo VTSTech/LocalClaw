@@ -22,7 +22,7 @@ import re
 import unicodedata
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from localclaw import Agent, get_default_client, LOCALCLAW_BACKEND
+from localclaw import Agent, get_default_client, get_tool_support, LOCALCLAW_BACKEND
 from localclaw.tools.builtins import make_builtin_registry
 from localclaw.model_discovery import get_available_models
 
@@ -191,15 +191,26 @@ def test_model(client, model: str, results: dict, force_react: bool = False, mai
         try:
             registry = make_builtin_registry().subset(tools) if tools else None
             
-            # Choose system prompt based on tools and force_react setting
-            if tools and force_react:
-                system_prompt = SYSTEM_PROMPT_REACT
-            else:
-                system_prompt = SYSTEM_PROMPT_WITH_TOOLS if tools else SYSTEM_PROMPT_NO_TOOLS
+            # Detect tool support level
+            tool_support = get_tool_support(model, client)
             
-            # Determine if model is small (needs ReAct)
-            is_small = any(x in model.lower() for x in ["270m", "135m", "350m", "0.5b", "tiny", "1b"])
-            use_react = force_react or (tools is not None and is_small)
+            # Choose system prompt based on tools and tool support level
+            if tools:
+                if tool_support == "none":
+                    # Model doesn't support tools - use simple prompt
+                    system_prompt = SYSTEM_PROMPT_NO_TOOLS
+                    use_react = False
+                elif tool_support == "native":
+                    # Native tool support - use tools via API
+                    system_prompt = SYSTEM_PROMPT_WITH_TOOLS
+                    use_react = False
+                else:
+                    # ReAct mode - text-based tool calling
+                    system_prompt = SYSTEM_PROMPT_REACT if force_react else SYSTEM_PROMPT_WITH_TOOLS
+                    use_react = True
+            else:
+                system_prompt = SYSTEM_PROMPT_NO_TOOLS
+                use_react = False
             
             agent = Agent(
                 model=model,

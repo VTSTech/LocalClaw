@@ -7,6 +7,11 @@ Uses dynamic model discovery to find available models.
 Works with either Ollama or BitNet backend (set LOCALCLAW_BACKEND env var).
 Use --acp flag or LOCALCLAW_ACP=1 to enable ACP integration.
 
+Tool support levels (detected automatically):
+  - "native": Model has native tool-calling (pass tools to API)
+  - "react": Model accepts tools but needs text-based prompting
+  - "none": Model doesn't support tools at all
+
 Run from the project root:   python examples/01_basic_agent.py
 Or from the examples folder: python 01_basic_agent.py
 
@@ -27,6 +32,7 @@ from localclaw import (
     get_default_client,
     get_available_models,
     get_system_prompt,
+    get_tool_support,  # Tool support detection
     DEFAULT_MODEL,
     LOCALCLAW_BACKEND,
 )
@@ -94,7 +100,11 @@ if USE_ACP:
         for w in bootstrap["warnings"]:
             print(f"   ⚠️ {w}")
 
-# ── 3. Create an agent ─────────────────────────────────────────────
+# ── 3. Detect tool support level ───────────────────────────────────
+tool_support = get_tool_support(MODEL, client)
+print(f"   Tool support: {tool_support}")
+
+# ── 4. Create an agent ─────────────────────────────────────────────
 agent = Agent(
     model=MODEL,
     client=client,  # Pass the backend-aware client!
@@ -110,7 +120,7 @@ agent = Agent(
     },
     debug=DEBUG,
 )
-print(f"   Using model: {agent.model}\n")
+print(f"   Agent tool support: {agent._tool_support}\n")
 
 # ── 4. Single-turn chat ────────────────────────────────────────────
 prompt = "What is the capital of France, and why is it historically significant?"
