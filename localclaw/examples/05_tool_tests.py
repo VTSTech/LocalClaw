@@ -6,8 +6,16 @@ Test suite focused on tool usage with calculator, shell, and Python REPL.
 The prompts ask questions - models must figure out which tools to use
 and how to call them. Content is NOT provided in prompts.
 
+Use --acp or LOCALCLAW_ACP=1 for ACP integration.
+Use --use-mf-sys or LOCALCLAW_USE_MF_SYS=1 for Modelfile system prompts.
+
 Run from the project root:   python examples/05_tool_tests.py
 Or from the examples folder: python 05_tool_tests.py
+
+With CLI:
+  localclaw test 05
+  localclaw test 05 --acp --debug
+  localclaw test 05 --use-mf-sys --model qwen2.5-coder:0.5b
 
 Written by VTSTech — https://www.vts-tech.org — https://github.com/VTSTech/LocalClaw
 """
@@ -18,9 +26,29 @@ import time
 import re
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from localclaw import Agent, get_default_client, LOCALCLAW_BACKEND, StepResult
+from localclaw import (
+    Agent,
+    get_default_client,
+    get_available_models,
+    get_system_prompt,
+    LOCALCLAW_BACKEND,
+    StepResult,
+)
 from localclaw.tools.builtins import make_builtin_registry
 from localclaw.model_discovery import pick_best_model, get_available_models
+
+# Check for environment flags
+USE_ACP = os.environ.get("LOCALCLAW_ACP", "0") == "1"
+DEBUG = os.environ.get("LOCALCLAW_DEBUG", "0") == "1"
+USE_MF_SYS = os.environ.get("LOCALCLAW_USE_MF_SYS", "0") == "1"
+
+# Import ACP if needed
+if USE_ACP:
+    try:
+        from localclaw import ACPPlugin
+    except ImportError:
+        print("⚠️ ACP requested but ACPPlugin not available")
+        USE_ACP = False
 
 BACKEND_NAME = LOCALCLAW_BACKEND.upper()
 
@@ -30,6 +58,9 @@ preferred = os.environ.get("LOCALCLAW_MODEL")
 MODEL = None  # Will be set in main()
 VERBOSE = os.environ.get("LOCALCLAW_VERBOSE", "1") == "1"
 TIMEOUT = int(os.environ.get("LOCALCLAW_TIMEOUT", "120"))  # seconds per test
+
+# ACP instance (global for step callback)
+acp = None
 
 
 def print_step(step: StepResult):

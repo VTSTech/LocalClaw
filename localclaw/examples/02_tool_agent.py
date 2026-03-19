@@ -6,12 +6,21 @@ Demonstrates the decorator-based tool registry.
 Uses dynamic model discovery.
 Backend-agnostic (works with Ollama or BitNet).
 
+Use --acp or LOCALCLAW_ACP=1 for ACP integration.
+Use --use-mf-sys or LOCALCLAW_USE_MF_SYS=1 for Modelfile system prompts.
+
 Run from the project root:   python examples/02_tool_agent.py
 Or from the examples folder: python 02_tool_agent.py
+
+With CLI:
+  localclaw test 02
+  localclaw test 02 --acp --debug
+  localclaw test 02 --use-mf-sys --model qwen2.5-coder:0.5b
 """
 
 import sys
 import os
+import re
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from localclaw import (
@@ -27,6 +36,19 @@ from localclaw import (
 from localclaw.tools.builtins import BUILTIN_REGISTRY
 from localclaw.model_discovery import pick_best_model
 
+# Check for environment flags
+USE_ACP = os.environ.get("LOCALCLAW_ACP", "0") == "1"
+DEBUG = os.environ.get("LOCALCLAW_DEBUG", "0") == "1"
+FORCE_REACT = os.environ.get("LOCALCLAW_FORCE_REACT", "0") == "1"
+
+# Import ACP if needed
+if USE_ACP:
+    try:
+        from localclaw import ACPPlugin
+    except ImportError:
+        print("⚠️ ACP requested but ACPPlugin not available")
+        USE_ACP = False
+
 BACKEND_NAME = LOCALCLAW_BACKEND.upper()
 
 # ── 1. Verify backend and pick model ──────────────────────────────────
@@ -38,9 +60,6 @@ if not client.is_running():
     else:
         print("   Start it with: ollama serve")
     sys.exit(1)
-
-# Check for force_react env var
-force_react = os.environ.get("LOCALCLAW_FORCE_REACT", "").lower() in ("1", "true", "yes")
 
 preferred = os.environ.get("LOCALCLAW_MODEL")
 MODEL = pick_best_model(preferred=preferred, client=client)
@@ -54,11 +73,30 @@ if not MODEL:
 
 print(f"✓  {BACKEND_NAME} is running")
 print(f"   Using model: {MODEL}")
-if force_react:
+if FORCE_REACT:
     print(f"   Force ReAct: YES (text-based tool calling)")
+if USE_ACP:
+    print(f"   ACP: enabled")
+if DEBUG:
+    print(f"   Debug: enabled")
 print()
 
-# ── 2. Define custom tools ─────────────────────────────────────────
+# ── 2. Initialize ACP if enabled ─────────────────────────────────────
+acp = None
+if USE_ACP:
+    acp = ACPPlugin(
+        agent_name="LocalClaw-ToolAgent",
+        model_name=MODEL,
+        debug=DEBUG,
+    )
+    print(f"   ACP URL: {acp.base_url}")
+    bootstrap = acp.bootstrap(claim_primary=False)
+    if bootstrap.get("stop_flag"):
+        print(f"   ⚠️ ACP STOP flag is set: {bootstrap.get('stop_reason')}")
+    print(f"   ACP Status: {'connected' if bootstrap.get('status') else 'unavailable'}")
+    print()
+
+# ── 3. Define custom tools ─────────────────────────────────────────
 registry = ToolRegistry()
 
 @registry.tool(
@@ -92,8 +130,6 @@ def get_weather(city: str, unit: str = "celsius") -> str:
 )
 def convert_currency(amount, from_currency: str = "USD", to_currency: str = "EUR") -> str:
     """Approximate currency conversion."""
-    import re
-    
     rates_to_usd = {"USD": 1.0, "EUR": 1.08, "GBP": 1.27, "JPY": 0.0067, "CAD": 0.74}
     
     # Fuzzy handling for amount
@@ -129,11 +165,11 @@ def convert_currency(amount, from_currency: str = "USD", to_currency: str = "EUR
     return f"{amount} {fc} ≈ {result:.2f} {tc}"
 
 
-# ── 3. Also include the built-in calculator ─────────────────────────
+# ── 4. Also include the built-in calculator ─────────────────────────
 for t in BUILTIN_REGISTRY.subset(["calculator"]).all():
     registry.register(t)
 
-# ── 4. Live step hook for a nice trace ─────────────────────────────
+# ── 5. Live step hook for a nice trace ─────────────────────────────
 def print_step(step: StepResult):
     icons = {"thought": "💭", "tool_call": "🔧", "tool_result": "📦", "final": "✅"}
     icon = icons.get(step.type, "•")
@@ -143,12 +179,16 @@ def print_step(step: StepResult):
         print(f"  {icon} Result: {step.content}")
     elif step.type == "thought":
         print(f"  {icon} {step.content[:120]}")
+    
+    # Forward to ACP if enabled
+    if acp:
+        acp.on_step(step)
 
 
-# ── 5. Build the agent ─────────────────────────────────────────────
+# ── 6. Build the agent ─────────────────────────────────────────────
 # Determine if model is small (needs ReAct)
 is_small = any(x in MODEL.lower() for x in ["270m", "135m", "350m", "0.5b", "tiny", "1b"])
-use_react = force_react or is_small
+use_react = FORCE_REACT or is_small
 
 agent = Agent(
     model=MODEL,
@@ -169,6 +209,7 @@ agent = Agent(
         "num_predict": 256,
     },
     force_react=use_react,
+    debug=DEBUG,
 )
 
 print(f"=== Multi-tool agent demo ({agent.model}) ===\n")
@@ -181,7 +222,17 @@ queries = [
 for q in queries:
     agent.reset()
     print(f"User: {q}")
+    if acp:
+        acp.log_user_message(q)
     run = agent.run(q)
     print(f"\nFinal: {run.final_answer}")
     print(f"Took {run.total_ms:.0f}ms | {len(run.steps)} steps\n")
+    if acp:
+        acp.log_assistant_message(run.final_answer)
     print("-" * 60 + "\n")
+
+# ── 7. Session summary ───────────────────────────────────────────
+if acp:
+    print("\n--- Session complete ---")
+    tokens = acp.get_session_tokens()
+    print(f"   Session tokens: {tokens}")

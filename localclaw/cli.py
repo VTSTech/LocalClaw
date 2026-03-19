@@ -1180,6 +1180,9 @@ def cmd_test(args):
     else:
         to_run = [args.example]
     
+    # Get CLI flags that apply to all tests
+    acp_flag = getattr(args, "acp", False)
+    
     print(bold("\n🦞 LocalClaw Test Runner"))
     print(dim(f"  Examples directory: {examples_dir}"))
     print()
@@ -1191,24 +1194,31 @@ def cmd_test(args):
     for i, test_id in enumerate(to_run, 1):
         # Find the example file
         example_file = None
+        use_acp = acp_flag  # Start with --acp flag value
         
-        # Special handling for _acp suffix tests
+        # Handle _acp suffix: map to base script and enable ACP via env var
         if test_id.endswith("_acp"):
-            # For gsm8k_acp, match files like gsm8k_*_acp.py
-            base = test_id[:-4]  # Remove _acp suffix
-            patterns = [f"{base}_*_acp.py", f"{base}_*_acp*.py", f"0{base}_*_acp.py"]
-        else:
-            # For non-acp tests, use standard patterns
-            patterns = [f"{test_id}_*.py", f"0{test_id}_*.py", f"{test_id}*.py"]
-        
-        for pattern in patterns:
-            matches = list(examples_dir.glob(pattern))
-            # Filter out _acp files for non-acp tests to avoid wrong matches
-            if not test_id.endswith("_acp"):
+            base_test_id = test_id[:-4]  # Remove _acp suffix
+            use_acp = True  # Auto-enable ACP for _acp tests
+            # Look for base script (without _acp)
+            patterns = [f"{base_test_id}_*.py", f"0{base_test_id}_*.py", f"{base_test_id}*.py"]
+            for pattern in patterns:
+                matches = list(examples_dir.glob(pattern))
+                # Filter out _acp files - we want the base script
                 matches = [m for m in matches if "_acp" not in m.stem]
-            if matches:
-                example_file = matches[0]
-                break
+                if matches:
+                    example_file = matches[0]
+                    break
+        else:
+            # Standard pattern matching for non-acp tests
+            patterns = [f"{test_id}_*.py", f"0{test_id}_*.py", f"{test_id}*.py"]
+            for pattern in patterns:
+                matches = list(examples_dir.glob(pattern))
+                # Filter out _acp files for non-acp tests
+                matches = [m for m in matches if "_acp" not in m.stem]
+                if matches:
+                    example_file = matches[0]
+                    break
         
         if not example_file:
             print(yellow(f"  [{i}/{total}] {test_id}: NOT FOUND"))
@@ -1223,6 +1233,7 @@ def cmd_test(args):
         force_react = getattr(args, "force_react", False)
         use_mf_sys = getattr(args, "use_modelfile_system", False)
         model_override = getattr(args, "model", None)
+        debug = getattr(args, "debug", False)
         
         # Pass flags via environment variable to scripts
         env = os.environ.copy()
@@ -1232,6 +1243,10 @@ def cmd_test(args):
             env["LOCALCLAW_USE_MF_SYS"] = "1"
         if model_override:
             env["LOCALCLAW_MODEL"] = model_override
+        if debug:
+            env["LOCALCLAW_DEBUG"] = "1"
+        if use_acp:
+            env["LOCALCLAW_ACP"] = "1"
         
         try:
             result = subprocess.run(
@@ -1480,6 +1495,16 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         metavar="MODEL",
         help="Model to use for tests (overrides LOCALCLAW_MODEL env var)",
+    )
+    p_test.add_argument(
+        "--debug",
+        action="store_true",
+        help="Enable debug output (parsed tool calls, fuzzy matching, etc.)",
+    )
+    p_test.add_argument(
+        "--acp",
+        action="store_true",
+        help="Enable ACP (Agent Control Panel) integration for activity tracking",
     )
     p_test.set_defaults(func=cmd_test)
 

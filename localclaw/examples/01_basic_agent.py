@@ -5,9 +5,15 @@ The simplest possible LocalClaw agent — no tools, just conversation.
 Uses dynamic model discovery to find available models.
 
 Works with either Ollama or BitNet backend (set LOCALCLAW_BACKEND env var).
+Use --acp flag or LOCALCLAW_ACP=1 to enable ACP integration.
 
 Run from the project root:   python examples/01_basic_agent.py
 Or from the examples folder: python 01_basic_agent.py
+
+With CLI:
+  localclaw test 01
+  localclaw test 01 --acp
+  localclaw test 01 --use-mf-sys --model qwen2.5-coder:0.5b
 """
 
 import sys
@@ -25,6 +31,18 @@ from localclaw import (
     LOCALCLAW_BACKEND,
 )
 
+# Check for optional ACP support
+USE_ACP = os.environ.get("LOCALCLAW_ACP", "0") == "1"
+if USE_ACP:
+    try:
+        from localclaw import ACPPlugin
+    except ImportError:
+        print("⚠️ ACP requested but ACPPlugin not available")
+        USE_ACP = False
+
+# Check for debug mode
+DEBUG = os.environ.get("LOCALCLAW_DEBUG", "0") == "1"
+
 # ── 1. Verify backend is running ────────────────────────────────────
 client = get_default_client()
 BACKEND_NAME = LOCALCLAW_BACKEND.upper()
@@ -41,9 +59,8 @@ print(f"✓  {BACKEND_NAME} is running")
 models = get_available_models(client)
 print(f"   Available models: {models}\n")
 
-# ── 2. Create an agent ─────────────────────────────────────────────
-# Use default model from config (respects LOCALCLAW_BACKEND)
-# Set LOCALCLAW_MODEL env var to override
+# ── 2. Create ACP plugin if requested ─────────────────────────────
+# Use model from env var or default
 MODEL = os.environ.get("LOCALCLAW_MODEL", DEFAULT_MODEL)
 
 # If default model not found, use first available
@@ -59,6 +76,25 @@ if MODEL not in models:
             print(f"❌  No models available.")
             sys.exit(1)
 
+acp = None
+if USE_ACP:
+    acp = ACPPlugin(
+        agent_name="LocalClaw-Basic",
+        model_name=MODEL,
+        debug=DEBUG,
+    )
+    print(f"   ACP URL: {acp.base_url}")
+    
+    # Bootstrap - MANDATORY first ACP call
+    bootstrap = acp.bootstrap(claim_primary=False)
+    if bootstrap.get("stop_flag"):
+        print(f"   ⚠️ ACP STOP flag is set: {bootstrap.get('stop_reason')}")
+    print(f"   ACP Status: {'connected' if bootstrap.get('status') else 'unavailable'}")
+    if bootstrap.get("warnings"):
+        for w in bootstrap["warnings"]:
+            print(f"   ⚠️ {w}")
+
+# ── 3. Create an agent ─────────────────────────────────────────────
 agent = Agent(
     model=MODEL,
     client=client,  # Pass the backend-aware client!
@@ -72,22 +108,57 @@ agent = Agent(
         "num_ctx": 1024,
         "num_predict": 256,
     },
+    debug=DEBUG,
 )
 print(f"   Using model: {agent.model}\n")
 
-# ── 3. Single-turn chat ────────────────────────────────────────────
-answer = agent.chat("What is the capital of France, and why is it historically significant?")
+# ── 4. Single-turn chat ────────────────────────────────────────────
+prompt = "What is the capital of France, and why is it historically significant?"
+if acp:
+    acp.log_user_message(prompt)
+
+answer = agent.chat(prompt)
 print("Answer:", answer)
 
-# ── 4. Multi-turn conversation (memory is retained) ────────────────
+if acp:
+    acp.log_assistant_message(answer)
+
+# ── 5. Multi-turn conversation (memory is retained) ────────────────
 print("\n--- Multi-turn conversation ---")
-agent.chat("My name is Alex.")
-response = agent.chat("What's my name?")
+prompt2 = "My name is Alex."
+if acp:
+    acp.log_user_message(prompt2)
+agent.chat(prompt2)
+if acp:
+    acp.log_assistant_message("Name noted")
+
+prompt3 = "What's my name?"
+if acp:
+    acp.log_user_message(prompt3)
+response = agent.chat(prompt3)
+if acp:
+    acp.log_assistant_message(response)
 print("Agent remembers:", response)
 
-# ── 5. Streaming ───────────────────────────────────────────────────
+# ── 6. Streaming ───────────────────────────────────────────────────
 print("\n--- Streaming response ---")
+prompt4 = "Tell me a one-sentence joke about programming."
+if acp:
+    acp.log_user_message(prompt4)
+
 print("Agent: ", end="", flush=True)
-for token in agent.stream("Tell me a one-sentence joke about programming."):
+full_response = ""
+for token in agent.stream(prompt4):
     print(token, end="", flush=True)
+    full_response += token
 print()
+
+if acp:
+    acp.log_assistant_message(full_response)
+
+# ── 7. Session summary ───────────────────────────────────────────
+if acp:
+    print("\n--- Session complete ---")
+    tokens = acp.get_session_tokens()
+    print(f"   Session tokens: {tokens}")
+    print("   ACP session left active for other agents")

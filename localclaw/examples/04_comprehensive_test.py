@@ -4,8 +4,16 @@ examples/04_comprehensive_test.py
 Comprehensive test suite for LocalClaw with detailed output.
 Tests multiple capabilities: Q&A, reasoning, tools, code generation.
 
+Use --acp or LOCALCLAW_ACP=1 for ACP integration.
+Use --use-mf-sys or LOCALCLAW_USE_MF_SYS=1 for Modelfile system prompts.
+
 Run from the project root:   python examples/04_comprehensive_test.py
 Or from the examples folder: python 04_comprehensive_test.py
+
+With CLI:
+  localclaw test 04
+  localclaw test 04 --acp --debug
+  localclaw test 04 --use-mf-sys --model qwen2.5-coder:0.5b
 
 Written by VTSTech — https://www.vts-tech.org — https://github.com/VTSTech/LocalClaw
 """
@@ -15,9 +23,29 @@ import os
 import time
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from localclaw import Agent, get_default_client, LOCALCLAW_BACKEND, StepResult
+from localclaw import (
+    Agent,
+    get_default_client,
+    get_available_models,
+    get_system_prompt,
+    LOCALCLAW_BACKEND,
+    StepResult,
+)
 from localclaw.tools.builtins import make_builtin_registry
 from localclaw.model_discovery import pick_best_model, get_available_models
+
+# Check for environment flags
+USE_ACP = os.environ.get("LOCALCLAW_ACP", "0") == "1"
+DEBUG = os.environ.get("LOCALCLAW_DEBUG", "0") == "1"
+USE_MF_SYS = os.environ.get("LOCALCLAW_USE_MF_SYS", "0") == "1"
+
+# Import ACP if needed
+if USE_ACP:
+    try:
+        from localclaw import ACPPlugin
+    except ImportError:
+        print("⚠️ ACP requested but ACPPlugin not available")
+        USE_ACP = False
 
 BACKEND_NAME = LOCALCLAW_BACKEND.upper()
 
@@ -76,14 +104,21 @@ TESTS = {
 }
 
 
-def print_step(step: StepResult):
-    """Print step information for verbose mode."""
-    if step.type == "tool_call":
-        args = ", ".join(f"{k}={v}" for k, v in (step.tool_args or {}).items())
-        print(f"    🔧 Tool: {step.tool_name}({args})")
-    elif step.type == "tool_result":
-        preview = step.content[:80] + "..." if len(step.content) > 80 else step.content
-        print(f"    📦 Result: {preview}")
+def make_step_printer(acp=None):
+    """Create a step printer function that optionally forwards to ACP."""
+    def print_step(step: StepResult):
+        if step.type == "tool_call":
+            args = ", ".join(f"{k}={v}" for k, v in (step.tool_args or {}).items())
+            print(f"    🔧 Tool: {step.tool_name}({args})")
+        elif step.type == "tool_result":
+            preview = step.content[:80] + "..." if len(step.content) > 80 else step.content
+            print(f"    📦 Result: {preview}")
+        
+        # Forward to ACP if enabled
+        if acp:
+            acp.on_step(step)
+    
+    return print_step
 
 
 def run_tests():
@@ -109,9 +144,28 @@ def run_tests():
         print(f"❌ No models available in {BACKEND_NAME}.")
         return
     
+    # Initialize ACP if enabled
+    acp = None
+    if USE_ACP:
+        acp = ACPPlugin(
+            agent_name="LocalClaw-ComprehensiveTest",
+            model_name=MODEL,
+            debug=DEBUG,
+        )
+        print(f"   ACP URL: {acp.base_url}")
+        bootstrap = acp.bootstrap(claim_primary=False)
+        if bootstrap.get("stop_flag"):
+            print(f"   ⚠️ ACP STOP flag is set: {bootstrap.get('stop_reason')}")
+        print(f"   ACP Status: {'connected' if bootstrap.get('status') else 'unavailable'}")
+    
     print(f"\n{'='*60}")
     print(f"🧪 LocalClaw Comprehensive Test Suite")
     print(f"   Model: {MODEL}")
+    print(f"   Backend: {BACKEND_NAME}")
+    if USE_MF_SYS:
+        print(f"   Using Modelfile system prompt: YES")
+    if DEBUG:
+        print(f"   Debug: enabled")
     print(f"{'='*60}")
     
     total_passed = 0
@@ -126,9 +180,14 @@ def run_tests():
         agent = Agent(
             model=MODEL,
             client=client,
-            system_prompt="You are a helpful assistant. Be concise and accurate.",
+            system_prompt=get_system_prompt(
+                MODEL,
+                client=client,
+                default_prompt="You are a helpful assistant. Be concise and accurate.",
+            ),
             max_steps=6,
-            on_step=print_step,
+            on_step=make_step_printer(acp),
+            debug=DEBUG,
             model_options={
                 "temperature": 0.0,     # Deterministic for tests
                 "num_ctx": 1024,        # Moderate context
@@ -142,6 +201,9 @@ def run_tests():
             
             t0 = time.time()
             try:
+                if acp:
+                    acp.log_user_message(test["prompt"])
+                
                 response = agent.chat(test["prompt"])
                 elapsed = time.time() - t0
                 total_time += elapsed
@@ -152,6 +214,9 @@ def run_tests():
                 status = "✅ PASS" if passed else "❌ FAIL"
                 preview = response[:60].replace("\n", " ")
                 print(f"  {status} ({elapsed:.1f}s): {preview}...")
+                
+                if acp:
+                    acp.log_assistant_message(response)
                 
                 if not passed:
                     print(f"       Full response: {response}")
@@ -173,6 +238,10 @@ def run_tests():
         print(f"\n⚠️  Model '{MODEL}' has some issues but usable.")
     else:
         print(f"\n❌ Model '{MODEL}' needs improvement or replacement.")
+    
+    if acp:
+        tokens = acp.get_session_tokens()
+        print(f"   ACP Session tokens: {tokens}")
 
 
 if __name__ == "__main__":
