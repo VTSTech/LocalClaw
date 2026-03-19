@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 """
+examples/14_gsm8k_benchmark.py
+------------------------------
 GSM8K Agent Benchmark - Using LocalClaw Agent System
 
 This benchmark uses the full Agent system with:
@@ -8,8 +10,16 @@ This benchmark uses the full Agent system with:
   • Better output parsing
   • Math-specific system prompts
   • Dynamic model discovery (no hardcoded models)
+  • Optional ACP integration (use --acp flag)
+
+With CLI:
+  localclaw test 14
+  localclaw test 14 --acp
+  localclaw test 14 --use-mf-sys --model qwen2.5-coder:0.5b
 
 Uses centralized config from localclaw/config.py
+
+Written by VTSTech — https://www.vts-tech.org — https://github.com/VTSTech/LocalClaw
 """
 
 import json
@@ -17,10 +27,10 @@ import time
 import sys
 import os
 
-# Add LocalClaw package to path (parent directory)
+# Add LocalClaw package to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from localclaw import get_default_client
+from localclaw import get_default_client, LOCALCLAW_BACKEND
 from localclaw.core.tools import ToolRegistry
 from localclaw.core.agent import Agent
 from localclaw.core.math_prompts import (
@@ -31,7 +41,18 @@ from localclaw.core.math_prompts import (
     calculator_tool,
 )
 from localclaw.model_discovery import get_available_models, pick_models_for_benchmark
-from localclaw import LOCALCLAW_BACKEND
+
+# Check for optional ACP support
+USE_ACP = os.environ.get("LOCALCLAW_ACP", "0") == "1"
+if USE_ACP:
+    try:
+        from localclaw.acp_plugin import ACPPlugin
+    except ImportError:
+        print("⚠️ ACP requested but ACPPlugin not available")
+        USE_ACP = False
+
+# Check for debug mode
+DEBUG = os.environ.get("LOCALCLAW_DEBUG", "0") == "1"
 
 BACKEND_NAME = LOCALCLAW_BACKEND.upper()
 
@@ -121,7 +142,7 @@ def create_calculator_tool():
     return registry
 
 
-def test_model_with_agent(model: str, question: str, expected: str, client, force_react: bool = False) -> dict:
+def test_model_with_agent(model: str, question: str, expected: str, client, acp=None, force_react: bool = False) -> dict:
     """
     Test a model using the full Agent system with calculator tool.
     """
@@ -137,9 +158,10 @@ def test_model_with_agent(model: str, question: str, expected: str, client, forc
         else:
             system_prompt = MATH_SYSTEM_PROMPT
         
+        # Build step callback for ACP if enabled
+        on_step = acp.on_step if acp else None
+        
         # Create agent with tools
-        # Use force_react for small models - native tool calling is unreliable
-        # Or force_react if explicitly requested via env var
         use_react = force_react or is_small
         agent = Agent(
             model=model,
@@ -148,7 +170,8 @@ def test_model_with_agent(model: str, question: str, expected: str, client, forc
             max_steps=5,
             client=client,
             model_options={"num_predict": 150},
-            force_react=use_react,  # Small models need ReAct format
+            on_step=on_step,
+            force_react=use_react,
         )
         
         start = time.time()
@@ -175,7 +198,7 @@ def test_model_with_agent(model: str, question: str, expected: str, client, forc
             "extracted": extracted,
             "correct": correct,
             "time": round(elapsed, 1),
-            "steps": len(result.steps),
+            "steps": len(result.steps) if hasattr(result, 'steps') else 0,
         }
         
     except Exception as e:
@@ -196,6 +219,19 @@ def main():
     
     # Check for force_react env var
     force_react = os.environ.get("LOCALCLAW_FORCE_REACT", "").lower() in ("1", "true", "yes")
+    
+    # Create main ACP instance if enabled
+    main_acp = None
+    if USE_ACP:
+        main_acp = ACPPlugin(
+            agent_name="LocalClaw",
+            model_name="gsm8k-benchmark",
+            debug=DEBUG,
+        )
+        bootstrap = main_acp.bootstrap(claim_primary=False)
+        acp_connected = bootstrap.get("status") is not None
+    else:
+        acp_connected = False
     
     # Shared client
     client = get_default_client()
@@ -218,14 +254,20 @@ def main():
     total_tests = len(MODELS) * len(QUESTIONS)
     completed = 0
     
-    log(f"\nStarting GSM8K Agent Benchmark")
-    log(f"Models: {len(MODELS)}")
-    log(f"Questions per model: {len(QUESTIONS)}")
-    log(f"Total tests: {total_tests}")
-    log(f"Using: Agent system with calculator tool")
+    log(f"\n🦞 GSM8K Agent Benchmark")
+    log(f"   Backend: {BACKEND_NAME}")
+    log(f"   Models: {len(MODELS)}")
+    log(f"   Questions per model: {len(QUESTIONS)}")
+    log(f"   Total tests: {total_tests}")
+    if USE_ACP:
+        log(f"   ACP: {'connected' if acp_connected else 'unavailable'}")
+    log(f"   Using: Agent system with calculator tool")
     if force_react:
-        log(f"Force ReAct: YES (all models will use text-based tool calling)")
+        log(f"   Force ReAct: YES (all models will use text-based tool calling)")
     log("=" * 50)
+    
+    if acp_connected and main_acp:
+        main_acp.log_chat("system", f"GSM8K Benchmark started: {len(MODELS)} models", complete=True)
     
     overall_start = time.time()
     
@@ -234,8 +276,18 @@ def main():
         correct_count = 0
         model_start = time.time()
         
+        # Create model-specific ACP instance if enabled
+        model_acp = None
+        if USE_ACP:
+            model_acp = ACPPlugin(
+                agent_name="LocalClaw",
+                model_name=model.split(':')[0][:25],
+                debug=DEBUG,
+            )
+            model_acp.bootstrap(claim_primary=False)
+        
         for i, (question, expected) in enumerate(QUESTIONS):
-            result = test_model_with_agent(model, question, expected, client, force_react=force_react)
+            result = test_model_with_agent(model, question, expected, client, acp=model_acp, force_react=force_react)
             results.append(result)
             completed += 1
             
@@ -244,6 +296,11 @@ def main():
             steps = result.get("steps", 0)
             extracted = result.get("extracted", "?")
             log(f"  Q{i+1:2d}: {status} ({elapsed}s, {steps} steps) - Expected: {expected}, Got: {extracted}")
+            
+            # Log to ACP
+            if model_acp:
+                result_status = "PASS" if result["correct"] else "FAIL"
+                model_acp.log_assistant_message(f"Q{i+1}: [{result_status}] Expected: {expected}, Got: {extracted}")
             
             if result["correct"]:
                 correct_count += 1
@@ -254,6 +311,11 @@ def main():
         model_time = time.time() - model_start
         accuracy = (correct_count / len(QUESTIONS)) * 100
         log(f"  Score: {correct_count}/{len(QUESTIONS)} = {accuracy:.1f}% (Time: {model_time:.1f}s)")
+        
+        # Log model result to main ACP
+        if main_acp:
+            main_acp.add_note("context", f"{model}: {correct_count}/{len(QUESTIONS)} ({accuracy:.1f}%)", 
+                        importance="high")
         
         # Save progress after each model
         with open(RESULTS_FILE, "a") as f:
@@ -266,6 +328,9 @@ def main():
     log("\n" + "=" * 50)
     log(f"COMPLETED: {total_tests} tests in {total_time:.1f}s")
     log(f"Results saved to: {RESULTS_FILE}")
+    
+    if acp_connected and main_acp:
+        main_acp.log_chat("system", f"GSM8K Benchmark complete", complete=True)
     
     summarize_results(MODELS)
 
@@ -280,7 +345,7 @@ def summarize_results(models: list[str]):
                     results.append(json.loads(line))
         
         print("\n" + "=" * 70)
-        print("GSM8K AGENT BENCHMARK RESULTS (with calculator tool)")
+        print("🏆 GSM8K AGENT BENCHMARK RESULTS")
         print("=" * 70)
         print(f"{'Model':<40} | {'Score':^7} | {'Accuracy':^8} | {'Avg Time':^8}")
         print("-" * 70)
