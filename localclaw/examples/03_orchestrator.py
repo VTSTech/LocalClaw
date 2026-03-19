@@ -4,8 +4,16 @@ examples/03_orchestrator.py
 A three-agent team with a router that dispatches tasks.
 Backend-agnostic (works with Ollama or BitNet).
 
+Use --acp or LOCALCLAW_ACP=1 for ACP integration.
+Use --use-mf-sys or LOCALCLAW_USE_MF_SYS=1 for Modelfile system prompts.
+
 Run from the project root:   python examples/03_orchestrator.py
 Or from the examples folder: python 03_orchestrator.py
+
+With CLI:
+  localclaw test 03
+  localclaw test 03 --acp --debug
+  localclaw test 03 --use-mf-sys --model qwen2.5-coder:0.5b
 """
 
 import sys
@@ -18,10 +26,24 @@ from localclaw import (
     AgentCard,
     get_default_client,
     get_available_models,
+    get_system_prompt,
     DEFAULT_MODEL,
     LOCALCLAW_BACKEND,
 )
 from localclaw.tools.builtins import BUILTIN_REGISTRY
+
+# Check for environment flags
+USE_ACP = os.environ.get("LOCALCLAW_ACP", "0") == "1"
+DEBUG = os.environ.get("LOCALCLAW_DEBUG", "0") == "1"
+USE_MF_SYS = os.environ.get("LOCALCLAW_USE_MF_SYS", "0") == "1"
+
+# Import ACP if needed
+if USE_ACP:
+    try:
+        from localclaw import ACPPlugin
+    except ImportError:
+        print("⚠️ ACP requested but ACPPlugin not available")
+        USE_ACP = False
 
 BACKEND_NAME = LOCALCLAW_BACKEND.upper()
 
@@ -49,15 +71,39 @@ def _pick(preferences):
                 return m
     return models[0]
 
+# Use LOCALCLAW_MODEL if set, otherwise pick best
+preferred = os.environ.get("LOCALCLAW_MODEL")
+
 # For BitNet, just use whatever model is available
 if LOCALCLAW_BACKEND == "bitnet":
-    MAIN_MODEL = models[0]
+    MAIN_MODEL = preferred or models[0]
     ROUTER_MODEL = models[0]
 else:
-    MAIN_MODEL   = _pick(["qwen2.5-coder", "llama3.1:8b", "llama3.2:3b", "qwen2.5:7b", "mistral", "qwen3.5:0.8b"])
+    MAIN_MODEL = preferred or _pick(["qwen2.5-coder", "llama3.1:8b", "llama3.2:3b", "qwen2.5:7b", "mistral", "qwen3.5:0.8b"])
     ROUTER_MODEL = _pick(["qwen2.5-coder", "llama3.2:3b", "qwen3.5:0.8b", "qwen2.5", MAIN_MODEL])
 
-print(f"Using model: {MAIN_MODEL}  |  router: {ROUTER_MODEL}\n")
+print(f"✓  {BACKEND_NAME} is running")
+print(f"   Using model: {MAIN_MODEL}  |  router: {ROUTER_MODEL}")
+if USE_ACP:
+    print(f"   ACP: enabled")
+if DEBUG:
+    print(f"   Debug: enabled")
+print()
+
+# ── Initialize ACP if enabled ─────────────────────────────────────
+acp = None
+if USE_ACP:
+    acp = ACPPlugin(
+        agent_name="LocalClaw-Orchestrator",
+        model_name=MAIN_MODEL,
+        debug=DEBUG,
+    )
+    print(f"   ACP URL: {acp.base_url}")
+    bootstrap = acp.bootstrap(claim_primary=False)
+    if bootstrap.get("stop_flag"):
+        print(f"   ⚠️ ACP STOP flag is set: {bootstrap.get('stop_reason')}")
+    print(f"   ACP Status: {'connected' if bootstrap.get('status') else 'unavailable'}")
+    print()
 
 # ── Build specialist agents ────────────────────────────────────────
 # NOTE: Small models (1b/3b) work best WITHOUT tools for generative tasks.
@@ -67,33 +113,48 @@ print(f"Using model: {MAIN_MODEL}  |  router: {ROUTER_MODEL}\n")
 coder = Agent(
     model=MAIN_MODEL,
     client=client,
-    system_prompt=(
-        "You are an expert software engineer. "
-        "When asked to write code, respond with clean, working Python code in a code block. "
-        "Include type hints and a brief docstring. Do not output JSON or schemas."
+    system_prompt=get_system_prompt(
+        MAIN_MODEL,
+        client=client,
+        default_prompt=(
+            "You are an expert software engineer. "
+            "When asked to write code, respond with clean, working Python code in a code block. "
+            "Include type hints and a brief docstring. Do not output JSON or schemas."
+        ),
     ),
+    debug=DEBUG,
 )
 
 analyst = Agent(
     model=MAIN_MODEL,
     client=client,
     tools=BUILTIN_REGISTRY.subset(["calculator"]),
-    system_prompt=(
-        "You are a data analyst and mathematician. "
-        "Break down problems step-by-step and show your reasoning. "
-        "Use the calculator tool for arithmetic. "
-        "After getting a result, state your final answer in plain text."
+    system_prompt=get_system_prompt(
+        MAIN_MODEL,
+        client=client,
+        default_prompt=(
+            "You are a data analyst and mathematician. "
+            "Break down problems step-by-step and show your reasoning. "
+            "Use the calculator tool for arithmetic. "
+            "After getting a result, state your final answer in plain text."
+        ),
     ),
+    debug=DEBUG,
 )
 
 writer = Agent(
     model=MAIN_MODEL,
     client=client,
-    system_prompt=(
-        "You are a skilled writer. Produce clear, well-structured prose. "
-        "Adapt tone to context: professional for business, friendly for casual. "
-        "Respond in plain text only."
+    system_prompt=get_system_prompt(
+        MAIN_MODEL,
+        client=client,
+        default_prompt=(
+            "You are a skilled writer. Produce clear, well-structured prose. "
+            "Adapt tone to context: professional for business, friendly for casual. "
+            "Respond in plain text only."
+        ),
     ),
+    debug=DEBUG,
 )
 
 # ── Build the orchestrator ─────────────────────────────────────────
@@ -118,8 +179,21 @@ tasks = [
 
 for task in tasks:
     print(f"Task: {task}")
+    if acp:
+        acp.log_user_message(task)
+    
     result = orch.run(task)
+    
     print(f"Routed to: [{result.chosen_agent}]")
     print(f"Answer:\n{result.final_answer}")
     print(f"\nTime: {result.total_ms:.0f}ms")
     print("=" * 70 + "\n")
+    
+    if acp:
+        acp.log_assistant_message(result.final_answer)
+
+# ── Session summary ───────────────────────────────────────────
+if acp:
+    print("\n--- Session complete ---")
+    tokens = acp.get_session_tokens()
+    print(f"   Session tokens: {tokens}")

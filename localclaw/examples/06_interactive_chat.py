@@ -3,8 +3,15 @@ examples/06_interactive_chat.py
 -------------------------------
 Interactive chat with tool support. Good for manual testing.
 
+Use --acp or LOCALCLAW_ACP=1 for ACP integration.
+Use --use-mf-sys or LOCALCLAW_USE_MF_SYS=1 for Modelfile system prompts.
+
 Run from the project root:   python examples/06_interactive_chat.py
 Or from the examples folder: python 06_interactive_chat.py
+
+With CLI:
+  localclaw test 06
+  localclaw test 06 --acp --debug
 
 Written by VTSTech — https://www.vts-tech.org — https://github.com/VTSTech/LocalClaw
 """
@@ -13,9 +20,29 @@ import sys
 import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from localclaw import Agent, get_default_client, LOCALCLAW_BACKEND, StepResult
+from localclaw import (
+    Agent,
+    get_default_client,
+    get_available_models,
+    get_system_prompt,
+    LOCALCLAW_BACKEND,
+    StepResult,
+)
 from localclaw.tools.builtins import make_builtin_registry
 from localclaw.model_discovery import pick_best_model, get_available_models
+
+# Check for environment flags
+USE_ACP = os.environ.get("LOCALCLAW_ACP", "0") == "1"
+DEBUG = os.environ.get("LOCALCLAW_DEBUG", "0") == "1"
+USE_MF_SYS = os.environ.get("LOCALCLAW_USE_MF_SYS", "0") == "1"
+
+# Import ACP if needed
+if USE_ACP:
+    try:
+        from localclaw import ACPPlugin
+    except ImportError:
+        print("⚠️ ACP requested but ACPPlugin not available")
+        USE_ACP = False
 
 BACKEND_NAME = LOCALCLAW_BACKEND.upper()
 
@@ -26,16 +53,23 @@ MODEL = None  # Will be set in main()
 TOOLS = ["calculator", "shell", "python_repl", "read_file", "write_file"]
 
 
-def print_step(step: StepResult):
-    """Print step info with colors."""
-    if step.type == "tool_call":
-        args = ", ".join(f"{k}={v}" for k, v in (step.tool_args or {}).items())
-        print(f"\n  \033[33m🔧 {step.tool_name}({args})\033[0m")
-    elif step.type == "tool_result":
-        preview = step.content[:100].replace("\n", " ")
-        if len(step.content) > 100:
-            preview += "..."
-        print(f"  \033[34m📦 → {preview}\033[0m")
+def make_step_printer(acp=None):
+    """Create a step printer function that optionally forwards to ACP."""
+    def print_step(step: StepResult):
+        if step.type == "tool_call":
+            args = ", ".join(f"{k}={v}" for k, v in (step.tool_args or {}).items())
+            print(f"\n  \033[33m🔧 {step.tool_name}({args})\033[0m")
+        elif step.type == "tool_result":
+            preview = step.content[:100].replace("\n", " ")
+            if len(step.content) > 100:
+                preview += "..."
+            print(f"  \033[34m📦 → {preview}\033[0m")
+        
+        # Forward to ACP if enabled
+        if acp:
+            acp.on_step(step)
+    
+    return print_step
 
 
 def main():
@@ -60,18 +94,38 @@ def main():
         print(f"❌ No models available in {BACKEND_NAME}.")
         return
     
+    # Initialize ACP if enabled
+    acp = None
+    if USE_ACP:
+        acp = ACPPlugin(
+            agent_name="LocalClaw-InteractiveChat",
+            model_name=MODEL,
+            debug=DEBUG,
+        )
+        print(f"   ACP URL: {acp.base_url}")
+        bootstrap = acp.bootstrap(claim_primary=False)
+        if bootstrap.get("stop_flag"):
+            print(f"   ⚠️ ACP STOP flag is set: {bootstrap.get('stop_reason')}")
+        print(f"   ACP Status: {'connected' if bootstrap.get('status') else 'unavailable'}")
+        print()
+    
     tools = make_builtin_registry().subset(TOOLS)
     
     agent = Agent(
         model=MODEL,
         client=client,
         tools=tools,
-        system_prompt=(
-            "You are a helpful assistant with access to tools. "
-            "Use them when needed. Be concise but informative."
+        system_prompt=get_system_prompt(
+            MODEL,
+            client=client,
+            default_prompt=(
+                "You are a helpful assistant with access to tools. "
+                "Use them when needed. Be concise but informative."
+            ),
         ),
         max_steps=8,
-        on_step=print_step,
+        on_step=make_step_printer(acp),
+        debug=DEBUG,
         model_options={
             "temperature": 0.3,     # Some creativity for chat
             "num_ctx": 2048,        # Larger context for conversation
@@ -84,6 +138,8 @@ def main():
     print(f"   Backend: {BACKEND_NAME}")
     print(f"   Model: {MODEL}")
     print(f"   Tools: {', '.join(TOOLS)}")
+    if USE_ACP:
+        print(f"   ACP: enabled")
     print(f"{'='*60}")
     print("   Commands: /reset, /tools, /quit")
     print(f"{'='*60}\n")
@@ -111,17 +167,30 @@ def main():
             print(f"🔧 Available tools: {', '.join(t.name for t in tools.all())}\n")
             continue
         
+        # Log to ACP if enabled
+        if acp:
+            acp.log_user_message(user_input)
+        
         # Run agent
         print()
         try:
             run = agent.run(user_input)
             print(f"\n\033[32m🤖 Agent:\033[0m {run.final_answer}")
             
+            if acp:
+                acp.log_assistant_message(run.final_answer)
+            
             tool_calls = len([s for s in run.steps if s.type == "tool_call"])
             if tool_calls > 0 or run.total_ms > 5000:
                 print(f"\n   \033[90m({tool_calls} tools, {run.total_ms/1000:.1f}s)\033[0m")
         except Exception as e:
             print(f"\n❌ Error: {e}")
+    
+    # Session summary
+    if acp:
+        print("\n--- Session complete ---")
+        tokens = acp.get_session_tokens()
+        print(f"   Session tokens: {tokens}")
 
 
 if __name__ == "__main__":

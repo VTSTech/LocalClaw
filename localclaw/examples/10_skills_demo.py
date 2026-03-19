@@ -10,7 +10,14 @@ This demo shows:
 
 The skill content is NOT provided - the agent generates it!
 
+Use --acp or LOCALCLAW_ACP=1 for ACP integration.
+Use --use-mf-sys or LOCALCLAW_USE_MF_SYS=1 for Modelfile system prompts.
+
 Run: python examples/10_skills_demo.py
+
+With CLI:
+  localclaw test 10
+  localclaw test 10 --acp --debug
 
 Written by VTSTech — https://www.vts-tech.org — https://github.com/VTSTech/LocalClaw
 """
@@ -22,11 +29,48 @@ import shutil
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from localclaw.skills import SkillLoader, SkillRegistry
-from localclaw import Agent, get_default_client, LOCALCLAW_BACKEND
+from localclaw import (
+    Agent,
+    get_default_client,
+    get_available_models,
+    get_system_prompt,
+    LOCALCLAW_BACKEND,
+    StepResult,
+)
 from localclaw.tools.builtins import make_builtin_registry
 from localclaw.model_discovery import pick_best_model, get_available_models
 
+# Check for environment flags
+USE_ACP = os.environ.get("LOCALCLAW_ACP", "0") == "1"
+DEBUG = os.environ.get("LOCALCLAW_DEBUG", "0") == "1"
+USE_MF_SYS = os.environ.get("LOCALCLAW_USE_MF_SYS", "0") == "1"
+
+# Import ACP if needed
+if USE_ACP:
+    try:
+        from localclaw import ACPPlugin
+    except ImportError:
+        print("⚠️ ACP requested but ACPPlugin not available")
+        USE_ACP = False
+
 BACKEND_NAME = LOCALCLAW_BACKEND.upper()
+
+
+def make_step_printer(acp=None):
+    """Create a step printer function that optionally forwards to ACP."""
+    def print_step(step: StepResult):
+        if step.type == "tool_call":
+            args = ", ".join(f"{k}={v}" for k, v in (step.tool_args or {}).items())
+            print(f"    🔧 {step.tool_name}({args})")
+        elif step.type == "tool_result":
+            preview = step.content[:80] + "..." if len(step.content) > 80 else step.content
+            print(f"    📦 → {preview}")
+        
+        # Forward to ACP if enabled
+        if acp:
+            acp.on_step(step)
+    
+    return print_step
 
 
 def main():
@@ -105,6 +149,21 @@ def main():
     
     print(f"   Using: {model}")
     
+    # Initialize ACP if enabled
+    acp = None
+    if USE_ACP:
+        acp = ACPPlugin(
+            agent_name="LocalClaw-SkillsDemo",
+            model_name=model,
+            debug=DEBUG,
+        )
+        print(f"   ACP URL: {acp.base_url}")
+        bootstrap = acp.bootstrap(claim_primary=False)
+        print(f"   ACP Status: {'connected' if bootstrap.get('status') else 'unavailable'}")
+    
+    if DEBUG:
+        print(f"   Debug: enabled")
+    
     tools = make_builtin_registry().subset(["write_file"])
     tool_names = [t.name for t in tools.all()]
     print(f"   Tools: {tool_names}")
@@ -128,8 +187,14 @@ Instructions for using the skill.
     agent = Agent(
         model=model,
         tools=tools,
-        system_prompt="You create skill files using the write_file tool.\n\n" + skill_creator_brief,
+        system_prompt=get_system_prompt(
+            model,
+            client=client,
+            default_prompt="You create skill files using the write_file tool.\n\n" + skill_creator_brief,
+        ),
         max_steps=5,
+        on_step=make_step_printer(acp),
+        debug=DEBUG,
         client=client,
         model_options={
             "temperature": 0.0,      # Deterministic
@@ -173,6 +238,9 @@ Use write_file to create the file."""
     print(f"   Prompt: Create a demo-skill for text operations")
     print("   Running agent...")
     
+    if acp:
+        acp.log_user_message(prompt)
+    
     start = time.time()
     try:
         result = agent.run(prompt)
@@ -181,15 +249,8 @@ Use write_file to create the file."""
         print(f"\n   ⏱️ Completed in {elapsed:.1f}s")
         print(f"   Steps: {len(result.steps)}")
         
-        for s in result.steps:
-            if s.type == "tool_call":
-                print(f"      TOOL: {s.tool_name}")
-                if s.tool_name == "write_file":
-                    p = s.tool_args.get("path", "?")
-                    print(f"         path: {p}")
-            elif s.type == "tool_result":
-                content = str(s.content)
-                print(f"         → {content[:80]}...")
+        if acp:
+            acp.log_assistant_message(result.final_answer)
     except Exception as e:
         elapsed = time.time() - start
         print(f"   ⚠️ Error after {elapsed:.1f}s: {type(e).__name__}")
@@ -248,8 +309,14 @@ Use write_file to create the file."""
     test_agent = Agent(
         model=model,
         tools=None,
-        system_prompt="You help with demos." + test_registry.to_system_prompt_addition(),
+        system_prompt=get_system_prompt(
+            model,
+            client=client,
+            default_prompt="You help with demos." + test_registry.to_system_prompt_addition(),
+        ),
         max_steps=2,
+        on_step=make_step_printer(acp),
+        debug=DEBUG,
         client=client,
         model_options={
             "temperature": 0.3,     # Some creativity for demo
@@ -261,39 +328,28 @@ Use write_file to create the file."""
     question = "What can the demo-skill help me with?"
     print(f"   Question: {question}")
     
+    if acp:
+        acp.log_user_message(question)
+    
     try:
         response = test_agent.chat(question)
         print(f"\n   Response: {response}")
+        if acp:
+            acp.log_assistant_message(response)
     except Exception as e:
         print(f"   ⚠️ Error: {type(e).__name__}")
     
     # ========================================
     # SUMMARY
     # ========================================
+    if acp:
+        print("\n--- Session complete ---")
+        tokens = acp.get_session_tokens()
+        print(f"   Session tokens: {tokens}")
+    
     print("\n" + "=" * 60)
     print("✅ Skills demo complete!")
     print("=" * 60)
-    print("""
-💡 Summary:
-
-   Progressive Disclosure (3 tiers):
-   ─────────────────────────────────
-   1. Catalog (name + description) - Always visible
-   2. Instructions (SKILL.md body) - When activated
-   3. Resources (scripts, refs) - When referenced
-
-   Skills vs Tools:
-   ────────────────
-   Skills = Knowledge (markdown documents)
-   Tools  = Execution (Python functions)
-
-   What Happened:
-   ──────────────
-   - Agent received a request to create a skill
-   - Agent autonomously generated the skill content
-   - Agent used write_file tool to save it
-   - Skill was loaded and tested successfully
-    """)
 
 
 if __name__ == "__main__":

@@ -14,6 +14,9 @@ Set LOCALCLAW_BACKEND environment variable to switch:
     export BITNET_BASE_URL=http://localhost:8765
     python 00_backend_demo.py
 
+Use --acp or LOCALCLAW_ACP=1 for ACP integration.
+Use --use-mf-sys or LOCALCLAW_USE_MF_SYS=1 for Modelfile system prompts.
+
 Written by VTSTech — https://www.vts-tech.org
 """
 
@@ -27,12 +30,44 @@ from localclaw import (
     Agent,
     get_default_client,
     get_available_models,
+    get_system_prompt,
     DEFAULT_MODEL,
     LOCALCLAW_BACKEND,
     OLLAMA_BASE_URL,
     BITNET_BASE_URL,
+    StepResult,
 )
 from localclaw.tools.builtins import make_builtin_registry
+
+# Check for environment flags
+USE_ACP = os.environ.get("LOCALCLAW_ACP", "0") == "1"
+DEBUG = os.environ.get("LOCALCLAW_DEBUG", "0") == "1"
+USE_MF_SYS = os.environ.get("LOCALCLAW_USE_MF_SYS", "0") == "1"
+
+# Import ACP if needed
+if USE_ACP:
+    try:
+        from localclaw import ACPPlugin
+    except ImportError:
+        print("⚠️ ACP requested but ACPPlugin not available")
+        USE_ACP = False
+
+
+def make_step_printer(acp=None):
+    """Create a step printer function that optionally forwards to ACP."""
+    def print_step(step: StepResult):
+        if step.type == "tool_call":
+            args = ", ".join(f"{k}={v}" for k, v in (step.tool_args or {}).items())
+            print(f"    🔧 {step.tool_name}({args})")
+        elif step.type == "tool_result":
+            preview = step.content[:80] + "..." if len(step.content) > 80 else step.content
+            print(f"    📦 → {preview}")
+        
+        # Forward to ACP if enabled
+        if acp:
+            acp.on_step(step)
+    
+    return print_step
 
 
 def main():
@@ -49,6 +84,11 @@ def main():
         print(f"║  BitNet URL: {BITNET_BASE_URL:<51} ║")
     else:
         print(f"║  Ollama URL: {OLLAMA_BASE_URL:<51} ║")
+    
+    if USE_ACP:
+        print(f"║  ACP: {'enabled':<55} ║")
+    if DEBUG:
+        print(f"║  Debug: {'enabled':<54} ║")
     
     print(f"╚═══════════════════════════════════════════════════════════════════╝")
     
@@ -78,7 +118,7 @@ def main():
         sys.exit(1)
     
     # Determine which model to use
-    model = DEFAULT_MODEL
+    model = os.environ.get("LOCALCLAW_MODEL", DEFAULT_MODEL)
     if model not in models:
         # Try partial match
         for m in models:
@@ -91,6 +131,20 @@ def main():
     
     print(f"\n🤖 Using model: {model}")
     
+    # Initialize ACP if enabled
+    acp = None
+    if USE_ACP:
+        acp = ACPPlugin(
+            agent_name="LocalClaw-BackendDemo",
+            model_name=model,
+            debug=DEBUG,
+        )
+        print(f"   ACP URL: {acp.base_url}")
+        bootstrap = acp.bootstrap(claim_primary=False)
+        if bootstrap.get("stop_flag"):
+            print(f"   ⚠️ ACP STOP flag is set: {bootstrap.get('stop_reason')}")
+        print(f"   ACP Status: {'connected' if bootstrap.get('status') else 'unavailable'}")
+    
     # Create agent with tools
     # Note: BitNet models don't support native tool calling,
     # so Agent will automatically use ReAct fallback
@@ -99,22 +153,40 @@ def main():
     agent = Agent(
         model=model,
         tools=tools,
-        system_prompt="You are a helpful math assistant. Use the calculator tool for arithmetic.",
+        system_prompt=get_system_prompt(
+            model,
+            client=client,
+            default_prompt="You are a helpful math assistant. Use the calculator tool for arithmetic.",
+        ),
         client=client,
-        debug=True,  # Show tool calls
+        on_step=make_step_printer(acp),
+        debug=DEBUG,
     )
     
     print("\n" + "=" * 60)
     print("🧪 Test: Calculate 15 * 8")
     print("=" * 60)
     
-    result = agent.run("What is 15 times 8?")
+    prompt = "What is 15 times 8?"
+    if acp:
+        acp.log_user_message(prompt)
+    
+    result = agent.run(prompt)
     print(f"\n📝 Answer: {result.final_answer}")
+    
+    if acp:
+        acp.log_assistant_message(result.final_answer)
     
     if result.steps:
         print("\n📊 Steps:")
         for step in result.steps:
             print(f"   {step}")
+    
+    # Session summary
+    if acp:
+        print("\n--- Session complete ---")
+        tokens = acp.get_session_tokens()
+        print(f"   Session tokens: {tokens}")
     
     print("\n" + "=" * 60)
     print("✅ Done!")
