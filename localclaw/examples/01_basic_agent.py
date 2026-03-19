@@ -20,6 +20,7 @@ from localclaw import (
     Agent,
     get_default_client,
     get_available_models,
+    get_system_prompt,
     DEFAULT_MODEL,
     LOCALCLAW_BACKEND,
 )
@@ -61,7 +62,11 @@ if MODEL not in models:
 agent = Agent(
     model=MODEL,
     client=client,  # Pass the backend-aware client!
-    system_prompt="You are a concise and helpful assistant. Keep answers brief.",
+    system_prompt=get_system_prompt(
+        MODEL, 
+        client=client,
+        default_prompt="You are a concise and helpful assistant. Keep answers brief."
+    ),
     model_options={
         "temperature": 0.7,
         "num_ctx": 1024,

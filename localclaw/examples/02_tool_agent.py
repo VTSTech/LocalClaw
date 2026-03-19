@@ -20,6 +20,7 @@ from localclaw import (
     StepResult,
     get_default_client,
     get_available_models,
+    get_system_prompt,
     DEFAULT_MODEL,
     LOCALCLAW_BACKEND,
 )
@@ -153,9 +154,13 @@ agent = Agent(
     model=MODEL,
     client=client,
     tools=registry,
-    system_prompt=(
-        "You are a helpful assistant with access to tools. "
-        "Call tools when needed. Give brief final answers after getting results."
+    system_prompt=get_system_prompt(
+        MODEL,
+        client=client,
+        default_prompt=(
+            "You are a helpful assistant with access to tools. "
+            "Call tools when needed. Give brief final answers after getting results."
+        ),
     ),
     on_step=print_step,
     model_options={

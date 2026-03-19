@@ -6,6 +6,8 @@ https://www.vts-tech.org
 https://github.com/VTSTech/LocalClaw
 """
 
+import os
+
 from .core.agent import Agent, AgentRun, StepResult
 from .core.memory import Memory
 from .core.tools import Tool, ToolRegistry, ToolParam
@@ -82,6 +84,58 @@ def get_available_models(client=None):
     
     return client.list_models() or []
 
+
+def get_system_prompt(model: str, client=None, default_prompt: str = None):
+    """
+    Get the system prompt based on LOCALCLAW_USE_MF_SYS environment variable.
+    
+    If LOCALCLAW_USE_MF_SYS=1, returns the Modelfile's system prompt for the model.
+    Otherwise returns the provided default_prompt.
+    
+    Parameters
+    ----------
+    model : str
+        Model name to get system prompt for.
+    client : OllamaClient or BitnetClient, optional
+        Client to use. Creates one via get_default_client() if not provided.
+    default_prompt : str, optional
+        Default system prompt to use if LOCALCLAW_USE_MF_SYS is not set.
+        If None and LOCALCLAW_USE_MF_SYS=1 but no Modelfile system prompt,
+        returns None (agent will use its own default).
+    
+    Returns
+    -------
+    str or None
+        The system prompt to use, or None.
+    
+    Examples
+    --------
+    >>> # Without LOCALCLAW_USE_MF_SYS set
+    >>> sys_prompt = get_system_prompt("llama3.2", default_prompt="You are helpful.")
+    >>> print(sys_prompt)  # "You are helpful."
+    
+    >>> # With LOCALCLAW_USE_MF_SYS=1
+    >>> sys_prompt = get_system_prompt("qwen2.5-coder", default_prompt="You are helpful.")
+    >>> print(sys_prompt)  # Modelfile's system prompt, e.g., "You are Qwen..."
+    """
+    use_mf_sys = os.environ.get("LOCALCLAW_USE_MF_SYS", "0") == "1"
+    
+    if use_mf_sys:
+        if client is None:
+            client = get_default_client()
+        
+        # Only OllamaClient has get_modelfile_system_prompt
+        if hasattr(client, "get_modelfile_system_prompt"):
+            mf_sys = client.get_modelfile_system_prompt(model)
+            if mf_sys:
+                print(f"  📜 Using Modelfile system prompt ({len(mf_sys)} chars)")
+                return mf_sys
+            else:
+                print(f"  ⚠ No SYSTEM prompt in Modelfile for '{model}', using default")
+                return default_prompt
+    
+    return default_prompt
+
 # R03 Enhancements
 from .core.orchestrator_enhanced import Orchestrator as EnhancedOrchestrator, AgentCard as EnhancedAgentCard
 
@@ -98,6 +152,7 @@ __all__ = [
     # R03: Backend-agnostic helpers
     "get_default_client",
     "get_available_models",
+    "get_system_prompt",
     "model_discovery",
     # Config exports
     "OLLAMA_BASE_URL",

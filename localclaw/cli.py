@@ -1221,11 +1221,17 @@ def cmd_test(args):
         
         timeout = getattr(args, "timeout", 300)
         force_react = getattr(args, "force_react", False)
+        use_mf_sys = getattr(args, "use_modelfile_system", False)
+        model_override = getattr(args, "model", None)
         
-        # Pass force_react via environment variable to scripts
+        # Pass flags via environment variable to scripts
         env = os.environ.copy()
         if force_react:
             env["LOCALCLAW_FORCE_REACT"] = "1"
+        if use_mf_sys:
+            env["LOCALCLAW_USE_MF_SYS"] = "1"
+        if model_override:
+            env["LOCALCLAW_MODEL"] = model_override
         
         try:
             result = subprocess.run(
@@ -1462,6 +1468,18 @@ def build_parser() -> argparse.ArgumentParser:
         "--force-react",
         action="store_true",
         help="Force ReAct text-based tool calling for all models",
+    )
+    p_test.add_argument(
+        "--use-mf-sys",
+        action="store_true",
+        dest="use_modelfile_system",
+        help="Use the system prompt from the model's Modelfile instead of LocalClaw's default",
+    )
+    p_test.add_argument(
+        "--model", "-m",
+        default=None,
+        metavar="MODEL",
+        help="Model to use for tests (overrides LOCALCLAW_MODEL env var)",
     )
     p_test.set_defaults(func=cmd_test)
 
