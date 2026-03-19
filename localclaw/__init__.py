@@ -139,6 +139,9 @@ def get_system_prompt(model: str, client=None, default_prompt: str = None):
 # R03 Enhancements
 from .core.orchestrator_enhanced import Orchestrator as EnhancedOrchestrator, AgentCard as EnhancedAgentCard
 
+# Tool support detection
+from .cli import get_tool_support
+
 __all__ = [
     # Core
     "Agent", "AgentRun", "StepResult",
@@ -153,6 +156,7 @@ __all__ = [
     "get_default_client",
     "get_available_models",
     "get_system_prompt",
+    "get_tool_support",  # Tool support detection
     "model_discovery",
     # Config exports
     "OLLAMA_BASE_URL",
@@ -168,7 +172,7 @@ __all__ = [
 if _BITNET_AVAILABLE:
     __all__.extend(["BitnetClient", "KNOWN_MODELS"])
 
-__version__ = "0.3.0.10"
+__version__ = "0.3.1.0"
 __author__ = "VTSTech"
 __author_email__ = "contact@vts-tech.org"
 __url__ = "https://github.com/VTSTech/LocalClaw"

@@ -6,8 +6,14 @@ Demonstrates the decorator-based tool registry.
 Uses dynamic model discovery.
 Backend-agnostic (works with Ollama or BitNet).
 
+Tool support levels (detected automatically):
+  - "native": Model has native tool-calling (pass tools to API)
+  - "react": Model accepts tools but needs text-based prompting
+  - "none": Model doesn't support tools at all
+
 Use --acp or LOCALCLAW_ACP=1 for ACP integration.
 Use --use-mf-sys or LOCALCLAW_USE_MF_SYS=1 for Modelfile system prompts.
+Use --tool-support to test model tool support first.
 
 Run from the project root:   python examples/02_tool_agent.py
 Or from the examples folder: python 02_tool_agent.py
@@ -30,6 +36,7 @@ from localclaw import (
     get_default_client,
     get_available_models,
     get_system_prompt,
+    get_tool_support,  # NEW: Tool support detection
     DEFAULT_MODEL,
     LOCALCLAW_BACKEND,
 )
@@ -73,8 +80,22 @@ if not MODEL:
 
 print(f"✓  {BACKEND_NAME} is running")
 print(f"   Using model: {MODEL}")
+
+# Detect tool support level
+tool_support = get_tool_support(MODEL, client)
+print(f"   Tool support: {tool_support}")
+
 if FORCE_REACT:
     print(f"   Force ReAct: YES (text-based tool calling)")
+elif tool_support == "native":
+    print(f"   Mode: Native tool calling (API)")
+elif tool_support == "react":
+    print(f"   Mode: ReAct text parsing")
+elif tool_support == "none":
+    print(f"   Mode: No tools (model doesn't support tools)")
+else:
+    print(f"   Mode: Unknown (will use heuristic)")
+
 if USE_ACP:
     print(f"   ACP: enabled")
 if DEBUG:
@@ -186,9 +207,15 @@ def print_step(step: StepResult):
 
 
 # ── 6. Build the agent ─────────────────────────────────────────────
-# Determine if model is small (needs ReAct)
-is_small = any(x in MODEL.lower() for x in ["270m", "135m", "350m", "0.5b", "tiny", "1b"])
-use_react = FORCE_REACT or is_small
+# Agent automatically detects tool support level via get_tool_support()
+# which checks tested_models.json first, then falls back to heuristic.
+# 
+# Tool support levels:
+#   - "native": Pass tools to API, model handles tool calling
+#   - "react":  Use text-based ReAct prompting
+#   - "none":   Don't use tools at all
+#
+# Use FORCE_REACT=1 to force text-based mode for testing.
 
 agent = Agent(
     model=MODEL,
@@ -208,11 +235,14 @@ agent = Agent(
         "num_ctx": 1024,
         "num_predict": 256,
     },
-    force_react=use_react,
+    force_react=FORCE_REACT,  # Only force if explicitly requested
     debug=DEBUG,
 )
 
-print(f"=== Multi-tool agent demo ({agent.model}) ===\n")
+print(f"=== Multi-tool agent demo ({agent.model}) ===")
+print(f"   Agent tool support: {agent._tool_support}")
+print(f"   Native tools mode: {agent._native_tools}")
+print()
 
 queries = [
     "Convert 500 JPY to EUR",

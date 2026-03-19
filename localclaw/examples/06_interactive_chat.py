@@ -3,8 +3,14 @@ examples/06_interactive_chat.py
 -------------------------------
 Interactive chat with tool support. Good for manual testing.
 
+Tool support levels (detected automatically):
+  - "native": Model has native tool-calling (pass tools to API)
+  - "react": Model accepts tools but needs text-based prompting
+  - "none": Model doesn't support tools at all
+
 Use --acp or LOCALCLAW_ACP=1 for ACP integration.
 Use --use-mf-sys or LOCALCLAW_USE_MF_SYS=1 for Modelfile system prompts.
+Use --tool-support to test model tool support first.
 
 Run from the project root:   python examples/06_interactive_chat.py
 Or from the examples folder: python 06_interactive_chat.py
@@ -25,6 +31,7 @@ from localclaw import (
     get_default_client,
     get_available_models,
     get_system_prompt,
+    get_tool_support,  # NEW: Tool support detection
     LOCALCLAW_BACKEND,
     StepResult,
 )
@@ -94,6 +101,9 @@ def main():
         print(f"❌ No models available in {BACKEND_NAME}.")
         return
     
+    # Detect tool support level
+    tool_support = get_tool_support(MODEL, client)
+    
     # Initialize ACP if enabled
     acp = None
     if USE_ACP:
@@ -137,6 +147,7 @@ def main():
     print(f"💬 LocalClaw Interactive Chat")
     print(f"   Backend: {BACKEND_NAME}")
     print(f"   Model: {MODEL}")
+    print(f"   Tool support: {agent._tool_support}")
     print(f"   Tools: {', '.join(TOOLS)}")
     if USE_ACP:
         print(f"   ACP: enabled")

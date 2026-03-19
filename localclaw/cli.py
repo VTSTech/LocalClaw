@@ -80,6 +80,62 @@ def _save_tested_models(models: dict):
         print(yellow(f"  ⚠ Could not save tested models: {e}"))
 
 
+def get_tool_support(model: str, client=None) -> str:
+    """
+    Get the tool support level for a model.
+    
+    Checks tested_models.json first, then falls back to heuristic.
+    
+    Parameters
+    ----------
+    model : str
+        Model name to check.
+    client : OllamaClient, optional
+        Client for heuristic fallback. Creates one if needed.
+    
+    Returns
+    -------
+    str
+        One of: "native", "react", "none", or "unknown"
+    
+    Levels
+    ------
+    - "native": Model has native Ollama tool-calling support (passes tools to API)
+    - "react": Model accepts tools API but needs text-based ReAct prompting  
+    - "none": Model explicitly rejects tools (don't pass tools at all)
+    - "unknown": Not tested yet, fall back to heuristic
+    
+    Examples
+    --------
+    >>> support = get_tool_support("llama3.1:8b")
+    >>> if support == "native":
+    ...     # Use native tool calling
+    ... elif support == "react":
+    ...     # Use ReAct text parsing
+    ... elif support == "none":
+    ...     # Don't use tools at all
+    """
+    # Check tested_models.json first
+    tested = _load_tested_models()
+    if model in tested:
+        result = tested[model].get("tool_support")
+        if result in ("native", "react", "none"):
+            return result
+    
+    # Fall back to heuristic if client available
+    if client is None:
+        from .core.ollama_client import OllamaClient
+        client = OllamaClient()
+    
+    if hasattr(client, "model_supports_tools"):
+        if client.model_supports_tools(model):
+            return "native"  # Heuristic says native-capable family
+        else:
+            return "react"  # Unknown family, assume ReAct needed
+    
+    return "unknown"
+
+
 def _test_model_tool_support(client: OllamaClient, model: str, verbose: bool = False) -> str:
     """
     Test if a model supports native tool calling.

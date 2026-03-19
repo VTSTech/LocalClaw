@@ -1105,26 +1105,48 @@ class Agent:
         self.debug = debug
         self.use_compact_prompt = use_compact_prompt
 
-        self._native_tools = (
-            not force_react and self.client.model_supports_tools(model)
-        )
+        # Determine tool support level: "native", "react", or "none"
+        # Priority: force_react > tested_models.json > heuristic
+        if force_react:
+            self._tool_support = "react"
+        else:
+            # Try to import get_tool_support from cli
+            try:
+                from ..cli import get_tool_support
+                self._tool_support = get_tool_support(model, self.client)
+            except ImportError:
+                # Fallback to heuristic
+                if self.client.model_supports_tools(model):
+                    self._tool_support = "native"
+                else:
+                    self._tool_support = "react"
+        
+        # Determine if native tools should be used
+        # "native" = pass tools to API, let model handle
+        # "react" = use text-based ReAct parsing
+        # "none" = don't use tools at all
+        self._native_tools = (self._tool_support == "native")
+        self._no_tools = (self._tool_support == "none")
         
         # Determine if we should use few-shot prompting
         self._is_small_model = _is_small_model(model)
         self._use_few_shot = few_shot if few_shot is not None else self._is_small_model
 
-        # Build system prompt with optional few-shot
+        # Build system prompt based on tool support level
         base_sys = system_prompt
         
-        # Add tool descriptions for ReAct fallback
-        if not self._native_tools and self.tools.all():
+        # For "react" level: add tool descriptions and ReAct format instructions
+        if self._tool_support == "react" and self.tools.all():
             tool_descriptions = "\n".join(
                 f"- {t.name}: {t.description}" for t in self.tools.all()
             )
             base_sys = base_sys + f"\n\nAvailable tools:\n{tool_descriptions}" + REACT_SYSTEM_SUFFIX
         
-        # Add few-shot examples for small models with tools
-        if self._use_few_shot and self.tools.all():
+        # For "none" level: don't add any tool-related prompts
+        # Model should use its Modelfile system prompt as-is
+        
+        # Add few-shot examples for small models with tools (only for react mode)
+        if self._use_few_shot and self.tools.all() and self._tool_support == "react":
             few_shot_suffix = FEW_SHOT_COMPACT if use_compact_prompt else FEW_SHOT_SUFFIX
             base_sys = base_sys + few_shot_suffix
 
@@ -1144,6 +1166,32 @@ class Agent:
         run = AgentRun()
         t0 = time.perf_counter()
         self.memory.add_user(user_input)
+
+        # Short-circuit for models with no tool support
+        # Just get a response and return it directly
+        if self._no_tools:
+            step_t0 = time.perf_counter()
+            response = self.client.chat(
+                model=self.model,
+                messages=self.memory.to_messages(),
+                tools=None,  # Don't pass tools
+                options=self.model_options,
+            )
+            elapsed = (time.perf_counter() - step_t0) * 1000
+            msg = response.get("message", {})
+            content = msg.get("content", "")
+            
+            if self.debug:
+                print(f"\n  🔍 DEBUG: No tool support mode")
+                print(f"    _tool_support={self._tool_support}")
+                print(f"    content[:100]={content[:100]!r}")
+            
+            # Store and return the response
+            self.memory.add_assistant(content)
+            run.final_answer = content
+            run.total_ms = elapsed
+            run.steps.append(StepResult(type="final", content=content, elapsed_ms=elapsed))
+            return run
 
         # Loop guards
         _tool_call_counts: dict[str, int] = {}  # per-tool call counter
@@ -1171,6 +1219,7 @@ class Agent:
             # Debug output
             if self.debug:
                 print(f"\n  🔍 DEBUG: Response received")
+                print(f"    _tool_support={self._tool_support}")
                 print(f"    _native_tools={self._native_tools}")
                 print(f"    tool_calls_raw={tool_calls_raw!r}")
                 print(f"    content[:100]={content[:100]!r}")
