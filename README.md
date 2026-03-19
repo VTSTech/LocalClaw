@@ -19,9 +19,9 @@ Inspired by the architecture of OpenClaw, rebuilt from scratch for local-first o
 
 | Document | Description |
 |----------|-------------|
-| [Architecture.md](https://github.com/VTSTech/LocalClaw/Architecture.md) | Technical documentation for developers (directory structure, core design, orchestrator modes) |
-| [CHANGELOG.md](https://github.com/VTSTech/LocalClaw/CHANGELOG.md) | Version history and release notes (R00–R03) |
-| [TESTS.md](https://github.com/VTSTech/LocalClaw/TESTS.md) | Benchmark results, model recommendations, and testing guide |
+| [Architecture.md](https://github.com/VTSTech/LocalClaw/blob/main/Architecture.md) | Technical documentation for developers (directory structure, core design, orchestrator modes) |
+| [CHANGELOG.md](https://github.com/VTSTech/LocalClaw/blob/main/CHANGELOG.md) | Version history and release notes (R00–R03) |
+| [TESTS.md](https://github.com/VTSTech/LocalClaw/blob/main/TESTS.md) | Benchmark results, model recommendations, and testing guide |
 
 ---
 
@@ -209,6 +209,6 @@ ollama pull qwen2.5-coder:0.5b-instruct-q4_k_m
 ---
 
 For more details, see:
-- [Architecture.md](Architecture.md) — Technical architecture and design decisions
-- [CHANGELOG.md](CHANGELOG.md) — Version history and release notes
-- [TESTS.md](TESTS.md) — Benchmark results and model recommendations
+- [Architecture.md](https://github.com/VTSTech/LocalClaw/blob/main/Architecture.md) — Technical architecture and design decisions
+- [CHANGELOG.md](https://github.com/VTSTech/LocalClaw/blob/main/CHANGELOG.md) — Version history and release notes
+- [TESTS.md](https://github.com/VTSTech/LocalClaw/blob/main/TESTS.md) — Benchmark results and model recommendations
