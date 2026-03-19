@@ -85,11 +85,13 @@ def _test_model_tool_support(client: OllamaClient, model: str, verbose: bool = F
     Test if a model supports native tool calling.
     Uses the model's Modelfile system prompt (no custom prompts).
     
-    Detection order (reduces false positives/negatives):
+    Detection logic:
     1. HTTP 400 "does not support tools" → none (Ollama's explicit rejection)
     2. Native tool_calls in response → native
-    3. ReAct-style patterns in text → react
-    4. No tool usage detected → none
+    3. API succeeded but no native tool_calls → react (model accepted tools)
+    
+    Key insight: If Ollama accepts the tools parameter without error, the model
+    CAN use tools. Only HTTP 400 "does not support tools" means truly no support.
     
     Returns: "native", "react", "none", or "error"
     """
@@ -145,30 +147,13 @@ def _test_model_tool_support(client: OllamaClient, model: str, verbose: bool = F
                         print(green("✓ native"))
                     return "native"
         
-        # 3. Check for ReAct-style patterns in text (stricter detection)
-        content = message.get("content", "") or ""
-        content_lower = content.lower()
-        
-        # Look for specific ReAct patterns (not just "tool" keyword)
-        react_patterns = [
-            r'"name"\s*:\s*"get_weather"',           # JSON-style: {"name": "get_weather", ...}
-            r'"function"\s*:\s*"get_weather"',       # Alternative JSON
-            r'Action:\s*get_weather',                # ReAct-style: Action: get_weather
-            r'Action\s*:\s*{\s*"name"\s*:\s*"get_weather"',  # ReAct with JSON
-            r'call\s+tool[:\s]+get_weather',         # Natural language tool call
-            r'using\s+get_weather\s+tool',           # Mention with action
-        ]
-        
-        for pattern in react_patterns:
-            if re.search(pattern, content, re.IGNORECASE):
-                if verbose:
-                    print(yellow("→ ReAct"))
-                return "react"
-        
-        # 4. No tool usage detected - default to none (conservative)
+        # 3. API succeeded but no native tool_calls → ReAct
+        # Key insight: If Ollama accepted the tools parameter without error,
+        # the model CAN use tools. Native tool_calls = native, otherwise ReAct.
+        # Only HTTP 400 "does not support tools" means truly "none".
         if verbose:
-            print(dim("○ none"))
-        return "none"
+            print(yellow("→ ReAct"))
+        return "react"
         
     except Exception as e:
         error_str = str(e)

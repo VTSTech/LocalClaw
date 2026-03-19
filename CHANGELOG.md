@@ -6,7 +6,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
-## [R03.1.0] - 2026-03-19
+## [R03.0.10] - 03-19-2026 4:10:37 PM
 
 ### Added
 - **Dynamic tool support detection** - Models are now tested individually instead of relying on family-based heuristics
@@ -20,19 +20,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   - **Tool Support** - `✓ native`, `ReAct`, or `○ none`
 
 ### Tool Support Detection Logic
-Detection order minimizes false positives/negatives:
+Detection is now simplified and more accurate:
 1. **Ollama rejection** - HTTP 400 "does not support tools" → `none` (definitive)
 2. **Native tool_calls** - Structured response in API → `native` (definitive)
-3. **ReAct patterns** - JSON or `Action:` style in text → `react` (stricter regex matching)
-4. **Default to none** - No tool usage detected → `none` (conservative)
+3. **API succeeded** - Model accepted tools but no native tool_calls → `react`
+
+**Key insight**: If Ollama accepts the tools parameter without error, the model CAN use tools. Only HTTP 400 "does not support tools" means truly no support.
 
 ### Changed
 - **Default tool support** - Untested models now show `ReAct (?)` until tested with `--tool_support`
 - **Removed family-based assumptions** - Models are no longer assumed to support tools based on family name
-- **Improved ReAct detection** - Stricter pattern matching for tool call attempts:
-  - JSON-style: `{"name": "get_weather", ...}`
-  - ReAct-style: `Action: get_weather`
-  - Natural language: `call tool: get_weather`
 
 ### Example Output
 ```
@@ -47,7 +44,7 @@ Detection order minimizes false positives/negatives:
 
 ---
 
-## [R03.0.9] - 2026-03-19
+## [R03.0.9] - 03-19-2026 3:13:37 PM
 
 ### Added
 - **`--acp` flag for test command** - Enables ACP (Agent Control Panel) integration for all test scripts
@@ -93,7 +90,7 @@ Detection order minimizes false positives/negatives:
 
 ---
 
-## [R03.0.8] - 2026-03-18
+## [R03.0.8] - 03-19-2026 2:06:37 AM
 
 ### Added
 - **`--force-react` flag for test command** - Forces text-based ReAct tool calling for all models
@@ -124,7 +121,7 @@ Detection order minimizes false positives/negatives:
 
 ---
 
-## [R03.0.7] - 2026-03-18
+## [R03.0.7] - 03-18-2026 3:00:37 PM
 
 ### Added
 - **`--timeout` flag for test command** - Configurable timeout per test
@@ -132,7 +129,7 @@ Detection order minimizes false positives/negatives:
   - Default remains 300 seconds (5 minutes)
   - Timeout value shown in error message when exceeded
 
-## [R03.0.6] - 2026-03-18
+## [R03.0.6] - 03-18-2026 2:50:37 PM
 
 ### Fixed
 - **Unused imports in benchmark examples** - Cleaned up `gsm8k_agent_benchmark.py` and `gsm8k_agent_benchmark_acp.py`
@@ -146,7 +143,7 @@ Detection order minimizes false positives/negatives:
   
 ---
 
-## [R03.0.5] - 2026-03-18
+## [R03.0.5] - 03-18-2026 2:08:37 PM
 
 ### Changed
 - **Re-enabled ANSI colors** - Set `_NO_COLOR = False` in CLI
@@ -163,7 +160,7 @@ Detection order minimizes false positives/negatives:
 
 ---
 
-## [R03.0.4] - 2026-03-18
+## [R03.0.4] - 03-18-2026
 
 ### Fixed
 - **Argparse help display in Google Colab** - Disabled all ANSI color codes by default
@@ -187,7 +184,7 @@ Detection order minimizes false positives/negatives:
 
 ---
 
-## [R03.0.3] - 2026-03-18
+## [R03.0.3] - 03-18-2026
 
 ### Fixed
 - **Argparse help display in Google Colab** - Added `WideHelpFormatter` with minimum width of 120 characters to fix truncation issues in environments with non-standard terminals (Google Colab, some Docker containers)
@@ -195,7 +192,7 @@ Detection order minimizes false positives/negatives:
 
 ---
 
-## [R03.0.2] - 2026-03-18
+## [R03.0.2] - 03-18-2026
 
 ### Changed
 - **Documentation restructure** - README.md split into modular documentation files
@@ -208,7 +205,7 @@ Detection order minimizes false positives/negatives:
 
 ---
 
-## [R03] - 2026-03-17
+## [R03] - 03-17-2026
 
 ### Added
 - **BitNet Backend Support** - Alternative inference backend using Microsoft's BitNet b1.58 2-bit quantization
@@ -264,7 +261,7 @@ Detection order minimizes false positives/negatives:
 
 ---
 
-## [R02] - 2026-03-10
+## [R02] - 03-10-2026
 
 ### Added
 - **`--stream` flag** for CLI - enables token-by-token streaming output for better UX on slow connections
@@ -292,7 +289,7 @@ Detection order minimizes false positives/negatives:
 
 ---
 
-## [R01] - 2026-03-09 to 2026-03-10
+## [R01] - 03-09-2026 to 03-10-2026
 
 ### Added
 - **Fuzzy argument name matching** for tool invocation - handles small model hallucinations of argument names (e.g., `filepath` → `path`, `data` → `content`)
@@ -331,7 +328,7 @@ Detection order minimizes false positives/negatives:
 
 ---
 
-## [R00] - 2026-03-09
+## [R00] - 03-09-2026
 
 ### Added
 - **Skills system** following Agent Skills specification
@@ -351,7 +348,7 @@ Detection order minimizes false positives/negatives:
 
 ---
 
-## [R0] - 2026-02-06 to 2026-03-09
+## [R0] - 02-06-2026 to 03-09-2026
 
 ### Added
 - **Core framework** with zero external dependencies (stdlib only)
@@ -424,31 +421,31 @@ Detection order minimizes false positives/negatives:
 
 ---
 
-## [R1-R7] - 2026-02-08 to 2026-02-17
+## [R1-R7] - 02-08-2026 to 02-17-2026
 
 Early development iterations building the core framework.
 
-### R7 (2026-02-16 to 2026-02-17)
+### R7 (02-16-2026 to 02-17-2026)
 - 11 commits
 - Further refinements and testing
 
-### R6 (2026-02-16)
+### R6 (02-16-2026)
 - 1 commit
 - Minor update
 
-### R4 (2026-02-09)
+### R4 (02-09-2026)
 - 8 commits
 - Bug fixes and improvements
 
-### R3 (2026-02-09)
+### R3 (02-09-2026)
 - 4 commits
 - Feature additions
 
-### R2 (2026-02-08 to 2026-02-09)
+### R2 (02-08-2026 to 02-09-2026)
 - 6 commits
 - Core functionality expansion
 
-### R1 (2026-02-08)
+### R1 (02-08-2026)
 - 4 commits
 - Initial agent implementation
 
