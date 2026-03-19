@@ -6,6 +6,11 @@ Includes multi-step reasoning, comparison, and tool chaining.
 
 Run: python examples/09_expanded_benchmark.py
 
+With CLI:
+  localclaw test 09
+  localclaw test 09 --acp
+  localclaw test 09 --use-mf-sys --model qwen2.5-coder:0.5b
+
 Written by VTSTech — https://www.vts-tech.org — https://github.com/VTSTech/LocalClaw
 """
 
@@ -20,6 +25,18 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from localclaw import Agent, get_default_client, LOCALCLAW_BACKEND
 from localclaw.tools.builtins import make_builtin_registry
 from localclaw.model_discovery import get_available_models, pick_best_model
+
+# Check for optional ACP support
+USE_ACP = os.environ.get("LOCALCLAW_ACP", "0") == "1"
+if USE_ACP:
+    try:
+        from localclaw.acp_plugin import ACPPlugin
+    except ImportError:
+        print("⚠️ ACP requested but ACPPlugin not available")
+        USE_ACP = False
+
+# Check for debug mode
+DEBUG = os.environ.get("LOCALCLAW_DEBUG", "0") == "1"
 
 BACKEND_NAME = LOCALCLAW_BACKEND.upper()
 
@@ -112,7 +129,7 @@ def save_results(results):
         json.dump(results, f, indent=2)
 
 
-def test_model(client, model: str, results: dict, force_react: bool = False) -> dict:
+def test_model(client, model: str, results: dict, force_react: bool = False, acp=None) -> dict:
     """Test a single model, saving progress after each test."""
     if model not in results:
         results[model] = {
@@ -123,6 +140,18 @@ def test_model(client, model: str, results: dict, force_react: bool = False) -> 
         }
 
     model_results = results[model]
+    
+    # Create per-model ACP instance if ACP is enabled
+    model_acp = None
+    if USE_ACP and acp is None:
+        model_short = model.split(':')[0]
+        model_acp = ACPPlugin(
+            agent_name="LocalClaw",
+            model_name=model_short,
+            debug=DEBUG,
+        )
+    elif acp:
+        model_acp = acp
 
     for cat, test_name, prompt, tools, expected in TESTS:
         full_name = f"{cat}:{test_name}"
@@ -158,11 +187,17 @@ def test_model(client, model: str, results: dict, force_react: bool = False) -> 
                     "num_predict": 64,      # Very short answers
                 },
                 force_react=use_react,
+                on_step=model_acp.on_step if model_acp else None,
             )
 
             t0 = time.time()
             response = agent.chat(prompt)
             elapsed = time.time() - t0
+            
+            # Log to ACP
+            if model_acp:
+                model_acp.log_user_message(prompt)
+                model_acp.log_assistant_message(response)
 
             response_norm = normalize_text(response)
             expected_norm = normalize_text(expected)
@@ -213,6 +248,15 @@ def main():
     # Check for force_react env var
     force_react = os.environ.get("LOCALCLAW_FORCE_REACT", "").lower() in ("1", "true", "yes")
     
+    # Initialize ACP if enabled
+    main_acp = None
+    if USE_ACP:
+        main_acp = ACPPlugin(
+            agent_name="LocalClaw",
+            model_name="expanded_benchmark",
+            debug=DEBUG,
+        )
+    
     client = get_default_client()
 
     if not client.is_running():
@@ -227,6 +271,8 @@ def main():
     print(f"🦞 LocalClaw Expanded Benchmark (25 tests)")
     print(f"   Backend: {BACKEND_NAME}")
     print(f"   Available: {', '.join(available)}")
+    if USE_ACP:
+        print(f"   ACP: enabled")
     if force_react:
         print(f"   Force ReAct: YES (all models will use text-based tool calling)")
 

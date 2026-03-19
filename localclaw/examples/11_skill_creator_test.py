@@ -14,6 +14,11 @@ Models that WORK with tool calling:
 
 Run: python examples/11_skill_creator_test.py
 
+With CLI:
+  localclaw test 11
+  localclaw test 11 --acp
+  localclaw test 11 --use-mf-sys --model qwen2.5-coder:0.5b
+
 Written by VTSTech — https://www.vts-tech.org — https://github.com/VTSTech/LocalClaw
 """
 
@@ -28,6 +33,18 @@ from localclaw.skills import SkillLoader, SkillRegistry
 from localclaw import Agent, get_default_client, LOCALCLAW_BACKEND, StepResult
 from localclaw.tools.builtins import make_builtin_registry
 from localclaw.model_discovery import pick_best_model, get_available_models
+
+# Check for optional ACP support
+USE_ACP = os.environ.get("LOCALCLAW_ACP", "0") == "1"
+if USE_ACP:
+    try:
+        from localclaw.acp_plugin import ACPPlugin
+    except ImportError:
+        print("⚠️ ACP requested but ACPPlugin not available")
+        USE_ACP = False
+
+# Check for debug mode
+DEBUG = os.environ.get("LOCALCLAW_DEBUG", "0") == "1"
 
 BACKEND_NAME = LOCALCLAW_BACKEND.upper()
 
@@ -159,7 +176,7 @@ def validate_skill(content: str, skill_name: str, expected_sections: list) -> di
     return result
 
 
-def test_model_with_skill(client, model: str, skill_request: dict, skills_dir: str, skill_creator_instructions: str) -> dict:
+def test_model_with_skill(client, model: str, skill_request: dict, skills_dir: str, skill_creator_instructions: str, acp=None) -> dict:
     """Test if a model can CREATE a skill autonomously."""
     
     skill_name = skill_request["name"]
@@ -173,6 +190,18 @@ def test_model_with_skill(client, model: str, skill_request: dict, skills_dir: s
     if os.path.exists(skill_dir):
         shutil.rmtree(skill_dir)
     os.makedirs(skill_dir, exist_ok=True)
+    
+    # Create per-model ACP instance if ACP is enabled
+    model_acp = None
+    if USE_ACP and acp is None:
+        model_short = model.split(':')[0]
+        model_acp = ACPPlugin(
+            agent_name="LocalClaw",
+            model_name=model_short,
+            debug=DEBUG,
+        )
+    elif acp:
+        model_acp = acp
     
     # Create agent with write_file tool
     tools = make_builtin_registry().subset(["write_file"])
@@ -194,6 +223,13 @@ The skill must have:
 
 Use the write_file tool to create the file."""
 
+    # Combine step callbacks for verbose and ACP
+    def on_step_callback(s):
+        if VERBOSE:
+            print_step(s, "    ")
+        if model_acp:
+            model_acp.on_step(s)
+
     agent = Agent(
         model=model,
         tools=tools,
@@ -205,7 +241,7 @@ Use the write_file tool to create the file."""
             "num_ctx": 2048,         # Enough for skill creation
             "num_predict": 1024,     # Enough for skill content
         },
-        on_step=lambda s: print_step(s, "    ") if VERBOSE else None,
+        on_step=on_step_callback,
     )
     
     # PROMPT: Just ask for the skill, DON'T provide content!
@@ -228,6 +264,11 @@ Call write_file now."""
     try:
         result = agent.run(prompt)
         elapsed = time.time() - start
+        
+        # Log to ACP
+        if model_acp:
+            model_acp.log_user_message(prompt)
+            model_acp.log_assistant_message(result.final_answer)
         
         # Collect step info
         for s in result.steps:
@@ -301,7 +342,18 @@ def main():
     print("The skill content is NOT provided - models must generate it!")
     print("Working models: functiongemma:270m, qwen2.5:0.5b, granite4:350m")
     print(f"Verbose: {VERBOSE}, Timeout: {TIMEOUT}s")
+    if USE_ACP:
+        print(f"ACP: enabled")
     print("=" * 60)
+    
+    # Initialize ACP if enabled
+    main_acp = None
+    if USE_ACP:
+        main_acp = ACPPlugin(
+            agent_name="LocalClaw",
+            model_name="skill_creator_test",
+            debug=DEBUG,
+        )
     
     # Load skill-creator instructions
     loader = SkillLoader()
