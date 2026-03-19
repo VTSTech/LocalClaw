@@ -26,6 +26,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - **Merged `_acp` scripts into base scripts** - No more duplicate files
   - `07_model_comparison.py` now supports `--acp` flag (removed `07_model_comparison_acp.py`)
   - `08_robust_comparison.py` now supports `--acp` flag (removed `08_robust_comparison_acp.py`)
+  - `09_expanded_benchmark.py` now supports `--acp` flag (added ACP integration)
+  - `11_skill_creator_test.py` now supports `--acp` flag (added ACP integration)
   - `12_batch_operations.py` created from former `12_batch_operations_acp.py` (requires ACP)
   - `13_shutdown_demo.py` created from former `13_shutdown_demo_acp.py` (requires ACP)
   - `14_gsm8k_benchmark.py` created from `gsm8k_agent_benchmark.py` with ACP support
@@ -44,8 +46,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ### Test Script ACP Support Matrix
 | Test | LOCALCLAW_ACP | Notes |
 |------|---------------|-------|
-| 01-08 | ✅ Conditional | ACP optional, runs without it |
-| 09-11 | ❌ Not yet | Future updates |
+| 01-11 | ✅ Conditional | ACP optional, runs without it |
 | 12-13 | ✅ Required | Exits gracefully if ACP unavailable |
 | 14 | ✅ Conditional | ACP optional, runs without it |
 
