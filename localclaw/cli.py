@@ -437,7 +437,7 @@ def _build_agent(args, client: OllamaClient):
 
 def cmd_models(args):
     backend = getattr(args, "backend", "ollama")
-    test_tools = getattr(args, "test_tools", False)
+    tool_support = getattr(args, "tool_support", False)
     verbose = getattr(args, "verbose", False)
     
     if backend == "bitnet":
@@ -478,8 +478,8 @@ def cmd_models(args):
     # Load tested models from storage
     tested_models = _load_tested_models()
     
-    # If --tool-support flag, test each model
-    if test_tools:
+    # If --tool_support flag, test each model
+    if tool_support:
         print(cyan("\n  Testing tool support for all models..."))
         print(dim("  Using Modelfile system prompts (no custom prompts)\n"))
         
@@ -578,7 +578,7 @@ def cmd_models(args):
     # Show hint about testing
     untested_count = sum(1 for _, _, _, ts in model_data if ts == "untested")
     if untested_count > 0:
-        print(dim(f"\n  {untested_count} model(s) untested. Use --tool-support to detect native support."))
+        print(dim(f"\n  {untested_count} model(s) untested. Use --tool_support to detect native support."))
     print()
 
 
@@ -1655,7 +1655,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     # ── models ──────────────────────────────────────────────────────
     p_models = sub.add_parser("models", parents=[shared], help="List available models")
-    p_models.add_argument("--tool-support", action="store_true", help="Test each model for native tool support")
+    p_models.add_argument("--tool_support", action="store_true", help="Test each model for native tool support")
     p_models.set_defaults(func=cmd_models)
 
     # ── tools ───────────────────────────────────────────────────────
