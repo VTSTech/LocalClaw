@@ -31,6 +31,7 @@ from localclaw import (
     get_default_client,
     get_available_models,
     get_system_prompt,
+    get_tool_support,  # Tool support detection
     DEFAULT_MODEL,
     LOCALCLAW_BACKEND,
     OLLAMA_BASE_URL,
@@ -131,6 +132,10 @@ def main():
     
     print(f"\n🤖 Using model: {model}")
     
+    # Detect tool support level
+    tool_support = get_tool_support(model, client)
+    print(f"   Tool support: {tool_support}")
+    
     # Initialize ACP if enabled
     acp = None
     if USE_ACP:
@@ -146,9 +151,10 @@ def main():
         print(f"   ACP Status: {'connected' if bootstrap.get('status') else 'unavailable'}")
     
     # Create agent with tools
-    # Note: BitNet models don't support native tool calling,
-    # so Agent will automatically use ReAct fallback
-    tools = make_builtin_registry().subset(["calculator"])
+    # Note: Models with 'none' tool support won't use tools
+    # Models with 'react' support will use text-based tool calling
+    # Models with 'native' support will use API tool calling
+    tools = make_builtin_registry().subset(["calculator"]) if tool_support != "none" else None
     
     agent = Agent(
         model=model,

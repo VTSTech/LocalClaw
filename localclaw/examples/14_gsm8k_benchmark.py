@@ -147,25 +147,31 @@ def test_model_with_agent(model: str, question: str, expected: str, client, acp=
     Test a model using the full Agent system with calculator tool.
     """
     try:
-        # Choose prompt based on model size and force_react setting
-        is_small = any(x in model.lower() for x in ["270m", "135m", "350m", "0.5b", "tiny", "1b"])
+        # Detect tool support level
+        tool_support = get_tool_support(model, client)
         
-        # Use ReAct-specific prompt when forcing ReAct mode
-        if force_react:
-            system_prompt = MATH_SYSTEM_PROMPT_REACT
-        elif is_small:
+        # Choose prompt based on tool support level
+        if tool_support == "none":
+            # Model doesn't support tools - use compact prompt without tools
             system_prompt = MATH_SYSTEM_PROMPT_COMPACT
-        else:
+            use_react = False
+        elif tool_support == "native":
+            # Native tool support - use tools via API
             system_prompt = MATH_SYSTEM_PROMPT
+            use_react = False
+        else:
+            # ReAct mode - text-based tool calling
+            system_prompt = MATH_SYSTEM_PROMPT_REACT if force_react else MATH_SYSTEM_PROMPT
+            use_react = True
         
         # Build step callback for ACP if enabled
         on_step = acp.on_step if acp else None
         
-        # Create agent with tools
-        use_react = force_react or is_small
+        # Create agent with tools (or None if no tool support)
+        agent_tools = create_calculator_tool() if tool_support != "none" else None
         agent = Agent(
             model=model,
-            tools=create_calculator_tool(),
+            tools=agent_tools,
             system_prompt=system_prompt,
             max_steps=5,
             client=client,
