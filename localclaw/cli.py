@@ -212,8 +212,24 @@ def _build_agent(args, client: OllamaClient):
 
     # Build system prompt — structured for small model reliability
     if getattr(args, "system", None):
+        # Explicit override via --system flag
         system_prompt = args.system
+    elif getattr(args, "use_modelfile_system", False):
+        # Use the Modelfile's system prompt instead of LocalClaw's default
+        mf_system = client.get_modelfile_system_prompt(args.model)
+        if mf_system:
+            system_prompt = mf_system
+            if getattr(args, "verbose", False):
+                print(dim(f"  📜 Using Modelfile system prompt ({len(mf_system)} chars)"))
+        else:
+            # No system prompt in Modelfile, fall back to default with warning
+            print(yellow(f"  ⚠ No SYSTEM prompt found in Modelfile for '{args.model}', using LocalClaw default"))
+            system_prompt = None  # Will trigger default below
     else:
+        system_prompt = None
+    
+    # If no system prompt set yet, use LocalClaw's default
+    if system_prompt is None:
         tool_lines = ""
         if tools_registry:
             for t in tools_registry.all():
