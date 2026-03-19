@@ -115,6 +115,7 @@ localclaw run "Calculate 17 * 23" --backend bitnet --tools calculator
 | `tools` | List built-in tools |
 | `skills` | List available Agent Skills |
 | `test [example]` | Run example/test scripts (`--list` to see all) |
+| `modelfile [model]` | Show model's Modelfile system prompt |
 
 ### Key Flags
 
@@ -127,6 +128,33 @@ localclaw run "Calculate 17 * 23" --backend bitnet --tools calculator
 | `--stream` | Stream output token-by-token |
 | `--fast` | Preset: reduced context for speed |
 | `-v`, `--verbose` | Show tool calls and timing |
+| `--acp` | Enable ACP (Agent Control Panel) integration |
+| `--use-mf-sys` | Use Modelfile system prompt instead of LocalClaw default |
+| `--debug` | Show debug info (parsed tool calls, fuzzy matching) |
+
+### Test Command Examples
+
+```bash
+# List all available tests
+localclaw test --list
+
+# Run a quick test suite
+localclaw test quick
+
+# Run a specific test
+localclaw test 01
+localclaw test 07
+
+# Run with ACP integration (activity tracking)
+localclaw test 01 --acp
+localclaw test 14_acp    # shorthand, auto-enables --acp
+
+# Run with Modelfile system prompt
+localclaw test 01 --use-mf-sys --model qwen2.5-coder:0.5b
+
+# Run with debug output
+localclaw test 02 --debug --verbose
+```
 
 ---
 

@@ -6,6 +6,51 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [R03.0.9] - 2026-03-19
+
+### Added
+- **`--acp` flag for test command** - Enables ACP (Agent Control Panel) integration for all test scripts
+  - Usage: `localclaw test 01 --acp` or `localclaw test 14_acp`
+  - Passes `LOCALCLAW_ACP=1` environment variable to test scripts
+  - Provides activity tracking, token counting, and session logging via ACP server
+- **`--use-mf-sys` flag for test command** - Use Modelfile system prompts instead of LocalClaw defaults
+  - Usage: `localclaw test 01 --use-mf-sys --model qwen2.5-coder:0.5b`
+  - Passes `LOCALCLAW_USE_MF_SYS=1` environment variable to test scripts
+- **`--debug` flag for test command** - Enable debug output for parsed tool calls and fuzzy matching
+  - Passes `LOCALCLAW_DEBUG=1` environment variable to test scripts
+- **`LOCALCLAW_ACP` environment variable** - Universal ACP control across all examples
+  - All example scripts now check this env var to conditionally enable ACP
+  - Scripts create model-specific ACP instances for per-model tracking
+
+### Changed
+- **Merged `_acp` scripts into base scripts** - No more duplicate files
+  - `07_model_comparison.py` now supports `--acp` flag (removed `07_model_comparison_acp.py`)
+  - `08_robust_comparison.py` now supports `--acp` flag (removed `08_robust_comparison_acp.py`)
+  - `12_batch_operations.py` created from former `12_batch_operations_acp.py` (requires ACP)
+  - `13_shutdown_demo.py` created from former `13_shutdown_demo_acp.py` (requires ACP)
+  - `14_gsm8k_benchmark.py` created from `gsm8k_agent_benchmark.py` with ACP support
+- **Test numbering reorganized**:
+  - Test 12: Batch operations (ACP demo)
+  - Test 13: Shutdown demo (ACP demo)
+  - Test 14: GSM8K benchmark (50 math questions)
+  - Removed old `gsm8k` and `gsm8k_acp` test IDs
+- **Updated cli.py EXAMPLES dict** with new test entries and `_acp` shorthand mappings
+  - Running `localclaw test 07_acp` auto-enables ACP and runs base script
+  - All tests now support `--acp`, `--debug`, `--use-mf-sys`, and `--model` flags
+
+### Fixed
+- **Syntax error in `08_robust_comparison.py`** - Fixed malformed `get_small_models()` function
+
+### Test Script ACP Support Matrix
+| Test | LOCALCLAW_ACP | Notes |
+|------|---------------|-------|
+| 01-08 | ✅ Conditional | ACP optional, runs without it |
+| 09-11 | ❌ Not yet | Future updates |
+| 12-13 | ✅ Required | Exits gracefully if ACP unavailable |
+| 14 | ✅ Conditional | ACP optional, runs without it |
+
+---
+
 ## [R03.0.8] - 2026-03-18
 
 ### Added
