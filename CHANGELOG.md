@@ -6,6 +6,47 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [R03.1.0] - 2026-03-19
+
+### Added
+- **Dynamic tool support detection** - Models are now tested individually instead of relying on family-based heuristics
+  - New `--tool_support` flag for `models` command: `localclaw models --tool_support`
+  - Tests each model using Ollama's native tool API with Modelfile system prompts (no custom prompts)
+  - Results persisted to `tested_models.json` for future reference
+- **Enhanced `models` command output** - Now displays 4 columns:
+  - **Model** - Model name
+  - **Family** - Model family from Ollama API
+  - **Context** - Context window size
+  - **Tool Support** - `✓ native`, `ReAct`, or `○ none`
+
+### Tool Support Detection Logic
+Detection order minimizes false positives/negatives:
+1. **Ollama rejection** - HTTP 400 "does not support tools" → `none` (definitive)
+2. **Native tool_calls** - Structured response in API → `native` (definitive)
+3. **ReAct patterns** - JSON or `Action:` style in text → `react` (stricter regex matching)
+4. **Default to none** - No tool usage detected → `none` (conservative)
+
+### Changed
+- **Default tool support** - Untested models now show `ReAct (?)` until tested with `--tool_support`
+- **Removed family-based assumptions** - Models are no longer assumed to support tools based on family name
+- **Improved ReAct detection** - Stricter pattern matching for tool call attempts:
+  - JSON-style: `{"name": "get_weather", ...}`
+  - ReAct-style: `Action: get_weather`
+  - Natural language: `call tool: get_weather`
+
+### Example Output
+```
+🦞 LocalClaw R03 Models · Written by VTSTech · https://www.vts-tech.org · https://github.com/VTSTech/LocalClaw
+  Model                                      Family       Context    Tool Support
+  ──────────────────────────────────────────────────────────────────────────────
+  driaforall/tiny-agent-a:1.5b               qwen2        32K        ReAct
+  gemma3:270m                                gemma3       32K        ○ none
+  granite4:350m                              granite      32K        ✓ native
+  qwen2.5-coder:0.5b-instruct-q4_k_m         qwen2        32K        ReAct
+```
+
+---
+
 ## [R03.0.9] - 2026-03-19
 
 ### Added

@@ -111,7 +111,7 @@ localclaw run "Calculate 17 * 23" --backend bitnet --tools calculator
 |---------|-------------|
 | `run "prompt"` | Run single prompt and exit |
 | `chat` | Interactive multi-turn conversation |
-| `models` | List available Ollama models |
+| `models` | List available Ollama models with tool support info |
 | `tools` | List built-in tools |
 | `skills` | List available Agent Skills |
 | `test [example]` | Run example/test scripts (`--list` to see all) |
@@ -131,6 +131,34 @@ localclaw run "Calculate 17 * 23" --backend bitnet --tools calculator
 | `--acp` | Enable ACP (Agent Control Panel) integration |
 | `--use-mf-sys` | Use Modelfile system prompt instead of LocalClaw default |
 | `--debug` | Show debug info (parsed tool calls, fuzzy matching) |
+
+### Models Command
+
+```bash
+# List models with family, context size, and tool support
+localclaw models
+
+# Test each model for native tool support
+localclaw models --tool_support
+```
+
+Output shows:
+- **Model** - Model name
+- **Family** - Model family from Ollama API
+- **Context** - Context window size
+- **Tool Support** - `✓ native`, `ReAct`, `○ none`, or `ReAct (?)` (untested)
+
+```
+🦞 LocalClaw R03 Models
+  Model                                      Family       Context    Tool Support
+  ──────────────────────────────────────────────────────────────────────────────
+  driaforall/tiny-agent-a:1.5b               qwen2        32K        ReAct
+  gemma3:270m                                gemma3       32K        ○ none
+  granite4:350m                              granite      32K        ✓ native
+  qwen2.5-coder:0.5b-instruct-q4_k_m         qwen2        32K        ReAct
+
+  2 model(s) untested. Use --tool_support to detect native support.
+```
 
 ### Test Command Examples
 
