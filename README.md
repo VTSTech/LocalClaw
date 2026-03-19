@@ -179,6 +179,7 @@ localclaw test 02 --debug --verbose
 |----------|-------------|---------|
 | `OLLAMA_BASE_URL` | Ollama server URL | `http://localhost:11434` |
 | `BITNET_BASE_URL` | BitNet server URL | `http://localhost:8765` |
+| `ACP_BASE_URL` | ACP (Agent Control Panel) server URL | `http://localhost:8766` |
 | `LOCALCLAW_BACKEND` | Backend: `ollama` or `bitnet` | `ollama` |
 | `LOCALCLAW_MODEL` | Default model | `qwen2.5-coder:0.5b-instruct-q4_k_m` |
 | `LOCALCLAW_SECURITY_MODE` | Security mode: `strict`, `permissive`, `disabled` | `permissive` |
