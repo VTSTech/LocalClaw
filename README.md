@@ -6,9 +6,11 @@ Inspired by the architecture of OpenClaw, rebuilt from scratch for local-first o
 
 **Written by [VTSTech](https://www.vts-tech.org)** · [GitHub](https://github.com/VTSTech/LocalClaw)
 
-[![PyPI version fury.io](https://badge.fury.io/py/localclaw.svg)](https://pypi.python.org/pypi/localclaw/) [![PyPI status](https://img.shields.io/pypi/status/localclaw.svg)](https://pypi.python.org/pypi/localclaw/)
+[![PyPI version fury.io](https://badge.fury.io/py/localclaw.svg)](https://pypi.python.org/pypi/localclaw/) [![PyPI status](https://img.shields.io/pypi/status/localclaw.svg)](https://pypi.python.org/pypi/localclaw/) [![GitHub commits](https://badgen.net/github/commits/VTSTech/LocalClaw)](https://GitHub.com/VTSTech/LocalClaw/commit/)
 
-[![PyPI download month](https://img.shields.io/pypi/dm/localclaw.svg)](https://pypi.python.org/pypi/localclaw/)[![PyPI download week](https://img.shields.io/pypi/dw/localclaw.svg)](https://pypi.python.org/pypi/localclaw/)[![PyPI download day](https://img.shields.io/pypi/dd/localclaw.svg)](https://pypi.python.org/pypi/localclaw/)
+
+
+[![PyPI download month](https://img.shields.io/pypi/dm/localclaw.svg)](https://pypi.python.org/pypi/localclaw/) [![PyPI download week](https://img.shields.io/pypi/dw/localclaw.svg)](https://pypi.python.org/pypi/localclaw/) [![PyPI download day](https://img.shields.io/pypi/dd/localclaw.svg)](https://pypi.python.org/pypi/localclaw/)
 
 
 ---
