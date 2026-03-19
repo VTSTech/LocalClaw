@@ -113,7 +113,7 @@ __all__ = [
 if _BITNET_AVAILABLE:
     __all__.extend(["BitnetClient", "KNOWN_MODELS"])
 
-__version__ = "0.3.0.8"
+__version__ = "0.3.0.9"
 __author__ = "VTSTech"
 __author_email__ = "contact@vts-tech.org"
 __url__ = "https://github.com/VTSTech/LocalClaw"

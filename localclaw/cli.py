@@ -377,6 +377,76 @@ def cmd_tools(args):
     print()
 
 
+def cmd_modelfile(args):
+    """Show model's Modelfile system prompt and other info."""
+    client = OllamaClient()
+    
+    if not client.is_running():
+        print(red("✗  Ollama is not running. Start it with: ollama serve"))
+        sys.exit(1)
+    
+    model = args.model
+    print(bold(f"\n🦞 LocalClaw R03 Modelfile") + dim(" · Written by VTSTech · https://www.vts-tech.org · https://github.com/VTSTech/LocalClaw"))
+    print()
+    
+    try:
+        info = client.get_model_info(model)
+    except Exception as e:
+        print(red(f"✗  Could not get info for model '{model}': {e}"))
+        sys.exit(1)
+    
+    # Display model information
+    print(bold(f"Model: {model}"))
+    print(dim("─" * 70))
+    print()
+    
+    # System prompt from Modelfile
+    system_prompt = info.get("system")
+    if system_prompt:
+        print(cyan("SYSTEM PROMPT (from Modelfile):"))
+        print()
+        print(system_prompt)
+        print()
+    else:
+        print(dim("(No SYSTEM prompt defined in Modelfile)"))
+        print()
+    
+    # Template
+    template = info.get("template")
+    if template:
+        print(cyan("TEMPLATE:"))
+        print()
+        print(template)
+        print()
+    
+    # Parameters
+    params = info.get("parameters", "")
+    if params:
+        print(cyan("PARAMETERS:"))
+        print()
+        # Pretty print parameters if it's a string
+        for line in params.strip().split("\n"):
+            if line.strip():
+                print(dim(f"  {line.strip()}"))
+        print()
+    
+    # License
+    license = info.get("license", "")
+    if license:
+        print(cyan("LICENSE:"))
+        print(f"  {license}")
+        print()
+    
+    # Details
+    details = info.get("details", {})
+    if details:
+        print(cyan("DETAILS:"))
+        print()
+        for key, value in details.items():
+            print(dim(f"  {key}: {value}"))
+        print()
+
+
 def cmd_skills(args):
     loader = SkillLoader()
     skills = loader.list_skills()
@@ -1291,6 +1361,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="Enable ACP (Agent Control Panel) integration for activity tracking",
     )
     shared.add_argument(
+        "--use-mf-system",
+        action="store_true",
+        dest="use_modelfile_system",
+        help="Use the system prompt from the model's Modelfile instead of LocalClaw's default",
+    )
+    shared.add_argument(
         "--backend",
         default="ollama",
         choices=["ollama", "bitnet"],
@@ -1336,6 +1412,11 @@ def build_parser() -> argparse.ArgumentParser:
     # ── tools ───────────────────────────────────────────────────────
     p_tools = sub.add_parser("tools", parents=[shared], help="List available tools")
     p_tools.set_defaults(func=cmd_tools)
+
+    # ── modelfile ──────────────────────────────────────────────────────
+    p_modelfile = sub.add_parser("modelfile", parents=[shared], help="Show model's Modelfile system prompt")
+    p_modelfile.add_argument("model", help="Model name to show Modelfile info for")
+    p_modelfile.set_defaults(func=cmd_modelfile)
 
     # ── skills ──────────────────────────────────────────────────────
     p_skills = sub.add_parser("skills", parents=[shared], help="List available skills")
