@@ -4,8 +4,8 @@
 This plugin connects LocalClaw agents to an ACP (Agent Control Panel) server,
 enabling real-time monitoring, token tracking, and STOP/Resume control.
 
-ACP Specification: v1.0.4 (A2A Compliance)
-Compliance: Full (mandatory requirements, hints, orphan handling, nudge support, batch ops, shutdown, A2A, JSON-RPC 2.0)
+ACP Specification: v1.0.5 (A2A Compliance)
+Compliance: Full (mandatory requirements, hints, orphan handling, nudge support, batch ops, shutdown, A2A, JSON-RPC 2.0, primary agent nudge delivery)
 
 Features:
 - Logs all tool calls to ACP (using combined /api/action endpoint)
@@ -23,6 +23,8 @@ Features:
 - Agent Card discovery via well-known URI (1.0.4)
 - AgentSkill registration support (1.0.4)
 - contextId tracking for session continuity (1.0.4)
+- primary_agent in /api/whoami response (1.0.5)
+- Nudges delivered only to primary agent (1.0.5)
 
 Usage:
     from localclaw import Agent

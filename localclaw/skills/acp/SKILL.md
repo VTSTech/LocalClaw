@@ -6,7 +6,7 @@ argument-hint: "No arguments needed - just invoke to bootstrap ACP workflow"
 
 # ACP Skill (Minimal)
 
-**Version:** 1.0.4 | **A2A Compliant**
+**Version:** 1.0.5 | **A2A Compliant**
 
 ## Environment (Ask Human)
 
@@ -23,11 +23,19 @@ argument-hint: "No arguments needed - just invoke to bootstrap ACP workflow"
 Execute on every session start / context resume:
 
 ```
-1. GET  {ACP_URL}/api/status       → Check stop_flag, orphan_warning
-2. GET  {ACP_URL}/api/whoami       → Establish identity
+1. GET  {ACP_URL}/api/status       → Check stop_flag, orphan_warning, primary_agent
+2. GET  {ACP_URL}/api/whoami       → Establish identity, check if you are primary agent
 3. POST {ACP_URL}/api/agents/register {"agent_name": "Super Z", "capabilities": [...], "model_name": "..."}
 4. POST {ACP_URL}/api/action {"action": "CHAT", "target": "Session bootstrap", "metadata": {"agent_name": "Super Z"}}
 ```
+
+**Response Fields (1.0.5):**
+
+| Endpoint | Field | Description |
+|----------|-------|-------------|
+| `/api/status` | `primary_agent` | Name of agent that owns the context |
+| `/api/whoami` | `primary_agent` | Who owns the context (check if it's you) |
+| `/api/action` | `nudge` | Only delivered to primary agent |
 
 **If `stop_flag: true`**: STOP immediately, inform user, wait for resume.
 
@@ -118,12 +126,23 @@ Check these in **every** `/api/action` response:
 | Field | Action |
 |-------|--------|
 | `stop_flag: true` | STOP immediately |
-| `nudge` | Human guidance, ack if `requires_ack: true` |
+| `nudge` | Human guidance, ack if `requires_ack: true` (primary agent only - 1.0.5) |
+| `primary_agent` | In /api/whoami - check if you own the context (1.0.5) |
 | `orphan_warning` | Complete orphan tasks first |
 | `hints.modified_this_session` | File was already modified - check before editing |
 | `hints.loop_detected` | Same action repeated 3+ times - change approach |
 | `hints.suggestion` | Actionable advice - follow it |
 | `hints.a2a.pending_count` | Pending A2A messages - retrieve via /api/a2a/history |
+
+**Note (1.0.5):** Nudges are delivered **only to the primary agent** (first agent to log activity). Secondary agents will always receive `nudge: null` in their API responses. This prevents context pollution in multi-agent environments.
+
+**To check if you are primary:**
+```bash
+GET /api/whoami
+→ {"primary_agent": "Super Z", ...}
+
+# If primary_agent matches your agent_name, you will receive nudges
+```
 
 ---
 
@@ -306,4 +325,4 @@ POST /api/files/mkdir           # Create dir {"path": "...", "name": "..."}
 
 ---
 
-*ACP Skill 1.0.4 Minimal*
+*ACP Skill 1.0.5 Minimal*
