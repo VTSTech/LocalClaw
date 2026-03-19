@@ -45,7 +45,7 @@ USE_MF_SYS = os.environ.get("LOCALCLAW_USE_MF_SYS", "0") == "1"
 # Import ACP if needed
 if USE_ACP:
     try:
-        from localclaw import ACPPlugin
+        from localclaw.acp_plugin import ACPPlugin
     except ImportError:
         print("⚠️ ACP requested but ACPPlugin not available")
         USE_ACP = False
@@ -61,6 +61,16 @@ TIMEOUT = int(os.environ.get("LOCALCLAW_TIMEOUT", "120"))  # seconds per test
 
 # ACP instance (global for step callback)
 acp = None
+
+
+def make_step_callback(verbose: bool, acp_instance=None):
+    """Create a combined step callback for verbose output and ACP logging."""
+    def on_step(step: StepResult):
+        if verbose:
+            print_step(step)
+        if acp_instance:
+            acp_instance.on_step(step)
+    return on_step
 
 
 def print_step(step: StepResult):
@@ -119,7 +129,7 @@ def run_test(agent, prompt: str, timeout: int = TIMEOUT):
 
 def test_calculator():
     """Test calculator tool - models must figure out how to use it."""
-    global MODEL
+    global MODEL, acp
     client = get_default_client()
     
     if not client.is_running():
@@ -136,10 +146,22 @@ def test_calculator():
         print(f"❌ No models available in {BACKEND_NAME}.")
         return 0, 0
     
+    # Create ACP instance for this test if enabled
+    test_acp = None
+    if USE_ACP:
+        model_short = MODEL.split(':')[0]
+        test_acp = ACPPlugin(
+            agent_name="LocalClaw",
+            model_name=model_short,
+            debug=DEBUG,
+        )
+    
     print(f"\n{'='*60}")
     print(f"🧮 Calculator Tool Tests")
     print(f"   Model: {MODEL}")
     print(f"   Timeout: {TIMEOUT}s per test")
+    if USE_ACP:
+        print(f"   ACP: enabled")
     print(f"{'='*60}")
     
     tools = make_builtin_registry().subset(["calculator"])
@@ -165,7 +187,7 @@ def test_calculator():
             tools=tools,
             system_prompt="Answer math questions using the calculator tool. Call the calculator with the expression.",
             max_steps=5,
-            on_step=print_step if VERBOSE else None,
+            on_step=make_step_callback(VERBOSE, test_acp),
             model_options={
                 "temperature": 0.0,      # Deterministic
                 "num_ctx": 1024,         # Enough for tool definitions + prompt
@@ -181,6 +203,11 @@ def test_calculator():
             results.append(False)
             print(f"  ❌ Error: {error}")
             continue
+        
+        # Log to ACP
+        if test_acp:
+            test_acp.log_user_message(prompt)
+            test_acp.log_assistant_message(run.final_answer)
         
         # Check if tool was actually used
         tool_used = check_tool_used(run, "calculator")
@@ -213,11 +240,23 @@ def test_calculator():
 
 def test_shell():
     """Test shell tool - models must figure out how to use it."""
+    global acp
     client = get_default_client()
+    
+    # Create ACP instance for this test if enabled
+    test_acp = None
+    if USE_ACP:
+        test_acp = ACPPlugin(
+            agent_name="LocalClaw",
+            model_name=f"{MODEL.split(':')[0]}_shell",
+            debug=DEBUG,
+        )
     
     print(f"\n{'='*60}")
     print(f"🖥️  Shell Tool Tests")
     print(f"   Model: {MODEL}")
+    if USE_ACP:
+        print(f"   ACP: enabled")
     print(f"{'='*60}")
     
     tools = make_builtin_registry().subset(["shell"])
@@ -241,7 +280,7 @@ def test_shell():
             tools=tools,
             system_prompt="Use the shell tool to run commands when asked.",
             max_steps=5,
-            on_step=print_step if VERBOSE else None,
+            on_step=make_step_callback(VERBOSE, test_acp),
             model_options={
                 "temperature": 0.0,      # Deterministic
                 "num_ctx": 1024,         # Enough for tool definitions + prompt
@@ -257,6 +296,11 @@ def test_shell():
             results.append(False)
             print(f"  ❌ Error: {error}")
             continue
+        
+        # Log to ACP
+        if test_acp:
+            test_acp.log_user_message(prompt)
+            test_acp.log_assistant_message(run.final_answer)
         
         # Verify tool was used
         tool_used = check_tool_used(run, required_tool)
@@ -289,11 +333,23 @@ def test_shell():
 
 def test_python_repl():
     """Test Python REPL tool - models must figure out how to use it."""
+    global acp
     client = get_default_client()
+    
+    # Create ACP instance for this test if enabled
+    test_acp = None
+    if USE_ACP:
+        test_acp = ACPPlugin(
+            agent_name="LocalClaw",
+            model_name=f"{MODEL.split(':')[0]}_python",
+            debug=DEBUG,
+        )
     
     print(f"\n{'='*60}")
     print(f"🐍 Python REPL Tool Tests")
     print(f"   Model: {MODEL}")
+    if USE_ACP:
+        print(f"   ACP: enabled")
     print(f"{'='*60}")
     
     tools = make_builtin_registry().subset(["python_repl"])
@@ -317,7 +373,7 @@ def test_python_repl():
             tools=tools,
             system_prompt="Use Python REPL for calculations. Use print() to show results in your code.",
             max_steps=5,
-            on_step=print_step if VERBOSE else None,
+            on_step=make_step_callback(VERBOSE, test_acp),
             model_options={
                 "temperature": 0.0,      # Deterministic
                 "num_ctx": 1024,         # Enough for tool definitions + prompt
@@ -333,6 +389,11 @@ def test_python_repl():
             results.append(False)
             print(f"  ❌ Error: {error}")
             continue
+        
+        # Log to ACP
+        if test_acp:
+            test_acp.log_user_message(prompt)
+            test_acp.log_assistant_message(run.final_answer)
         
         # Verify tool was used
         tool_used = check_tool_used(run, required_tool)
@@ -373,6 +434,8 @@ def main():
     print(f"   Backend: {BACKEND_NAME}")
     print(f"   Verbose: {VERBOSE}")
     print(f"   Timeout: {TIMEOUT}s")
+    if USE_ACP:
+        print(f"   ACP: enabled")
     print(f"{'='*60}")
     
     total_passed = 0
