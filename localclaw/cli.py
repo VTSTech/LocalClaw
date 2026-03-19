@@ -429,7 +429,11 @@ def cmd_models(args):
         # Truncate long model names
         m_display = m[:40] + ".." if len(m) > 42 else m
         family_display = family[:10] + ".." if len(family) > 12 else family
-        print(f"  {cyan(m_display):<42} {family_display:<12} {ctx:<10} {support_str}")
+        # Pad first, then apply color (ANSI codes don't count for width)
+        m_padded = f"{m_display:<42}"
+        family_padded = f"{family_display:<12}"
+        ctx_padded = f"{ctx:<10}"
+        print(f"  {cyan(m_padded)} {family_padded} {ctx_padded} {support_str}")
     print()
 
 
