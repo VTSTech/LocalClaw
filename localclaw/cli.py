@@ -49,6 +49,111 @@ try:
 except ImportError:
     _BITNET_AVAILABLE = False
 
+# Path to tested models storage
+_TESTED_MODELS_FILE = Path(__file__).parent / "tested_models.json"
+
+
+def _load_tested_models() -> dict:
+    """Load tested models from JSON file."""
+    try:
+        if _TESTED_MODELS_FILE.exists():
+            with open(_TESTED_MODELS_FILE, "r") as f:
+                data = json.load(f)
+                return data.get("models", {})
+    except Exception:
+        pass
+    return {}
+
+
+def _save_tested_models(models: dict):
+    """Save tested models to JSON file."""
+    try:
+        data = {
+            "_comment": "Tool support test results for LocalClaw models",
+            "_version": "1.0",
+            "_updated": datetime.datetime.now().isoformat(),
+            "models": models
+        }
+        with open(_TESTED_MODELS_FILE, "w") as f:
+            json.dump(data, f, indent=2)
+    except Exception as e:
+        print(yellow(f"  ⚠ Could not save tested models: {e}"))
+
+
+def _test_model_tool_support(client: OllamaClient, model: str, verbose: bool = False) -> str:
+    """
+    Test if a model supports native tool calling.
+    Uses the model's Modelfile system prompt (no custom prompts).
+    
+    Returns: "native", "react", or "none"
+    """
+    # Simple test tool
+    test_tool = {
+        "type": "function",
+        "function": {
+            "name": "get_weather",
+            "description": "Get the current weather for a location",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "location": {
+                        "type": "string",
+                        "description": "The city and country, e.g., 'Paris, France'"
+                    }
+                },
+                "required": ["location"]
+            }
+        }
+    }
+    
+    test_message = {
+        "role": "user",
+        "content": "What's the weather like in Tokyo?"
+    }
+    
+    if verbose:
+        print(dim(f"    Testing {model}..."), end=" ", flush=True)
+    
+    try:
+        # Send request with tools but NO system prompt override
+        # This lets the model's Modelfile system prompt be used
+        response = client.chat(
+            model=model,
+            messages=[test_message],
+            tools=[test_tool],
+            options={"num_predict": 100}  # Limit response size
+        )
+        
+        # Check if model made a tool call
+        message = response.get("message", {})
+        tool_calls = message.get("tool_calls", [])
+        
+        if tool_calls:
+            # Verify it's a valid tool call for our function
+            for tc in tool_calls:
+                func = tc.get("function", {})
+                if func.get("name") == "get_weather":
+                    if verbose:
+                        print(green("✓ native"))
+                    return "native"
+        
+        # Check if model tried to call tool in text (ReAct style)
+        content = message.get("content", "")
+        if "get_weather" in content.lower() or "tool" in content.lower():
+            if verbose:
+                print(yellow("→ ReAct"))
+            return "react"
+        
+        # No tool usage detected
+        if verbose:
+            print(dim("○ none"))
+        return "none"
+        
+    except Exception as e:
+        if verbose:
+            print(red(f"✗ error: {e}"))
+        return "error"
+
 # Global reference for A2A processing (set in cmd_chat)
 _acp_plugin = None
 _tools_registry = None
@@ -332,6 +437,8 @@ def _build_agent(args, client: OllamaClient):
 
 def cmd_models(args):
     backend = getattr(args, "backend", "ollama")
+    test_tools = getattr(args, "test_tools", False)
+    verbose = getattr(args, "verbose", False)
     
     if backend == "bitnet":
         if not _BITNET_AVAILABLE:
@@ -367,6 +474,25 @@ def cmd_models(args):
         return
 
     print(bold("\n🦞 LocalClaw R03 Models") + dim(" · Written by VTSTech · https://www.vts-tech.org · https://github.com/VTSTech/LocalClaw"))
+    
+    # Load tested models from storage
+    tested_models = _load_tested_models()
+    
+    # If --tool-support flag, test each model
+    if test_tools:
+        print(cyan("\n  Testing tool support for all models..."))
+        print(dim("  Using Modelfile system prompts (no custom prompts)\n"))
+        
+        for m in sorted(models):
+            result = _test_model_tool_support(client, m, verbose=True)
+            tested_models[m] = {
+                "tool_support": result,
+                "tested_at": datetime.datetime.now().isoformat()
+            }
+        
+        # Save results
+        _save_tested_models(tested_models)
+        print(dim(f"\n  Results saved to {_TESTED_MODELS_FILE}\n"))
     
     # Collect model info
     model_data = []
@@ -412,20 +538,34 @@ def cmd_models(args):
             else:
                 ctx_str = "-"
             
-            # Tool support
-            supports_tools = client.model_supports_tools(m)
+            # Get tool support from tested results, or default to untested
+            if m in tested_models:
+                tool_support = tested_models[m].get("tool_support", "untested")
+            else:
+                tool_support = "untested"
             
-            model_data.append((m, family, ctx_str, supports_tools))
+            model_data.append((m, family, ctx_str, tool_support))
         except Exception:
             # Fallback if we can't get model info
-            model_data.append((m, "-", "-", client.model_supports_tools(m)))
+            model_data.append((m, "-", "-", "untested"))
     
     # Print table header
     print(bold(f"  {'Model':<42} {'Family':<12} {'Context':<10} {'Tool Support'}"))
     print(dim("  " + "─" * 78))
     
-    for m, family, ctx, supports_tools in model_data:
-        support_str = green("✓ native") if supports_tools else dim("ReAct")
+    for m, family, ctx, tool_support in model_data:
+        # Format tool support string
+        if tool_support == "native":
+            support_str = green("✓ native")
+        elif tool_support == "react":
+            support_str = yellow("ReAct")
+        elif tool_support == "none":
+            support_str = red("none")
+        elif tool_support == "error":
+            support_str = red("error")
+        else:
+            support_str = dim("ReAct (?)")
+        
         # Truncate long model names
         m_display = m[:40] + ".." if len(m) > 42 else m
         family_display = family[:10] + ".." if len(family) > 12 else family
@@ -434,6 +574,11 @@ def cmd_models(args):
         family_padded = f"{family_display:<12}"
         ctx_padded = f"{ctx:<10}"
         print(f"  {cyan(m_padded)} {family_padded} {ctx_padded} {support_str}")
+    
+    # Show hint about testing
+    untested_count = sum(1 for _, _, _, ts in model_data if ts == "untested")
+    if untested_count > 0:
+        print(dim(f"\n  {untested_count} model(s) untested. Use --tool-support to detect native support."))
     print()
 
 
@@ -1510,6 +1655,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     # ── models ──────────────────────────────────────────────────────
     p_models = sub.add_parser("models", parents=[shared], help="List available models")
+    p_models.add_argument("--tool-support", action="store_true", help="Test each model for native tool support")
     p_models.set_defaults(func=cmd_models)
 
     # ── tools ───────────────────────────────────────────────────────
