@@ -6,7 +6,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
-## [R03.1.1] - 03-20-2026 8:26:47 AM
+## [R03.1.1] - 03-20-2026 11:00:59 AM
 
 ### Added
 - **`--num-ctx`, `--num-predict`, `--fast` flags for test command** - Configure context window and prediction limits for benchmark tests
@@ -43,6 +43,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - **Refactored test argument passing** from environment variables to direct CLI arguments
   - Cleaner architecture: args passed via subprocess CLI instead of env vars
   - Test scripts receive `--force-react`, `--use-mf-sys`, `--model`, `--debug`, `--acp` directly
+- **Fixed pytest warnings** in test files
+  - Changed `return True/False` to proper pytest pattern (use `assert` and `raise`)
+  - Tests now pass without `PytestReturnNotNoneWarning`
+  - All 37 tests passing with 0 warnings (was 7 warnings)
 - **TESTS.md restructured** with comprehensive benchmark comparison
   - Added separate tables for Modelfile prompts vs `--force-react` mode
   - Added "Mode Comparison" table showing which mode is better per model
