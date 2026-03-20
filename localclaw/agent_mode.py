@@ -473,21 +473,11 @@ class AgentMode:
     #  Task Execution                                                    #
     # ------------------------------------------------------------------ #
     
-    # Planning prompt template for LLM-based planning
-    PLANNING_PROMPT = """You are a task planner. Break down the following goal into clear, actionable steps.
+    # Simple planning prompt - works better with small models
+    PLANNING_PROMPT = """Break down this task into 3-5 steps. Output ONLY a JSON array:
+Task: {goal}
 
-Goal: {goal}
-
-Respond with a JSON array of steps. Each step should have a "description" field.
-Example format:
-[
-  {{"description": "Step 1: Description of first step"}},
-  {{"description": "Step 2: Description of second step"}},
-  {{"description": "Step 3: Description of third step"}}
-]
-
-Keep the plan concise (3-7 steps). Each step should be specific and actionable.
-Only output the JSON array, no additional text."""
+Example: [{{"description": "Step 1"}}, {{"description": "Step 2"}}]"""
 
     def plan_task(self, goal: str) -> TaskPlan:
         """
@@ -497,7 +487,12 @@ Only output the JSON array, no additional text."""
         """
         plan = TaskPlan(goal=goal)
         
-        # Try LLM-based planning first
+        # For simple/short tasks, skip LLM planning and use heuristics
+        # Small models often struggle with planning prompts
+        if len(goal) < 50 or not self.verbose:
+            return self._heuristic_plan(goal)
+        
+        # Try LLM-based planning for complex tasks
         try:
             plan = self._llm_plan(goal)
             if plan and plan.steps:
@@ -506,7 +501,11 @@ Only output the JSON array, no additional text."""
             if self.verbose:
                 print(f"  ⚠ LLM planning failed: {e}, using heuristics")
         
-        # Fallback: Simple heuristic planning
+        return self._heuristic_plan(goal)
+    
+    def _heuristic_plan(self, goal: str) -> TaskPlan:
+        """Generate plan using keyword heuristics."""
+        plan = TaskPlan(goal=goal)
         goal_lower = goal.lower()
         
         if "analyze" in goal_lower and "log" in goal_lower:
@@ -530,11 +529,8 @@ Only output the JSON array, no additional text."""
             plan.add_step("Implement fix")
             plan.add_step("Verify fix works")
         else:
-            # Generic task breakdown
-            plan.add_step("Understand the task requirements")
-            plan.add_step("Gather necessary information")
-            plan.add_step("Execute the main task")
-            plan.add_step("Verify and report results")
+            # Simple single-step for most tasks
+            plan.add_step(f"Complete: {goal[:50]}{'...' if len(goal) > 50 else ''}")
         
         return plan
     
@@ -544,20 +540,16 @@ Only output the JSON array, no additional text."""
         
         plan = TaskPlan(goal=goal)
         
-        # Use the agent's memory to make the planning request
-        planning_message = self.PLANNING_PROMPT.format(goal=goal)
-        
-        # Get response from agent's LLM (without tools)
+        # Use the agent's client for a simple completion
         try:
-            # Access the agent's client directly for a simple completion
             if hasattr(self.agent, 'client') and hasattr(self.agent.client, 'chat'):
+                # Use a simple system prompt for planning
                 response = self.agent.client.chat(
                     model=self.agent.model,
                     messages=[
-                        {"role": "system", "content": "You are a helpful task planner."},
-                        {"role": "user", "content": planning_message}
+                        {"role": "user", "content": self.PLANNING_PROMPT.format(goal=goal)}
                     ],
-                    options={"temperature": 0.3, "num_predict": 500}
+                    options={"temperature": 0.1, "num_predict": 300}
                 )
                 content = response.get("message", {}).get("content", "")
             else:
@@ -567,7 +559,6 @@ Only output the JSON array, no additional text."""
                 return None
             
             # Extract JSON array from response
-            # Handle markdown code blocks
             content = re.sub(r"```(?:json)?", "", content).strip().rstrip("`").strip()
             
             # Find JSON array
@@ -600,8 +591,8 @@ Only output the JSON array, no additional text."""
         """
         Execute a single step using the Agent.
         
-        This creates a prompt for the step and runs the agent
-        to execute it with tools.
+        Uses a simple, direct prompt that works with the agent's
+        existing system prompt (including Modelfile prompts).
         """
         step.status = "in_progress"
         step.started_at = datetime.now().isoformat()
@@ -614,14 +605,9 @@ Only output the JSON array, no additional text."""
         })
         
         try:
-            # Create a focused prompt for this step
-            step_prompt = f"""Execute the following step as part of a larger task.
-
-Overall Goal: {self.plan.goal}
-
-Current Step: {step.description}
-
-Complete this step using available tools if needed. Report what you did and the result."""
+            # Simple prompt - let the agent use its existing context
+            # This works better with Modelfile system prompts
+            step_prompt = step.description
             
             # Run the agent with the step prompt
             if self.verbose:
