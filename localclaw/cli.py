@@ -881,6 +881,11 @@ def cmd_models(args):
                 "tool_support": result,
                 "tested_at": datetime.datetime.now().isoformat()
             }
+            # Unload the model to free memory before testing next one
+            try:
+                client.unload_model(m)
+            except Exception:
+                pass  # Ignore errors during cleanup
         
         # Save results
         _save_tested_models(tested_models)
