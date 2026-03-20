@@ -9,6 +9,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ## [R03.1.1] - 03-20-2026 8:26:47 AM
 
 ### Added
+- **`--num-ctx`, `--num-predict`, `--fast` flags for test command** - Configure context window and prediction limits for benchmark tests
+  - Usage: `localclaw test 14 --num-ctx 4096 --num-predict 256`
+  - `--fast` preset: `--num-ctx 2048 --num-predict 128`
+  - Enables memory optimization for running benchmarks on resource-constrained systems
+- **`shared_args` module** - Centralized CLI argument handling for test scripts
+  - `SharedConfig` dataclass for passing configuration to subprocess
+  - `add_shared_args()` function for consistent argument parsing
+  - Replaces environment variable passing with direct CLI argument forwarding
 - **`/ollama` chat command** - Remote Ollama management via HTTP API
   - Works with both local and remote Ollama instances (via Cloudflare tunnels, etc.)
   - Commands: `list`, `pull`, `rm`, `show`, `ps`, `stop`, `cp`, `set-url`
@@ -16,6 +24,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   - New methods in `OllamaClient`: `pull_model()`, `delete_model()`, `list_running()`, `push_model()`, `create_model()`, `unload_model()`, `copy_model()`
 
 ### Fixed
+- **`--acp` flag not respected in test scripts** - `14_gsm8k_benchmark.py` wasn't using `shared_args`
+  - Updated to import and use `add_shared_args()` and `parse_shared_args()`
+  - ACP integration now works correctly with `localclaw test 14 --acp`
 - **Syntax error in cli.py line 446** - f-string cannot contain backslash
   - Changed `system.split('\n')` inside f-string to pre-computed `more_lines` variable
   - Python f-strings require backslash expressions to be moved outside the `{}`
@@ -29,6 +40,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   - Added `import re` at module level for `_contains_text_tool_call()` function
 
 ### Changed
+- **Refactored test argument passing** from environment variables to direct CLI arguments
+  - Cleaner architecture: args passed via subprocess CLI instead of env vars
+  - Test scripts receive `--force-react`, `--use-mf-sys`, `--model`, `--debug`, `--acp` directly
 - **TESTS.md restructured** with comprehensive benchmark comparison
   - Added separate tables for Modelfile prompts vs `--force-react` mode
   - Added "Mode Comparison" table showing which mode is better per model
