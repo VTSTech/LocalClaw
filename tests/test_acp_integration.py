@@ -46,9 +46,7 @@ def test_basic_agent():
     acp = ACPPlugin(debug=True, agent_name="LocalClaw-Basic")
     
     status = acp.get_status()
-    if "error" in status:
-        print(f"WARNING: ACP not reachable: {status['error']}")
-        return False
+    assert "error" not in status, f"ACP not reachable: {status['error']}"
     
     print(f"ACP Connected: {status.get('session_tokens', 0)} tokens used")
     
@@ -69,14 +67,14 @@ def test_basic_agent():
         
         status = acp.get_status()
         print(f"ACP Tokens: {status.get('session_tokens', 0):,}")
-        return True
+        # Test passed
         
     except StopIteration as e:
         print(f"STOPPED by ACP: {e}")
-        return False
+        assert False, f"ACP stopped: {e}"
     except Exception as e:
         print(f"ERROR: {e}")
-        return False
+        raise
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # TEST 2: Agent with Tools + ACP
@@ -112,16 +110,16 @@ def test_tool_agent():
         
         status = acp.get_status()
         print(f"ACP Tokens: {status.get('session_tokens', 0):,}")
-        return True
+        # Test passed
         
     except StopIteration as e:
         print(f"STOPPED by ACP: {e}")
-        return False
+        assert False, f"ACP stopped: {e}"
     except Exception as e:
         print(f"ERROR: {e}")
         import traceback
         traceback.print_exc()
-        return False
+        raise
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # TEST 3: Multi-Agent Orchestrator + ACP
@@ -172,27 +170,36 @@ def test_orchestrator():
         
         status = acp.get_status()
         print(f"ACP Tokens: {status.get('session_tokens', 0):,}")
-        return True
+        # Test passed
         
     except StopIteration as e:
         print(f"STOPPED by ACP: {e}")
-        return False
+        assert False, f"ACP stopped: {e}"
     except Exception as e:
         print(f"ERROR: {e}")
         import traceback
         traceback.print_exc()
-        return False
+        raise
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # MAIN
 # ═══════════════════════════════════════════════════════════════════════════════
 
 def main():
+    """Run tests manually (not via pytest)."""
     results = []
     
-    results.append(("Basic Agent", test_basic_agent()))
-    results.append(("Tool Agent", test_tool_agent()))
-    results.append(("Orchestrator", test_orchestrator()))
+    for name, test_func in [
+        ("Basic Agent", test_basic_agent),
+        ("Tool Agent", test_tool_agent),
+        ("Orchestrator", test_orchestrator),
+    ]:
+        try:
+            test_func()
+            results.append((name, True))
+        except Exception as e:
+            print(f"FAILED: {e}")
+            results.append((name, False))
     
     print("\n" + "="*60)
     print("SUMMARY")

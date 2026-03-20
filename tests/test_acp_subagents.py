@@ -105,12 +105,12 @@ def test_basic_agent():
         print(f"Response ({elapsed:.1f}s): {response}")
         
         acp_complete_activity(activity_id, f"Success: {response[:100]}")
-        return True
+        # Test passed
         
     except Exception as e:
         print(f"ERROR: {e}")
         acp_complete_activity(activity_id, f"Error: {str(e)[:100]}")
-        return False
+        raise
 
 def test_tool_agent():
     """Test 2: Agent with tools."""
@@ -153,12 +153,12 @@ def test_tool_agent():
         run.print_trace()
         
         acp_complete_activity(activity_id, f"Success: {run.final_answer[:100]}")
-        return True
+        # Test passed
         
     except Exception as e:
         print(f"ERROR: {e}")
         acp_complete_activity(activity_id, f"Error: {str(e)[:100]}")
-        return False
+        raise
 
 def test_orchestrator_router():
     """Test 3: Multi-agent orchestrator with router."""
@@ -204,14 +204,14 @@ def test_orchestrator_router():
         print(f"Answer:\n{result.final_answer}")
         
         acp_complete_activity(activity_id, f"Routed to {result.chosen_agent}: {result.final_answer[:100]}")
-        return True
+        # Test passed
         
     except Exception as e:
         print(f"ERROR: {e}")
         import traceback
         traceback.print_exc()
         acp_complete_activity(activity_id, f"Error: {str(e)[:100]}")
-        return False
+        raise
 
 def test_builtin_tools():
     """Test 4: Built-in tools."""
@@ -246,12 +246,12 @@ def test_builtin_tools():
         run.print_trace()
         
         acp_complete_activity(activity_id, f"Success: {run.final_answer[:100]}")
-        return True
+        # Test passed
         
     except Exception as e:
         print(f"ERROR: {e}")
         acp_complete_activity(activity_id, f"Error: {str(e)[:100]}")
-        return False
+        raise
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # MAIN
@@ -277,10 +277,18 @@ def main():
     
     results = []
     
-    results.append(("Basic Agent", test_basic_agent()))
-    results.append(("Tool Agent", test_tool_agent()))
-    results.append(("Orchestrator Router", test_orchestrator_router()))
-    results.append(("Built-in Tools", test_builtin_tools()))
+    for name, test_func in [
+        ("Basic Agent", test_basic_agent),
+        ("Tool Agent", test_tool_agent),
+        ("Orchestrator Router", test_orchestrator_router),
+        ("Built-in Tools", test_builtin_tools),
+    ]:
+        try:
+            test_func()
+            results.append((name, True))
+        except Exception as e:
+            print(f"FAILED: {e}")
+            results.append((name, False))
     
     print("\n" + "="*60)
     print("SUMMARY")
