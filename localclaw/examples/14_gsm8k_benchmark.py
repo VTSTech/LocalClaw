@@ -35,7 +35,7 @@ from localclaw.core.tools import ToolRegistry
 from localclaw.core.agent import Agent
 from localclaw.core.math_prompts import (
     MATH_SYSTEM_PROMPT,
-    MATH_SYSTEM_PROMPT_COMPACT,
+    MATH_SYSTEM_PROMPT_NO_TOOLS,
     MATH_SYSTEM_PROMPT_REACT,
     extract_number,
     calculator_tool,
@@ -145,29 +145,49 @@ def create_calculator_tool():
 def test_model_with_agent(model: str, question: str, expected: str, client, acp=None, force_react: bool = False) -> dict:
     """
     Test a model using the full Agent system with calculator tool.
+    
+    The Agent internally handles tool support detection via get_tool_support().
+    - "native": Uses Ollama's native tool-calling API
+    - "react": Uses text-based ReAct parsing
+    - "none": No tools at all, pure reasoning
+    
+    Parameters
+    ----------
+    model : str
+        Model name to test
+    question : str
+        Math question to ask
+    expected : str
+        Expected answer
+    client : OllamaClient
+        Client for API calls
+    acp : ACPPlugin, optional
+        ACP instance for logging
+    force_react : bool
+        If True, force all models to use ReAct mode (for testing)
     """
     try:
-        # Detect tool support level
+        # Detect tool support level for prompt selection
         tool_support = get_tool_support(model, client)
         
-        # Choose prompt based on tool support level
+        # Choose system prompt based on tool support level
+        # The Agent will also detect tool support internally for execution logic
         if tool_support == "none":
-            # Model doesn't support tools - use compact prompt without tools
-            system_prompt = MATH_SYSTEM_PROMPT_COMPACT
-            use_react = False
-        elif tool_support == "native":
-            # Native tool support - use tools via API
-            system_prompt = MATH_SYSTEM_PROMPT
-            use_react = False
+            # No tool support - use reasoning-only prompt
+            system_prompt = MATH_SYSTEM_PROMPT_NO_TOOLS
+        elif force_react:
+            # Force ReAct mode requested - use ReAct-specific prompt
+            system_prompt = MATH_SYSTEM_PROMPT_REACT
         else:
-            # ReAct mode - text-based tool calling
-            system_prompt = MATH_SYSTEM_PROMPT_REACT if force_react else MATH_SYSTEM_PROMPT
-            use_react = True
+            # Native or ReAct mode - standard math prompt
+            # Agent will add ReAct suffix if needed
+            system_prompt = MATH_SYSTEM_PROMPT
         
         # Build step callback for ACP if enabled
         on_step = acp.on_step if acp else None
         
-        # Create agent with tools (or None if no tool support)
+        # Create agent - it handles tool support detection internally
+        # Only pass tools if model supports them
         agent_tools = create_calculator_tool() if tool_support != "none" else None
         agent = Agent(
             model=model,
@@ -177,7 +197,7 @@ def test_model_with_agent(model: str, question: str, expected: str, client, acp=
             client=client,
             model_options={"num_predict": 150},
             on_step=on_step,
-            force_react=use_react,
+            force_react=force_react,  # Agent handles this appropriately
         )
         
         start = time.time()

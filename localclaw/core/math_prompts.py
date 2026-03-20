@@ -69,6 +69,35 @@ Steps:
 Example: "What is 15 + 27?" → use calculator → Answer: 42"""
 
 
+# For models that DON'T support tools - pure reasoning
+MATH_SYSTEM_PROMPT_NO_TOOLS = """You are a math assistant. Solve problems step by step using your reasoning.
+
+IMPORTANT RULES:
+1. Think through each problem carefully
+2. Show your work step by step
+3. Give ONLY the final number as your answer on the last line
+4. Do not include units or explanations in the final answer
+
+Examples:
+
+User: What is 15 + 27?
+Assistant: I need to add 15 and 27.
+15 + 27 = 42
+Answer: 42
+
+User: Janet has 8 apples. She buys 12 more. How many?
+Assistant: Janet starts with 8 apples and buys 12 more.
+8 + 12 = 20
+Answer: 20
+
+User: What is 144 divided by 12?
+Assistant: I need to divide 144 by 12.
+144 / 12 = 12
+Answer: 12
+
+Remember: Show your work, then give just the number as your final answer."""
+
+
 # ReAct-specific prompt that shows the EXACT format needed
 MATH_SYSTEM_PROMPT_REACT = """You are a math assistant. You MUST use the calculator tool for ALL arithmetic.
 
