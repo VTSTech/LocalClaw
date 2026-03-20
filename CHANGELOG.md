@@ -6,6 +6,69 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [R03.1.1] - 03-20-2026 8:26:47 AM
+
+### Added
+- **`/ollama` chat command** - Remote Ollama management via HTTP API
+  - Works with both local and remote Ollama instances (via Cloudflare tunnels, etc.)
+  - Commands: `list`, `pull`, `rm`, `show`, `ps`, `stop`, `cp`, `set-url`
+  - No dependency on local `ollama` CLI binary
+  - New methods in `OllamaClient`: `pull_model()`, `delete_model()`, `list_running()`, `push_model()`, `create_model()`, `unload_model()`, `copy_model()`
+
+### Fixed
+- **Syntax error in cli.py line 446** - f-string cannot contain backslash
+  - Changed `system.split('\n')` inside f-string to pre-computed `more_lines` variable
+  - Python f-strings require backslash expressions to be moved outside the `{}`
+
+### Changed
+- **TESTS.md restructured** with comprehensive benchmark comparison
+  - Added separate tables for Modelfile prompts vs `--force-react` mode
+  - Added "Mode Comparison" table showing which mode is better per model
+  - Updated category champions for both modes
+
+### Benchmark Results (15-Test Comparison)
+
+#### Modelfile vs --force-react
+
+| Model | Modelfile | ReAct | Δ Time | Better |
+|-------|-----------|-------|--------|--------|
+| `dolphin3.0-qwen2.5:0.5b` | 11/15, 27.1s | 11/15, 24.4s | -2.7s | ReAct |
+| `granite4:350m` | 11/15, 78.4s | 11/15, 75.6s | -2.8s | ReAct |
+| `qwen2.5-coder:0.5b` | 9/15, 121.7s | 9/15, 111.6s | -10.1s | ReAct |
+| `gemma3:270m` | 8/15, 22.8s | 8/15, 29.4s | +6.6s | Modelfile |
+| `qwen2.5:0.5b` | 8/15, 61.0s | 8/15, 54.5s | -6.5s | ReAct |
+| `functiongemma:270m` | 2/15, 55.1s | 2/15, 56.1s | +1.0s | Tie |
+| `qwen3:0.6b` | 0/15, 197.0s | 0/15, 199.2s | +2.2s | Both fail |
+
+**Key Finding:** `--force-react` is faster for most models, except `gemma3:270m` (no tool support = ReAct adds unnecessary overhead).
+
+### Benchmark Results (GSM8K 50-Question Comparison)
+
+#### Modelfile vs --force-react
+
+| Model | Modelfile | ReAct | Δ Score | Δ Accuracy | Better |
+|-------|-----------|-------|---------|------------|--------|
+| `qwen2.5:0.5b` | 36/50 (72%) | **42/50 (84%)** | +6 | **+12%** | **ReAct** |
+| `granite4:350m` | 23/50 (46%) | **38/50 (76%)** | +15 | **+30%** | **ReAct** |
+| `dolphin3.0-qwen2.5:0.5b` | **39/50 (78%)** | 33/50 (66%) | -6 | -12% | **Modelfile** |
+| `gemma3:270m` | **31/50 (62%)** | 29/50 (58%) | -2 | -4% | **Modelfile** |
+| `functiongemma:270m` | 19/50 (38%) | 20/50 (40%) | +1 | +2% | Tie |
+| `qwen3:0.6b` | 4/50 (8%) | **10/50 (20%)** | +6 | +12% | ReAct (still bad) |
+
+**Key Findings:**
+1. **`granite4:350m` improves 30% with ReAct** - biggest winner (46% → 76%)
+2. **`qwen2.5:0.5b` improves 12% with ReAct** - becomes top performer (84%)
+3. **`dolphin3.0-qwen2.5:0.5b` drops 12% with ReAct** - better with native tools
+4. **`gemma3:270m` slightly worse with ReAct** - pure reasoning is optimal
+
+### Known Issues
+- `granite4:350m` detected as "native" but outputs tool calls as text JSON instead of using native API
+  - Debug shows `tool_calls_raw=[]` despite `_tool_support=native`
+  - May need reclassification to "react" or detection logic refinement
+- `qwen3:0.6b` fails completely (0%) in both modes - fundamental issues beyond tool support
+
+---
+
 ## [R03.1.0] - 03-19-2026 10:32:24 PM
 
 ### Added
