@@ -1,5 +1,5 @@
 """
-🦞 LocalClaw R03 — Ollama Client
+🦞 LocalClaw R04 — Ollama Client
 Zero-dependency wrapper around the local Ollama HTTP API.
 Uses only Python stdlib (urllib + json) — no pip install required.
 

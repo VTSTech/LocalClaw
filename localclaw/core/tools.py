@@ -1,5 +1,5 @@
 """
-🦞 LocalClaw R03 — Tool System
+🦞 LocalClaw R04 — Tool System
 Decorator-based tool registry that auto-generates Ollama-compatible JSON schemas
 from Python type hints and docstrings.
 

@@ -1,4 +1,4 @@
-# 🦞 LocalClaw R03
+# 🦞 LocalClaw R04
 
 ## Test 07 Benchmark Results (15-Test Suite)
 
@@ -409,7 +409,7 @@ localclaw models --tool_support
 
 Example output:
 ```
-🦞 LocalClaw R03 Models
+🦞 LocalClaw R04 Models
   Model                                      Family       Context    Tool Support
   ──────────────────────────────────────────────────────────────────────────────
   gemma3:270m                                gemma3       32K        ○ none

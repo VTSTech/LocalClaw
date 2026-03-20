@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-🦞 LocalClaw R03 — Backend-Agnostic Example
+🦞 LocalClaw R04 — Backend-Agnostic Example
 
 This example works with EITHER Ollama OR BitNet backend.
 Set LOCALCLAW_BACKEND environment variable to switch:
@@ -82,7 +82,7 @@ def make_step_printer(acp=None):
 def main():
     print(f"""
 ╔═══════════════════════════════════════════════════════════════════╗
-║     🦞 LocalClaw R03 — Backend-Agnostic Demo                      ║
+║     🦞 LocalClaw R04 — Backend-Agnostic Demo                      ║
 ╠═══════════════════════════════════════════════════════════════════╣""")
     
     # Show current configuration

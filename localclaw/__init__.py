@@ -1,5 +1,5 @@
 """
-🦞 LocalClaw R03 - A minimal, hackable agentic framework for Ollama and BitNet
+🦞 LocalClaw R04 - A minimal, hackable agentic framework for Ollama and BitNet
 
 Written by VTSTech
 https://www.vts-tech.org
@@ -27,7 +27,7 @@ from .config import (
     LOCALCLAW_BACKEND,
 )
 
-# R03: BitNet backend support
+# R04: BitNet backend support
 try:
     from .bitnet_client import BitnetClient, KNOWN_MODELS
     _BITNET_AVAILABLE = True
@@ -136,7 +136,7 @@ def get_system_prompt(model: str, client=None, default_prompt: str = None):
     
     return default_prompt
 
-# R03 Enhancements
+# R04 Enhancements
 from .core.orchestrator_enhanced import Orchestrator as EnhancedOrchestrator, AgentCard as EnhancedAgentCard
 
 # Tool support detection
@@ -160,10 +160,10 @@ __all__ = [
     "OllamaClient", "Orchestrator", "AgentCard",
     # Skills
     "SkillLoader", "Skill", "SkillRegistry",
-    # R03 Enhancements
+    # R04 Enhancements
     "EnhancedOrchestrator", "EnhancedAgentCard",
     "ACPPlugin",
-    # R03: Backend-agnostic helpers
+    # R04: Backend-agnostic helpers
     "get_default_client",
     "get_available_models",
     "get_system_prompt",
@@ -191,7 +191,7 @@ __all__ = [
 if _BITNET_AVAILABLE:
     __all__.extend(["BitnetClient", "KNOWN_MODELS"])
 
-__version__ = "0.3.1.2"
+__version__ = "0.4.0.0"
 __author__ = "VTSTech"
 __author_email__ = "contact@vts-tech.org"
 __url__ = "https://github.com/VTSTech/LocalClaw"

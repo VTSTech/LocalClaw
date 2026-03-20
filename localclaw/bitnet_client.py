@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-🦞 LocalClaw R03 — BitnetClient
+🦞 LocalClaw R04 — BitnetClient
 Drop-in replacement for OllamaClient that uses Microsoft's bitnet.cpp
 (llama-server) as the inference backend instead of Ollama.
 

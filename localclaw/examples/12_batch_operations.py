@@ -45,7 +45,7 @@ DEBUG = config.debug
 
 
 def main():
-    print("🦞 LocalClaw R03 - Batch Operations Demo (ACP)")
+    print("🦞 LocalClaw R04 - Batch Operations Demo (ACP)")
     print("=" * 60)
     
     # ── Create and bootstrap ACP ─────────────────────────────────

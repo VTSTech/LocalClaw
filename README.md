@@ -1,4 +1,4 @@
-# 🦞 LocalClaw R03.1.1
+# 🦞 LocalClaw R04.0.0
 
 A minimal, hackable agentic framework engineered to run **entirely locally** with [Ollama](https://ollama.com) or [BitNet](https://github.com/microsoft/BitNet).
 
@@ -20,7 +20,7 @@ Inspired by the architecture of OpenClaw, rebuilt from scratch for local-first o
 | Document | Description |
 |----------|-------------|
 | [Architecture.md](https://github.com/VTSTech/LocalClaw/blob/main/Architecture.md) | Technical documentation for developers (directory structure, core design, orchestrator modes) |
-| [CHANGELOG.md](https://github.com/VTSTech/LocalClaw/blob/main/CHANGELOG.md) | Version history and release notes (R00–R03.1.1) |
+| [CHANGELOG.md](https://github.com/VTSTech/LocalClaw/blob/main/CHANGELOG.md) | Version history and release notes (R00–R04.0.0) |
 | [TESTS.md](https://github.com/VTSTech/LocalClaw/blob/main/TESTS.md) | Benchmark results, model recommendations, and testing guide |
 
 ---
@@ -200,7 +200,7 @@ Output shows:
 - **Tool Support** - `✓ native`, `ReAct`, `○ none`, or `untested`
 
 ```
-🦞 LocalClaw R03.1.1 Models
+🦞 LocalClaw R04.0.0 Models
   Model                                      Family       Context    Tool Support
   ──────────────────────────────────────────────────────────────────────────────
   gemma3:270m                                gemma3       32K        ○ none
@@ -274,7 +274,7 @@ localclaw models --tool_support
 
 ## About
 
-**🦞 LocalClaw R03.1.1** is written and maintained by **VTSTech**.
+**🦞 LocalClaw ** is written and maintained by **VTSTech**.
 
 - 🌐 Website: [https://www.vts-tech.org](https://www.vts-tech.org)
 - 📦 GitHub: [https://github.com/VTSTech/LocalClaw](https://github.com/VTSTech/LocalClaw)

@@ -1,5 +1,5 @@
 """
-🦞 LocalClaw R03 — Built-in Tools
+🦞 LocalClaw R04 — Built-in Tools
 A curated set of safe, practical tools for local agents.
 Import whichever you need and add them to a ToolRegistry.
 

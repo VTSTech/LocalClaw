@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-🦞 LocalClaw R03 — Agent Mode
+🦞 LocalClaw R04 — Agent Mode
 
 A goal-driven execution mode where the agent autonomously works through tasks.
 Unlike chat mode (which is user-driven), agent mode:

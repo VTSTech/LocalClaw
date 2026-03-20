@@ -1,5 +1,5 @@
 """
-🦞 LocalClaw R03 — Agent
+🦞 LocalClaw R04 — Agent
 Core ReAct agent that drives the think → act → observe loop.
 
 Supports:

@@ -1,5 +1,5 @@
 """
-🦞 LocalClaw R03 - Skills Module
+🦞 LocalClaw R04 - Skills Module
 
 Agent Skills support for LocalClaw.
 Loads skills from SKILL.md files following the Agent Skills specification.

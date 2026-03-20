@@ -1,5 +1,5 @@
 """
-🦞 LocalClaw R03 — Model Discovery
+🦞 LocalClaw R04 — Model Discovery
 
 Dynamic model discovery for Ollama and BitNet backends.
 Discovers available models at runtime instead of hardcoding.

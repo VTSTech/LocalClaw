@@ -6,7 +6,83 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
-## [R03.1.2] - 03-20-2026 12:02:02 PM
+## [R04.0.0] - 03-20-2026 12:02:02 PM
+
+### Major Release - Agent Mode
+
+This release introduces full Agent Mode with autonomous task execution, complete ACP integration for activity logging, and improved final response handling.
+
+### Added
+- **Agent Mode - Full Implementation**:
+  - `localclaw agent` command for goal-driven autonomous task execution
+  - State machine: IDLE → WORKING → IDLE with PAUSED and STOPPING states
+  - Message queuing during execution, processed after task completion
+  - Rollback support with `/stop` prompting for confirmation
+  - Background task execution with real-time progress tracking
+  - LLM-based planning with heuristic fallback for small models
+
+- **Agent Mode Slash Commands**:
+  - `/status` - Show current agent status and progress
+  - `/progress` - Detailed step-by-step breakdown
+  - `/plan` - Show the current task plan
+  - `/pause` / `/resume` - Pause and resume execution
+  - `/stop` - Stop with rollback confirmation
+  - `/logs` - View execution history
+  - `/reset` - Clear memory and plans
+
+- **`AgentMode` class** in `agent_mode.py`:
+  - State management with callbacks
+  - Task planning with LLM and heuristic methods
+  - Step execution using Agent.run()
+  - Execution logging and history
+  - Final response tracking across all steps
+  - Rollback action helpers (file write/delete, mkdir, shell)
+
+- **ACP Integration for Agent Mode**:
+  - User messages logged to ACP when tasks start
+  - Final responses logged to ACP on task completion
+  - All steps logged with full content (no truncation)
+  - `log_user_message()` and `log_assistant_message()` helpers
+
+- **Improved Final Response Display**:
+  - Full final response shown on task completion
+  - `/status` now includes final_response field
+  - format_status() displays full response (up to 10 lines)
+
+### Changed
+- **ACP Plugin - Full Message Logging**:
+  - `_handle_final()` now logs full answer (not truncated to 100 chars)
+  - `log_chat()` details limit increased from 1000 to 4000 chars
+  - `log_chat()` result limit increased from 500 to 2000 chars
+  - Notes content limit increased from 400 to 2000 chars
+  - Note importance changed from "normal" to "high"
+
+- **Version bump**: R03 → R04, 0.3.x → 0.4.0.0
+
+### Fixed
+- Final responses now displayed in full when Agent Mode tasks complete
+- ACP receives complete step content instead of truncated messages
+
+### Usage
+```bash
+# Start agent mode with ACP logging
+localclaw agent --model llama3.2:1b --tools calculator,shell --acp
+
+# With verbose output
+localclaw agent -m llama3.2:1b --tools calculator,shell -v --acp
+
+# With Modelfile system prompt
+localclaw agent --use-mf-sys --tools shell --acp --debug
+```
+
+### Verified Working
+- `llama3.2:1b` - First model to correctly respond in Agent Mode
+- GSM8K champion at 90% accuracy
+- Correctly identifies as LocalClaw, acknowledges user
+
+---
+
+## [R03.2.0] - 03-20-2026
 
 ### Added
 - **Agent Mode** - New `localclaw agent` command for autonomous task execution
@@ -231,7 +307,7 @@ localclaw agent --use-mf-sys --tools shell
 
 ### Example Output
 ```
-🦞 LocalClaw R03 Models
+🦞 LocalClaw R04 Models
   Model                                      Family       Context    Tool Support
   ──────────────────────────────────────────────────────────────────────────────
   gemma3:270m                                gemma3       32K        ○ none
@@ -276,7 +352,7 @@ Detection is now simplified and more accurate:
 
 ### Example Output
 ```
-🦞 LocalClaw R03 Models · Written by VTSTech · https://www.vts-tech.org · https://github.com/VTSTech/LocalClaw
+🦞 LocalClaw R04 Models · Written by VTSTech · https://www.vts-tech.org · https://github.com/VTSTech/LocalClaw
   Model                                      Family       Context    Tool Support
   ──────────────────────────────────────────────────────────────────────────────
   driaforall/tiny-agent-a:1.5b               qwen2        32K        ReAct
@@ -478,7 +554,7 @@ Detection is now simplified and more accurate:
   - `test-bitnet.sh` / `test-bitnet.cmd` - Run benchmark tests with BitNet backend
 
 ### Changed
-- Version tags updated from R02 to R03 across all files
+- Version tags updated from R02 to R04 across all files
 - CLI now supports `--backend ollama|bitnet` flag for backend selection
 - Tool system now has comprehensive security validation layer
 - ACP streaming functionality consolidated into main plugin

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-🦞 LocalClaw R03 — Command Line Interface
+🦞 LocalClaw R04 — Command Line Interface
 
 Entry point for: python -m localclaw [command] [options]
 
