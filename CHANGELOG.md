@@ -6,6 +6,60 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [R03.1.2] - 03-20-2026 12:02:02 PM
+
+### Added
+- **Agent Mode** - New `localclaw agent` command for autonomous task execution
+  - Goal-driven execution: Give tasks and agent works through them autonomously
+  - State machine: IDLE → WORKING → IDLE with PAUSED and STOPPING states
+  - Message queuing: Messages queued while working, processed after completion
+  - Slash commands always respond (even during WORKING state)
+  - Rollback support: `/stop` prompts for rollback confirmation
+  - Background execution: Tasks run in background thread with progress tracking
+  - LLM-based planning with heuristic fallback for small models
+  
+- **Agent Mode Slash Commands**:
+  - `/status` - Show current agent status and progress
+  - `/progress` - Detailed step-by-step breakdown
+  - `/plan` - Show the current task plan
+  - `/pause` / `/resume` - Pause and resume execution
+  - `/stop` - Stop with rollback confirmation
+  - `/logs` - View execution history
+  - `/reset` - Clear memory and plans
+  - `/tools`, `/skills`, `/ollama` - Always available
+
+- **`AgentMode` class** in `agent_mode.py`:
+  - State management with callbacks
+  - Task planning with LLM and heuristic methods
+  - Step execution using Agent.run()
+  - Execution logging and history
+  - Rollback action helpers (file write/delete, mkdir, shell)
+
+- **Data classes for Agent Mode**:
+  - `Action` - Atomic action with rollback support
+  - `Step` - Collection of actions with status tracking
+  - `TaskPlan` - Complete plan with progress tracking
+
+### Changed
+- **Simplified planning** - Small models often struggle with complex planning prompts
+  - LLM planning only used for complex tasks (verbose mode or long goals)
+  - Heuristic planning uses single-step for most simple queries
+  - Execution prompts are simple and direct to respect Modelfile system prompts
+
+### Usage
+```bash
+# Start agent mode
+localclaw agent --model llama3.2:1b --tools calculator,shell
+
+# With verbose output
+localclaw agent -m llama3.2:1b --tools calculator,shell -v
+
+# With Modelfile system prompt
+localclaw agent --use-mf-sys --tools shell
+```
+
+---
+
 ## [R03.1.1] - 03-20-2026 11:00:59 AM
 
 ### Added
