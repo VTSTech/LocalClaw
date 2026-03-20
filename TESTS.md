@@ -14,14 +14,44 @@ Models are tested using their own **Modelfile system prompts** combined with Loc
 - **`react`** models → Tools via text-based ReAct prompting
 - **`none`** models → **No tools**, uses `MATH_SYSTEM_PROMPT_NO_TOOLS` (pure reasoning)
 
+#### Modelfile Prompts (auto-detected tool support)
+
 | Rank | Model | Score | Accuracy | Avg Time | Tool Support | Notes |
 |:----:|-------|------:|--------:|--------:|--------------|-------|
-| 🥇 | **`nchapman/dolphin3.0-qwen2.5:0.5b`** | **39/50** | **78.0%** | 8.9s | native | 🏆 **Best overall!** |
+| 🥇 | **`nchapman/dolphin3.0-qwen2.5:0.5b`** | **39/50** | **78.0%** | 8.9s | native | 🏆 **Best with native tools!** |
 | 🥈 | `qwen2.5:0.5b` | 36/50 | 72.0% | 19.3s | native | Strong performer |
-| 🥉 | `gemma3:270m` | 31/50 | 62.0% | **2.7s** | none | ⚡ **Fastest!** Pure reasoning (no tools) |
+| 🥉 | `gemma3:270m` | 31/50 | 62.0% | **2.7s** | none | ⚡ **Fastest!** Pure reasoning |
 | 4 | `granite4:350m` | 23/50 | 46.0% | 23.4s | native | Struggles with native tools |
 | 5 | `functiongemma:270m` | 19/50 | 38.0% | 9.6s | native | Designed for tools but underperforms |
 | 6 | `qwen3:0.6b` | 4/50 | 8.0% | 27.5s | react | ⚠️ Poor performance |
+
+#### With `--force-react` (text-based ReAct prompting)
+
+| Rank | Model | Score | Accuracy | Avg Time | Tool Support | Notes |
+|:----:|-------|------:|--------:|--------:|--------------|-------|
+| 🥇 | **`qwen2.5:0.5b`** | **42/50** | **84.0%** | 19.0s | native | 🏆 **Best overall!** |
+| 🥈 | `granite4:350m` | 38/50 | 76.0% | 20.1s | native | **+30% vs native mode!** |
+| 🥉 | `nchapman/dolphin3.0-qwen2.5:0.5b` | 33/50 | 66.0% | 10.2s | native | Faster but lower accuracy |
+| 4 | `gemma3:270m` | 29/50 | 58.0% | **3.2s** | none | Pure reasoning, fast |
+| 5 | `functiongemma:270m` | 20/50 | 40.0% | 28.2s | native | Slow, low accuracy |
+| 6 | `qwen3:0.6b` | 10/50 | 20.0% | 42.0s | react | Still poor but +12% |
+
+#### GSM8K Mode Comparison
+
+| Model | Modelfile | ReAct | Δ Score | Δ Accuracy | Better Mode |
+|-------|-----------|-------|---------|------------|-------------|
+| `qwen2.5:0.5b` | 36/50 (72%) | **42/50 (84%)** | +6 | **+12%** | **ReAct** |
+| `granite4:350m` | 23/50 (46%) | **38/50 (76%)** | +15 | **+30%** | **ReAct** |
+| `dolphin3.0-qwen2.5:0.5b` | **39/50 (78%)** | 33/50 (66%) | -6 | -12% | **Modelfile** |
+| `gemma3:270m` | **31/50 (62%)** | 29/50 (58%) | -2 | -4% | **Modelfile** |
+| `functiongemma:270m` | 19/50 (38%) | 20/50 (40%) | +1 | +2% | Tie |
+| `qwen3:0.6b` | 4/50 (8%) | **10/50 (20%)** | +6 | +12% | ReAct (still bad) |
+
+**Key Findings:**
+1. **`granite4:350m` improves 30% with ReAct** - biggest winner (46% → 76%)
+2. **`qwen2.5:0.5b` improves 12% with ReAct** - becomes top performer (84%)
+3. **`dolphin3.0-qwen2.5:0.5b` drops 12% with ReAct** - better with native tools
+4. **`gemma3:270m` slightly worse with ReAct** - pure reasoning is optimal (no tool overhead)
 
 ---
 
@@ -218,16 +248,25 @@ LocalClaw has been tested with **Microsoft BitNet-b1.58-2B-4T** — a 2B paramet
 
 | Use Case | Recommended Model | Why |
 |----------|-------------------|-----|
-| **Best overall (15-test)** | **`dolphin3.0-qwen2.5:0.5b`** | **73% (11/15)**, fastest (27.1s), native tools |
-| **Best overall (GSM8K)** | **`dolphin3.0-qwen2.5:0.5b`** | **78% GSM8K**, fast (8.9s), native tools |
-| **Best speed** | `gemma3:270m` | **22.8s** total, pure reasoning (no tools) |
-| **Best Calc tool use** | `granite4:350m` | **3/3 Calc**, native tool support |
+| **Best GSM8K (ReAct)** | `qwen2.5:0.5b` + `--force-react` | **84% GSM8K**, excellent tool use via ReAct |
+| **Best GSM8K (native)** | `dolphin3.0-qwen2.5:0.5b` | **78% GSM8K**, fast (8.9s), native tools |
+| **Best 15-test (tie)** | `dolphin3.0-qwen2.5:0.5b` / `granite4:350m` | **73% (11/15)**, dolphin faster |
+| **Best speed** | `gemma3:270m` | **2.7s avg**, pure reasoning (no tools) |
+| **Best Calc tool use** | `granite4:350m` | **3/3 Calc**, 76% GSM8K with ReAct |
 | **Best Math/Code** | `gemma3:270m` | **3/3 Math**, **3/3 Code** (no tools needed) |
-| **Best with ReAct** | `tiny-agent-a:1.5b` + `--force-react` | **94% GSM8K** (slower at ~29s/question) |
-| **Best sub-500M with ReAct** | `granite4:350m` + `--force-react` | 82% GSM8K |
-| **General use** | `qwen2.5:0.5b` | 72% GSM8K, reliable native tool calling |
 | **Large context** | `llama3.2:1b` | **128k context window** |
 | **CPU-only** | `BitNet-b1.58-2B-4T` | Efficient ternary weights, no GPU needed |
+
+### Mode Recommendations by Model
+
+| Model | Recommended Mode | Reason |
+|-------|------------------|--------|
+| `qwen2.5:0.5b` | `--force-react` | +12% accuracy (72% → 84%) |
+| `granite4:350m` | `--force-react` | **+30% accuracy** (46% → 76%) |
+| `dolphin3.0-qwen2.5:0.5b` | Native/Modelfile | -12% with ReAct, better natively |
+| `gemma3:270m` | Modelfile (none) | Slightly faster without ReAct overhead |
+| `functiongemma:270m` | Either | No significant difference |
+| `qwen3:0.6b` | Avoid | Fails in both modes |
 
 ---
 
