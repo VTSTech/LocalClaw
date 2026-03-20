@@ -103,6 +103,42 @@ Models are tested using their own **Modelfile system prompts** combined with Loc
 
 ---
 
+### GSM8K 1B+ Models (Test 14, R03.1.1)
+
+The following 1B-2B parameter models were tested on the **50-question GSM8K benchmark** using Modelfile system prompts:
+
+| Rank | Model | Score | Accuracy | Avg Time | Tool Support | Notes |
+|:----:|-------|------:|--------:|--------:|--------------|-------|
+| 🥇 | **`llama3.2:1b`** | **45/50** | **90.0%** | 12.7s | ReAct | 🏆 **Best 1B model!** |
+| 🥈 | `nchapman/dolphin3.0-llama3:1b` | 35/50 | 70.0% | **5.9s** | none | ⚡ **Fastest!** Good accuracy |
+| 🥉 | `granite3.1-moe:1b` | 34/50 | 68.0% | 13.4s | ReAct (text JSON) | Solid MoE performer |
+| 4 | `tinydolphin:1.1b` | 11/50 | 22.0% | 10.8s | none | Weak math reasoning |
+| 5 | `tinyllama:1.1b` | 5/50 | 10.0% | 12.0s | none | Poor performance |
+| 6 | `deepseek-coder:1.3b` | 4/50 | 8.0% | 23.3s | none | ❌ Catastrophic failure |
+
+**Key Findings (1B+ GSM8K):**
+1. **`llama3.2:1b` dominates** - 90% accuracy, clear winner among 1B+ models
+2. **`dolphin3.0-llama3:1b` is fastest** (5.9s) with solid 70% accuracy
+3. **`granite3.1-moe:1b` consistent** - 68% matches its 15-test performance (80%)
+4. **`deepseek-coder:1.3b` fails** - Despite 60% on 15-test, only 8% on GSM8K math
+5. **Tiny models struggle** - Both tinydolphin and tinyllama under 25%
+
+#### 1B+ vs Sub-500M Comparison (GSM8K)
+
+| Rank | Model | Params | Accuracy | Avg Time |
+|:----:|-------|-------:|--------:|--------:|
+| 🥇 | **`llama3.2:1b`** | 1.2B | **90.0%** | 12.7s |
+| 🥈 | `qwen2.5:0.5b` + ReAct | 494M | 84.0% | 19.0s |
+| 🥉 | `dolphin3.0-qwen2.5:0.5b` | 494M | 78.0% | 8.9s |
+| 4 | `granite4:350m` + ReAct | 350M | 76.0% | 20.1s |
+| 5 | `dolphin3.0-llama3:1b` | 1B | 70.0% | **5.9s** |
+| 6 | `granite3.1-moe:1b` | 1B MoE | 68.0% | 13.4s |
+| 7 | `gemma3:270m` | 270M | 62.0% | 2.7s |
+
+**Insight**: `llama3.2:1b` at 90% outperforms all sub-500M models, but `dolphin3.0-qwen2.5:0.5b` (78%) and `qwen2.5:0.5b` + ReAct (84%) are competitive at half the size.
+
+---
+
 ### Key Findings
 
 #### 1. Dolphin Fine-tunes Excel at Tool Calling
@@ -296,12 +332,13 @@ LocalClaw has been tested with **Microsoft BitNet-b1.58-2B-4T** — a 2B paramet
 
 | Use Case | Recommended Model | Why |
 |----------|-------------------|-----|
-| **Best 1B (15-test)** | `llama3.2:1b` | **87% (13/15)**, fastest among top scorers |
-| **Best 1B for Math** | `granite3.1-moe:1b` | **3/3 Math**, 3/3 Calc, fastest top-3 (89.4s) |
-| **Best GSM8K (ReAct)** | `qwen2.5:0.5b` + `--force-react` | **84% GSM8K**, excellent tool use via ReAct |
+| **Best 1B Overall** | `llama3.2:1b` | **90% GSM8K**, 87% (13/15) test, 128k context |
+| **Best 1B for Math** | `llama3.2:1b` | **90% GSM8K**, best math reasoning in class |
+| **Best GSM8K Overall** | `llama3.2:1b` | **90% GSM8K**, beats all sub-500M models |
+| **Best GSM8K (sub-500M)** | `qwen2.5:0.5b` + `--force-react` | **84% GSM8K**, excellent tool use via ReAct |
 | **Best GSM8K (native)** | `dolphin3.0-qwen2.5:0.5b` | **78% GSM8K**, fast (8.9s), native tools |
 | **Best speed (sub-500M)** | `gemma3:270m` | **2.7s avg**, pure reasoning (no tools) |
-| **Best speed (1B)** | `nchapman/dolphin3.0-llama3:1b` | **28.3s** total, good for Code tasks |
+| **Best speed (1B)** | `nchapman/dolphin3.0-llama3:1b` | **5.9s avg**, 70% GSM8K, fast inference |
 | **Best Calc tool use** | `granite4:350m` | **3/3 Calc**, 76% GSM8K with ReAct |
 | **Large context** | `llama3.2:1b` | **128k context window** |
 | **CPU-only** | `BitNet-b1.58-2B-4T` | Efficient ternary weights, no GPU needed |
