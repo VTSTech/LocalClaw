@@ -142,6 +142,9 @@ from .core.orchestrator_enhanced import Orchestrator as EnhancedOrchestrator, Ag
 # Tool support detection
 from .cli import get_tool_support
 
+# Shared args for test scripts
+from .shared_args import add_shared_args, parse_shared_args, SharedConfig
+
 __all__ = [
     # Core
     "Agent", "AgentRun", "StepResult",
@@ -158,6 +161,9 @@ __all__ = [
     "get_system_prompt",
     "get_tool_support",  # Tool support detection
     "model_discovery",
+    "add_shared_args",   # Shared CLI args for test scripts
+    "parse_shared_args",
+    "SharedConfig",
     # Config exports
     "OLLAMA_BASE_URL",
     "BITNET_BASE_URL", 

@@ -19,15 +19,23 @@ import os
 import time
 import re
 import json
+import argparse
 import unicodedata
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from localclaw import Agent, get_default_client, get_tool_support, LOCALCLAW_BACKEND
 from localclaw.tools.builtins import make_builtin_registry
 from localclaw.model_discovery import get_available_models
+from localclaw.shared_args import add_shared_args, parse_shared_args, SharedConfig
+
+# Parse CLI args (with env var fallbacks)
+parser = argparse.ArgumentParser(description="LocalClaw Model Comparison")
+add_shared_args(parser)
+args = parser.parse_args()
+config = parse_shared_args(args)
 
 # Check for optional ACP support
-USE_ACP = os.environ.get("LOCALCLAW_ACP", "0") == "1"
+USE_ACP = config.acp
 if USE_ACP:
     try:
         from localclaw.acp_plugin import ACPPlugin
@@ -35,8 +43,8 @@ if USE_ACP:
         print("⚠️ ACP requested but ACPPlugin not available")
         USE_ACP = False
 
-# Check for debug mode
-DEBUG = os.environ.get("LOCALCLAW_DEBUG", "0") == "1"
+# Debug mode
+DEBUG = config.debug
 
 BACKEND_NAME = LOCALCLAW_BACKEND.upper()
 
@@ -124,11 +132,14 @@ TESTS = [
 ]
 
 
-def test_model(client, model: str, force_react: bool = False, acp=None) -> dict:
+def test_model(client, model: str, config: SharedConfig, acp=None) -> dict:
     """Test a single model and return results."""
     print(f"\n{'='*60}")
     print(f"🧪 Testing: {model}")
     print(f"{'='*60}")
+    
+    # Get force_react from config
+    force_react = config.force_react
     
     # Create model-specific ACP instance if ACP is enabled
     model_acp = None
@@ -198,17 +209,22 @@ def test_model(client, model: str, force_react: bool = False, acp=None) -> dict:
                 system_prompt = SYSTEM_PROMPT_NO_TOOLS
                 use_react = False
             
+            # Build model options: start with config, override with test-specific
+            model_opts = {"temperature": 0.0}  # Deterministic
+            model_opts.update(config.model_options)  # Apply CLI args (num_ctx, num_predict, etc.)
+            # Override for this specific test type
+            if "num_ctx" not in model_opts:
+                model_opts["num_ctx"] = 512  # Small context for short answers
+            if "num_predict" not in model_opts:
+                model_opts["num_predict"] = 64  # Most answers are 1-10 tokens
+            
             agent = Agent(
                 model=model,
                 tools=registry,
                 system_prompt=system_prompt,
                 max_steps=5,
                 client=client,
-                model_options={
-                    "temperature": 0.0,      # Deterministic
-                    "num_ctx": 512,        # Small context for short answers
-                    "num_predict": 64,     # Most answers are 1-10 tokens
-                },
+                model_options=model_opts,
                 force_react=use_react,
             )
             
@@ -287,8 +303,8 @@ def test_model(client, model: str, force_react: bool = False, acp=None) -> dict:
 
 
 def main():
-    # Check for force_react env var
-    force_react = os.environ.get("LOCALCLAW_FORCE_REACT", "").lower() in ("1", "true", "yes")
+    # Get force_react from config (parsed from CLI or env)
+    force_react = config.force_react
     
     # Create main ACP instance for session tracking
     main_acp = None
@@ -329,6 +345,17 @@ def main():
         # Filter to available models
         models_to_test = [m for m in MODELS if any(m.split(':')[0] in a for a in available)]
     
+    # If --model was specified, filter to just that model
+    if config.model:
+        models_to_test = [m for m in models_to_test if config.model in m]
+        if not models_to_test:
+            # Try exact match
+            if config.model in available:
+                models_to_test = [config.model]
+            else:
+                print(f"   ⚠️ Model '{config.model}' not found in available models")
+                return
+    
     if not models_to_test:
         print("   ⚠️ No models to test!")
         return
@@ -344,7 +371,7 @@ def main():
     for model in models_to_test:
         # Find the exact model name from available
         exact_name = next((a for a in available if model.split(':')[0] in a), model)
-        result = test_model(client, exact_name, force_react=force_react)
+        result = test_model(client, exact_name, config=config, acp=main_acp)
         all_results.append(result)
         
         # Log model result to main ACP

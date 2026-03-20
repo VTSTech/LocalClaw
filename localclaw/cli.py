@@ -1852,32 +1852,33 @@ def cmd_test(args):
         print()
         
         timeout = getattr(args, "timeout", 300)
-        force_react = getattr(args, "force_react", False)
-        use_mf_sys = getattr(args, "use_modelfile_system", False)
-        model_override = getattr(args, "model", None)
-        debug = getattr(args, "debug", False)
         
-        # Pass flags via environment variable to scripts
-        env = os.environ.copy()
-        if force_react:
-            env["LOCALCLAW_FORCE_REACT"] = "1"
-        if use_mf_sys:
-            env["LOCALCLAW_USE_MF_SYS"] = "1"
-        if model_override:
-            env["LOCALCLAW_MODEL"] = model_override
-        if debug:
-            env["LOCALCLAW_DEBUG"] = "1"
+        # Build CLI args to pass to the subprocess
+        cmd_args = [sys.executable, str(example_file)]
+        if getattr(args, "force_react", False):
+            cmd_args.append("--force-react")
+        if getattr(args, "use_modelfile_system", False):
+            cmd_args.append("--use-mf-sys")
+        if getattr(args, "model", None):
+            cmd_args.extend(["--model", args.model])
+        if getattr(args, "debug", False):
+            cmd_args.append("--debug")
         if use_acp:
-            env["LOCALCLAW_ACP"] = "1"
+            cmd_args.append("--acp")
+        if getattr(args, "num_ctx", None):
+            cmd_args.extend(["--num-ctx", str(args.num_ctx)])
+        if getattr(args, "num_predict", None):
+            cmd_args.extend(["--num-predict", str(args.num_predict)])
+        if getattr(args, "fast", False):
+            cmd_args.append("--fast")
         
         try:
             result = subprocess.run(
-                [sys.executable, str(example_file)],
+                cmd_args,
                 cwd=examples_dir,
                 capture_output=False,
                 text=True,
                 timeout=timeout,
-                env=env,
             )
             
             if result.returncode == 0:
@@ -2128,6 +2129,25 @@ def build_parser() -> argparse.ArgumentParser:
         "--acp",
         action="store_true",
         help="Enable ACP (Agent Control Panel) integration for activity tracking",
+    )
+    p_test.add_argument(
+        "--num-ctx",
+        type=int,
+        default=None,
+        metavar="TOKENS",
+        help="Context window size (default: model's native context length)",
+    )
+    p_test.add_argument(
+        "--num-predict",
+        type=int,
+        default=None,
+        metavar="TOKENS",
+        help="Maximum tokens to generate (default: -1 = infinite)",
+    )
+    p_test.add_argument(
+        "--fast",
+        action="store_true",
+        help="Fast mode preset: num_ctx=2048, num_predict=256",
     )
     p_test.set_defaults(func=cmd_test)
 
