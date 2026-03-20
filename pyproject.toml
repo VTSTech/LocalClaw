@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "localclaw"
-version = "0.3.1.1"
+version = "0.3.1.2"
 description = "A minimal, hackable agentic framework for Ollama and BitNet - local-first AI agent toolkit"
 readme = "README.md"
 license = {text = "MIT"}
@@ -22,6 +22,7 @@ keywords = [
     "bitnet",
     "local-ai",
     "agentic",
+    "agent-mode",
     "tool-use",
     "function-calling",
     "cli",

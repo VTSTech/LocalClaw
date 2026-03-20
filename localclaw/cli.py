@@ -6,6 +6,7 @@ Entry point: localclaw <command> [options]
 Commands:
   run     Run the agent on a single prompt and exit
   chat    Interactive multi-turn conversation with memory
+  agent   Agent mode: autonomous task execution with planning
   models  List models available in Ollama
   tools   List available built-in tools
   skills  List available Agent Skills
@@ -16,6 +17,7 @@ Examples:
   localclaw run "What is sqrt(144)?" --tools calculator
   localclaw chat --model llama3.1:8b --tools calculator,shell
   localclaw chat --skills skill-creator --tools write_file,shell
+  localclaw agent --model llama3.2:1b --tools shell,calculator
   localclaw models
   localclaw tools
   localclaw skills
@@ -44,6 +46,7 @@ from .core.memory import Message
 from .tools.builtins import BUILTIN_REGISTRY
 from .skills import SkillLoader, SkillRegistry
 from .acp_plugin import ACPPlugin
+from .agent_mode import AgentMode, AgentState, TaskPlan, Step, Action
 try:
     from .bitnet_client import BitnetClient, KNOWN_MODELS
     _BITNET_AVAILABLE = True
@@ -1730,6 +1733,405 @@ def cmd_chat(args):
         print(f"\n{dim('Interrupted.')}")
 
 
+def cmd_agent(args):
+    """
+    Agent Mode - Goal-driven autonomous task execution.
+
+    Unlike chat mode (which is user-driven), agent mode:
+    - Plans and executes multi-step tasks autonomously
+    - Queues messages while working, processes after completion
+    - Supports rollback of current step on /stop
+    - Provides progress tracking via slash commands
+
+    State Machine:
+      IDLE → WORKING (task given) → IDLE (task done)
+                  ↓
+             STOPPING (/stop) → IDLE (with optional rollback)
+    """
+    import threading
+    from .agent_mode import format_status, format_progress
+
+    client = _build_client(args)
+    backend = getattr(args, "backend", "ollama")
+
+    if not client.is_running():
+        if backend == "bitnet":
+            url = getattr(client, "base_url", "http://localhost:8765")
+            print(red(f"✗  BitNet backend not found at {url}"))
+            print(dim("   Ensure llama-server.exe is running in a separate terminal."))
+        else:
+            print(red("✗  Ollama is not running. Start it with: ollama serve"))
+        sys.exit(1)
+
+    # Warm up model if requested
+    if getattr(args, "warmup", False):
+        print(dim("  🔥 Warming up model..."), end=" ", flush=True)
+        t0 = time.perf_counter()
+        try:
+            warmup_response = client.chat(
+                model=args.model,
+                messages=[{"role": "user", "content": "Hi"}],
+                options={"num_predict": 1}
+            )
+            elapsed = (time.perf_counter() - t0) * 1000
+            print(green(f"✓ {elapsed:.0f}ms"))
+        except Exception as e:
+            print(yellow(f"(warmup failed: {e})"))
+        print()
+
+    agent, skill_registry, acp_plugin = _build_agent(args, client)
+
+    # Bootstrap ACP if enabled
+    if acp_plugin:
+        bootstrap_result = acp_plugin.bootstrap(claim_primary=False)
+        if getattr(args, "verbose", False):
+            if bootstrap_result.get("primary_claimed"):
+                print(dim(f"  🔗 ACP: Claimed primary agent"))
+            else:
+                print(dim(f"  🔗 ACP: Connected as secondary agent"))
+
+    # Create AgentMode session
+    agent_mode = AgentMode(agent, verbose=getattr(args, "verbose", False))
+
+    # Build status line
+    parts = [f"[{args.model}"]
+    if args.tools:
+        parts.append(f"tools: {args.tools}")
+    if args.skills:
+        parts.append(f"skills: {args.skills}")
+    parts.append("]")
+    status = " ".join(parts)
+
+    print(bold(f"\n🦞 LocalClaw R03 agent mode") + dim(f"  {status} · Written by VTSTech · https://www.vts-tech.org · https://github.com/VTSTech/LocalClaw"))
+    print(dim("  Agent mode: Give tasks and the agent will work autonomously."))
+    print(dim("  Type '/help' to see available commands."))
+    print(dim("  ─────────────────────────────────────"))
+    print()
+
+    # State change callback
+    def on_state_change(old_state: AgentState, new_state: AgentState):
+        if new_state == AgentState.WORKING:
+            print(cyan("  ⚙  Agent is working..."))
+            print(dim("     Messages will be queued until task completes."))
+            print(dim("     Use /status, /progress, or /stop to interact."))
+            print()
+        elif new_state == AgentState.PAUSED:
+            print(yellow("  ⏸  Agent paused."))
+            print(dim("     Use /resume to continue or /stop to abort."))
+            print()
+        elif new_state == AgentState.IDLE and old_state == AgentState.WORKING:
+            print(green("  ✓  Agent is now idle."))
+            # Process queued messages
+            queued = agent_mode.process_queue()
+            if queued:
+                print(dim(f"     Processing {len(queued)} queued message(s)..."))
+                for msg in queued:
+                    print(dim(f"     • {msg[:50]}..."))
+                print()
+
+    agent_mode.on_state_change = on_state_change
+
+    # Step completion callback
+    def on_step_complete(step: Step):
+        if getattr(args, "verbose", False):
+            print(green(f"  ✓ Step {agent_mode.plan.current_step_index}/{agent_mode.plan.total_steps}: {step.description}"))
+            if step.actions:
+                print(dim(f"     {len(step.actions)} action(s) completed"))
+
+    agent_mode.on_step_complete = on_step_complete
+
+    # Task completion callback
+    def on_task_complete(plan: TaskPlan):
+        print()
+        print(bold(green("  🏆 Task Complete!")))
+        print(dim(f"     Goal: {plan.goal}"))
+        print(dim(f"     Steps completed: {plan.completed_steps}/{plan.total_steps}"))
+        # Show queued messages
+        queued = agent_mode.process_queue()
+        if queued:
+            print()
+            print(yellow(f"  📬 {len(queued)} message(s) queued during execution:"))
+            for i, msg in enumerate(queued, 1):
+                print(dim(f"     {i}. {msg[:60]}{'...' if len(msg) > 60 else ''}"))
+        print()
+
+    agent_mode.on_task_complete = on_task_complete
+
+    # Background task execution
+    _execution_thread = None
+    _stop_requested = False
+
+    def run_task_in_background(goal: str):
+        """Run task in background thread."""
+        nonlocal _stop_requested
+        _stop_requested = False
+        try:
+            success, msg = agent_mode.run_task(goal)
+            if not success:
+                print(red(f"  ✗ Task failed: {msg}"))
+        except Exception as e:
+            print(red(f"  ✗ Error: {e}"))
+
+    try:
+        while True:
+            try:
+                # Show appropriate prompt based on state
+                if agent_mode.state == AgentState.WORKING:
+                    prompt_text = bold(yellow("⚙ Working"))
+                elif agent_mode.state == AgentState.PAUSED:
+                    prompt_text = bold(yellow("⏸ Paused"))
+                else:
+                    prompt_text = bold("You")
+                user_input = input(f"{prompt_text}: ").strip()
+            except EOFError:
+                break
+
+            if not user_input:
+                continue
+
+            # ═══════════════════════════════════════════════════════════════════
+            # Always-available slash commands
+            # ═══════════════════════════════════════════════════════════════════
+
+            if user_input.lower() in ("exit", "quit", "/exit", "/quit"):
+                if agent_mode.state == AgentState.WORKING:
+                    print(yellow("  ⚠ Agent is working. Use /stop first or /stop --rollback"))
+                else:
+                    print(dim("Goodbye."))
+                    break
+                continue
+
+            if user_input == "/help":
+                print()
+                print(cyan("  Agent Mode Commands"))
+                print(dim("  ─────────────────────────────────────"))
+                print("  " + bold("Task Management"))
+                print(dim("    <task>          Give agent a task to work on autonomously"))
+                print(dim("    /status         Show current agent status and progress"))
+                print(dim("    /progress       Show detailed step-by-step progress"))
+                print(dim("    /plan           Show the current task plan"))
+                print(dim("    /stop           Stop current task (with rollback prompt)"))
+                print(dim("    /stop --force   Stop without rollback confirmation"))
+                print()
+                print("  " + bold("Pause/Resume"))
+                print(dim("    /pause          Pause execution (can resume later)"))
+                print(dim("    /resume         Resume from paused state"))
+                print()
+                print("  " + bold("Rollback"))
+                print(dim("    /rollback       Rollback current step (when stopped)"))
+                print()
+                print("  " + bold("Session"))
+                print(dim("    /reset          Clear agent memory and plans"))
+                print(dim("    /logs           Show execution logs"))
+                print(dim("    /help           Show this help message"))
+                print(dim("    exit, quit      End the session"))
+                print()
+                print("  " + bold("Information"))
+                print(dim("    /tools          List active tools"))
+                print(dim("    /skills         List active skills"))
+                print(dim("    /ollama         Ollama management commands"))
+                print()
+                continue
+
+            if user_input == "/status":
+                status = agent_mode.get_status()
+                print()
+                print(cyan("  Agent Status"))
+                print(dim("  ─────────────────────────────────────"))
+                print(format_status(status))
+                print()
+                continue
+
+            if user_input == "/progress":
+                progress = agent_mode.get_progress()
+                print()
+                if "error" in progress:
+                    print(yellow(f"  {progress['error']}"))
+                else:
+                    print(cyan("  Task Progress"))
+                    print(dim("  ─────────────────────────────────────"))
+                    print(format_progress(progress))
+                print()
+                continue
+
+            if user_input == "/plan":
+                plan = agent_mode.get_plan()
+                print()
+                if plan is None:
+                    print(dim("  No active task plan."))
+                    print(dim("  Give the agent a task to create a plan."))
+                else:
+                    print(cyan("  Current Task Plan"))
+                    print(dim("  ─────────────────────────────────────"))
+                    print(f"  Goal: {plan['goal']}")
+                    print(f"  Created: {plan['created_at']}")
+                    print(f"  Steps: {plan['total_steps']}")
+                    print()
+                    for i, step in enumerate(plan['steps'], 1):
+                        icon = {
+                            "pending": "○",
+                            "in_progress": "◐",
+                            "done": "●",
+                            "rolled_back": "↺",
+                        }.get(step['status'], "?")
+                        print(f"    {icon} {i}. {step['description']} [{step['status']}]")
+                print()
+                continue
+
+            if user_input == "/pause":
+                success, msg = agent_mode.pause()
+                if success:
+                    print(green(f"  ✓ {msg}"))
+                else:
+                    print(yellow(f"  ⚠ {msg}"))
+                continue
+
+            if user_input == "/resume":
+                success, msg = agent_mode.resume()
+                if success:
+                    print(green(f"  ✓ {msg}"))
+                else:
+                    print(yellow(f"  ⚠ {msg}"))
+                continue
+
+            if user_input.startswith("/stop"):
+                # Parse rollback option
+                force = "--force" in user_input or "-f" in user_input
+                no_rollback = "--no-rollback" in user_input
+
+                if agent_mode.state == AgentState.IDLE:
+                    print(dim("  Agent is already idle. No task to stop."))
+                    continue
+
+                if not force and not no_rollback:
+                    # Ask for rollback confirmation
+                    print()
+                    print(yellow("  Stop current task?"))
+                    current_step = agent_mode.plan.current_step_index + 1 if agent_mode.plan else 0
+                    total_steps = agent_mode.plan.total_steps if agent_mode.plan else 0
+                    print(dim(f"  Currently at step {current_step}/{total_steps}"))
+                    print(dim("  Options:"))
+                    print(dim("    • [y] Stop and rollback current step"))
+                    print(dim("    • [n] Stop without rollback"))
+                    print(dim("    • [c] Cancel (continue task)"))
+
+                    try:
+                        confirm = input(bold("  Choice [y/N/c]: ")).strip().lower()
+                    except (EOFError, KeyboardInterrupt):
+                        print(dim("  Cancelled."))
+                        continue
+
+                    if confirm == 'c':
+                        print(dim("  Continuing task..."))
+                        continue
+                    elif confirm == 'y':
+                        success, msg = agent_mode.stop(rollback=True)
+                    else:
+                        success, msg = agent_mode.stop(rollback=False)
+                else:
+                    success, msg = agent_mode.stop(rollback=not no_rollback)
+
+                print(green(f"  ✓ {msg}") if success else yellow(f"  ⚠ {msg}"))
+                continue
+
+            if user_input == "/rollback":
+                if agent_mode.state != AgentState.IDLE:
+                    print(yellow("  Cannot rollback while agent is active. Use /stop first."))
+                    continue
+                print(yellow("  No current step to rollback."))
+                continue
+
+            if user_input == "/logs":
+                logs = agent_mode.get_logs(limit=20)
+                print()
+                print(cyan("  Execution Logs"))
+                print(dim("  ─────────────────────────────────────"))
+                if not logs:
+                    print(dim("  No logs yet."))
+                else:
+                    for log in logs:
+                        log_type = log.get("type", "unknown")
+                        timestamp = log.get("timestamp", "")[:19]
+                        if log_type == "task_start":
+                            print(f"  ▶ {timestamp}: Task started - {log.get('goal', '')[:50]}")
+                        elif log_type == "step_start":
+                            print(f"    → {timestamp}: Step - {log.get('step_description', '')[:40]}")
+                        elif log_type == "step_failed":
+                            print(red(f"    ✗ {timestamp}: Step {log.get('step', '?')} failed"))
+                        elif log_type == "task_complete":
+                            print(green(f"  ✓ {timestamp}: Task completed"))
+                        elif log_type == "stop":
+                            print(yellow(f"  ⏹ {timestamp}: Stopped (rollback={log.get('rollback', False)})"))
+                print()
+                continue
+
+            if user_input == "/reset":
+                agent.reset()
+                agent_mode = AgentMode(agent, verbose=getattr(args, "verbose", False))
+                agent_mode.on_state_change = on_state_change
+                agent_mode.on_step_complete = on_step_complete
+                agent_mode.on_task_complete = on_task_complete
+                print(dim("  ↺  Agent memory and plans cleared."))
+                continue
+
+            if user_input == "/tools":
+                if agent.tools.all():
+                    names = [t.name for t in agent.tools.all()]
+                    print(dim(f"  Active tools: {', '.join(names)}"))
+                else:
+                    print(dim("  No tools active. Use --tools to add some."))
+                continue
+
+            if user_input == "/skills":
+                if len(skill_registry) > 0:
+                    names = skill_registry.list()
+                    for name in names:
+                        skill = skill_registry.get(name)
+                        desc = skill.description[:50] + "..." if len(skill.description) > 50 else skill.description
+                        print(dim(f"  • {name}: {desc}"))
+                else:
+                    print(dim("  No skills active. Use --skills to add some."))
+                continue
+
+            # Ollama commands (always available)
+            if user_input == "/ollama" or user_input.startswith("/ollama "):
+                _handle_ollama_command(user_input, agent.client, args)
+                continue
+
+            # ═══════════════════════════════════════════════════════════════════
+            # Task handling based on state
+            # ═══════════════════════════════════════════════════════════════════
+
+            if agent_mode.state == AgentState.WORKING:
+                # Queue message while working
+                queue_len = agent_mode.queue_message(user_input)
+                print(yellow(f"  📬 Message queued (position {queue_len}). Agent will process after task completes."))
+                continue
+
+            if agent_mode.state == AgentState.PAUSED:
+                print(yellow("  Agent is paused. Use /resume to continue or /stop to abort."))
+                continue
+
+            # Agent is IDLE - start a new task
+            # Run task in background thread
+            print()
+            print(cyan(f"  📋 Starting task: {user_input[:60]}{'...' if len(user_input) > 60 else ''}"))
+            print(dim("  Agent will work autonomously. Messages will be queued until completion."))
+            print()
+
+            _execution_thread = threading.Thread(
+                target=run_task_in_background,
+                args=(user_input,),
+                daemon=True
+            )
+            _execution_thread.start()
+
+    except KeyboardInterrupt:
+        print(f"\n{dim('Interrupted.')}")
+        if agent_mode.state == AgentState.WORKING:
+            print(yellow("  Agent was working. Use /stop on restart to rollback if needed."))
+
+
 def cmd_test(args):
     """Run example/test scripts from the localclaw package."""
     import subprocess
@@ -2064,6 +2466,10 @@ def build_parser() -> argparse.ArgumentParser:
     # ── chat ────────────────────────────────────────────────────────
     p_chat = sub.add_parser("chat", parents=[shared], help="Interactive chat")
     p_chat.set_defaults(func=cmd_chat)
+
+    # ── agent ────────────────────────────────────────────────────────
+    p_agent = sub.add_parser("agent", parents=[shared], help="Agent mode: autonomous task execution with planning")
+    p_agent.set_defaults(func=cmd_agent)
 
     # ── models ──────────────────────────────────────────────────────
     p_models = sub.add_parser("models", parents=[shared], help="List available models")
