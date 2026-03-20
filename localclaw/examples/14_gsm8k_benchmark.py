@@ -26,6 +26,7 @@ import json
 import time
 import sys
 import os
+import argparse
 
 # Add LocalClaw package to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -41,9 +42,16 @@ from localclaw.core.math_prompts import (
     calculator_tool,
 )
 from localclaw.model_discovery import get_available_models, pick_models_for_benchmark
+from localclaw.shared_args import add_shared_args, parse_shared_args, SharedConfig
+
+# Parse CLI args (with env var fallbacks)
+parser = argparse.ArgumentParser(description="GSM8K Agent Benchmark")
+add_shared_args(parser)
+args = parser.parse_args()
+config = parse_shared_args(args)
 
 # Check for optional ACP support
-USE_ACP = os.environ.get("LOCALCLAW_ACP", "0") == "1"
+USE_ACP = config.acp
 if USE_ACP:
     try:
         from localclaw.acp_plugin import ACPPlugin
@@ -51,8 +59,8 @@ if USE_ACP:
         print("⚠️ ACP requested but ACPPlugin not available")
         USE_ACP = False
 
-# Check for debug mode
-DEBUG = os.environ.get("LOCALCLAW_DEBUG", "0") == "1"
+# Debug mode
+DEBUG = config.debug
 
 BACKEND_NAME = LOCALCLAW_BACKEND.upper()
 
@@ -142,7 +150,7 @@ def create_calculator_tool():
     return registry
 
 
-def test_model_with_agent(model: str, question: str, expected: str, client, acp=None, force_react: bool = False) -> dict:
+def test_model_with_agent(model: str, question: str, expected: str, client, acp=None, force_react: bool = False, model_options: dict = None) -> dict:
     """
     Test a model using the full Agent system with calculator tool.
     
@@ -165,6 +173,8 @@ def test_model_with_agent(model: str, question: str, expected: str, client, acp=
         ACP instance for logging
     force_react : bool
         If True, force all models to use ReAct mode (for testing)
+    model_options : dict, optional
+        Model options like num_ctx, num_predict
     """
     try:
         # Detect tool support level for prompt selection
@@ -186,6 +196,11 @@ def test_model_with_agent(model: str, question: str, expected: str, client, acp=
         # Build step callback for ACP if enabled
         on_step = acp.on_step if acp else None
         
+        # Build model options
+        opts = {"num_predict": 150}  # Default for math questions
+        if model_options:
+            opts.update(model_options)  # Apply CLI overrides
+        
         # Create agent - it handles tool support detection internally
         # Only pass tools if model supports them
         agent_tools = create_calculator_tool() if tool_support != "none" else None
@@ -195,7 +210,7 @@ def test_model_with_agent(model: str, question: str, expected: str, client, acp=
             system_prompt=system_prompt,
             max_steps=5,
             client=client,
-            model_options={"num_predict": 150},
+            model_options=opts,
             on_step=on_step,
             force_react=force_react,  # Agent handles this appropriately
         )
@@ -243,8 +258,8 @@ def main():
     open(RESULTS_FILE, "w").close()
     open(LOG_FILE, "w").close()
     
-    # Check for force_react env var
-    force_react = os.environ.get("LOCALCLAW_FORCE_REACT", "").lower() in ("1", "true", "yes")
+    # Get force_react from config (CLI arg or env var)
+    force_react = config.force_react
     
     # Create main ACP instance if enabled
     main_acp = None
@@ -265,6 +280,18 @@ def main():
     # Discover available models dynamically
     log("Discovering available models...")
     MODELS = pick_models_for_benchmark(max_models=6, prefer_small=True, client=client)
+    
+    # If --model specified, filter to just that model
+    if config.model:
+        MODELS = [m for m in MODELS if config.model in m]
+        if not MODELS:
+            # Try exact match
+            available = get_available_models(client)
+            if config.model in available:
+                MODELS = [config.model]
+            else:
+                log(f"ERROR: Model '{config.model}' not found")
+                sys.exit(1)
     
     if not MODELS:
         log(f"ERROR: No models found! Make sure {BACKEND_NAME} is running with models pulled.")
@@ -313,7 +340,12 @@ def main():
             model_acp.bootstrap(claim_primary=False)
         
         for i, (question, expected) in enumerate(QUESTIONS):
-            result = test_model_with_agent(model, question, expected, client, acp=model_acp, force_react=force_react)
+            result = test_model_with_agent(
+                model, question, expected, client, 
+                acp=model_acp, 
+                force_react=force_react,
+                model_options=config.model_options
+            )
             results.append(result)
             completed += 1
             
