@@ -19,12 +19,40 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - **Syntax error in cli.py line 446** - f-string cannot contain backslash
   - Changed `system.split('\n')` inside f-string to pre-computed `more_lines` variable
   - Python f-strings require backslash expressions to be moved outside the `{}`
+- **`/ollama rm` JSON parsing error** - Ollama returns empty response on successful delete
+  - Updated `_delete()` to handle empty responses gracefully
+  - Returns `{"status": "success"}` for empty responses
+- **`/ollama stop` HTTP 404 error** - Model not running causes confusing error
+  - Updated `unload_model()` to return `{"status": "not_running"}` instead of throwing error
+  - CLI now shows "⚠ Model 'xxx' is not currently running"
+- **`re` module import error** - Missing module-level import in cli.py
+  - Added `import re` at module level for `_contains_text_tool_call()` function
 
 ### Changed
 - **TESTS.md restructured** with comprehensive benchmark comparison
   - Added separate tables for Modelfile prompts vs `--force-react` mode
   - Added "Mode Comparison" table showing which mode is better per model
   - Updated category champions for both modes
+- **Tool support detection logic (v2)** - Improved accuracy
+  - Added `_contains_text_tool_call()` to detect text-based JSON tool calls
+  - Models outputting `{"name": "...", "arguments": {...}}` as TEXT now classified as "react"
+  - "native" requires ACTUAL `tool_calls` structure in API response
+  - New output message: `→ ReAct (text JSON)` for text-based tool calling
+- **Memory optimization** for `--tool_support` testing
+  - Models are now unloaded after each tool support test
+  - Prevents memory exhaustion when testing multiple models
+
+### Tool Support Detection Results (1B-2B Models)
+
+| Model | Tool Support | Notes |
+|-------|--------------|-------|
+| `llama3.2:1b` | ✓ native | True native API tool calling |
+| `granite3.1-moe:1b` | ReAct (text JSON) | Outputs JSON as text, not native API |
+| `driaforall/tiny-agent-a:1.5b` | ReAct | API accepted tools, no native calls |
+| `deepseek-coder:1.3b` | ○ none | Modelfile issue (model supports tools) |
+| `nchapman/dolphin3.0-llama3:1b` | ○ none | Dolphin fine-tune lost tool support |
+| `tinydolphin:1.1b` | ○ none | Too small/old |
+| `tinyllama:1.1b` | ○ none | Too small/old |
 
 ### Benchmark Results (15-Test Comparison)
 
