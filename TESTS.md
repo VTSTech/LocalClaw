@@ -1,5 +1,53 @@
 # 🦞 LocalClaw R03
 
+## Test 07 Benchmark Results (15-Test Suite)
+
+---
+
+### 1B+ Models with Modelfile Prompts (R03.1.1)
+
+The following 1B-2B parameter models were tested on the **15-test benchmark** using Modelfile system prompts:
+
+| Rank | Model | Score | Time | Math | Reason | Know | Calc | Code |
+|:----:|-------|------:|-----:|:-----:|:------:|:----:|:----:|:----:|
+| 🥇 | **`llama3.2:1b`** | **13/15 (87%)** | 106.8s | 3/3 | 2/3 | 2/3 | 3/3 | 3/3 |
+| 🥈 | `driaforall/tiny-agent-a:1.5b` | 13/15 (87%) | 136.5s | 3/3 | 2/3 | 2/3 | 3/3 | 3/3 |
+| 🥉 | `granite3.1-moe:1b` | 12/15 (80%) | **89.4s** | 3/3 | 2/3 | 2/3 | 3/3 | 2/3 |
+| 4 | `tinydolphin:1.1b` | 9/15 (60%) | 63.3s | 2/3 | 1/3 | 3/3 | 1/3 | 2/3 |
+| 5 | `deepseek-coder:1.3b` | 9/15 (60%) | 111.3s | 2/3 | 1/3 | 1/3 | 2/3 | 3/3 |
+| 6 | `tinyllama:1.1b` | 8/15 (53%) | 68.2s | 1/3 | 1/3 | 2/3 | 2/3 | 2/3 |
+| 7 | `nchapman/dolphin3.0-llama3:1b` | 7/15 (47%) | **28.3s** | 1/3 | 1/3 | 1/3 | 1/3 | 3/3 |
+
+#### Category Champions (1B+)
+
+| Category | 🏆 Champion | Score |
+|----------|-------------|-------|
+| **Math** | `granite3.1-moe:1b` | 3/3 |
+| **Reasoning** | `granite3.1-moe:1b` | 2/3 |
+| **Knowledge** | `tinydolphin:1.1b` | 3/3 |
+| **Calc** | `llama3.2:1b` | 3/3 |
+| **Code** | `nchapman/dolphin3.0-llama3:1b` | 3/3 |
+
+**Key Findings:**
+1. **`llama3.2:1b` is the best 1B model** - ties on score with `tiny-agent-a:1.5b` but 30s faster
+2. **`granite3.1-moe:1b` wins Math + Reasoning** - fastest among top 3 (89.4s)
+3. **`nchapman/dolphin3.0-llama3:1b` is fastest overall** (28.3s) but lowest score - good for Code only
+4. **`tinydolphin:1.1b` surprises** - Knowledge champion despite 60% overall
+
+#### Tool Support (1B+ Models)
+
+| Model | Tool Support | Notes |
+|-------|--------------|-------|
+| `llama3.2:1b` | ReAct | Text-based tool calling |
+| `driaforall/tiny-agent-a:1.5b` | ReAct (text JSON) | Outputs JSON as text |
+| `granite3.1-moe:1b` | ReAct (text JSON) | Outputs JSON as text |
+| `tinydolphin:1.1b` | none | No tool support |
+| `deepseek-coder:1.3b` | none | Modelfile missing tool info |
+| `tinyllama:1.1b` | none | No tool support |
+| `nchapman/dolphin3.0-llama3:1b` | none | No tool support |
+
+---
+
 ## GSM8K Benchmark Results
 
 The following models have been tested on a **50-question GSM8K-style benchmark** using the Agent system with tool support detection.
