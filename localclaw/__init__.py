@@ -145,6 +145,14 @@ from .cli import get_tool_support
 # Shared args for test scripts
 from .shared_args import add_shared_args, parse_shared_args, SharedConfig
 
+# R04: Agent Mode
+from .agent_mode import (
+    AgentMode, AgentState, TaskPlan, Step, Action,
+    create_file_write_action, create_file_delete_action,
+    create_mkdir_action, create_shell_action,
+    format_status, format_progress,
+)
+
 __all__ = [
     # Core
     "Agent", "AgentRun", "StepResult",
@@ -164,6 +172,11 @@ __all__ = [
     "add_shared_args",   # Shared CLI args for test scripts
     "parse_shared_args",
     "SharedConfig",
+    # R04: Agent Mode
+    "AgentMode", "AgentState", "TaskPlan", "Step", "Action",
+    "create_file_write_action", "create_file_delete_action",
+    "create_mkdir_action", "create_shell_action",
+    "format_status", "format_progress",
     # Config exports
     "OLLAMA_BASE_URL",
     "BITNET_BASE_URL", 
