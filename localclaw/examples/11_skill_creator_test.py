@@ -27,15 +27,23 @@ import sys
 import time
 import shutil
 import yaml
+import argparse
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from localclaw.skills import SkillLoader, SkillRegistry
 from localclaw import Agent, get_default_client, LOCALCLAW_BACKEND, StepResult
 from localclaw.tools.builtins import make_builtin_registry
 from localclaw.model_discovery import pick_best_model, get_available_models
+from localclaw.shared_args import add_shared_args, parse_shared_args
+
+# Parse CLI args (with env var fallbacks)
+parser = argparse.ArgumentParser(description="LocalClaw Skill Creator Test")
+add_shared_args(parser)
+args = parser.parse_args()
+config = parse_shared_args(args)
 
 # Check for optional ACP support
-USE_ACP = os.environ.get("LOCALCLAW_ACP", "0") == "1"
+USE_ACP = config.acp
 if USE_ACP:
     try:
         from localclaw.acp_plugin import ACPPlugin
@@ -44,7 +52,7 @@ if USE_ACP:
         USE_ACP = False
 
 # Check for debug mode
-DEBUG = os.environ.get("LOCALCLAW_DEBUG", "0") == "1"
+DEBUG = config.debug
 
 BACKEND_NAME = LOCALCLAW_BACKEND.upper()
 

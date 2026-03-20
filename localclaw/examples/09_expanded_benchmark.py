@@ -20,14 +20,22 @@ import time
 import re
 import json
 import unicodedata
+import argparse
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from localclaw import Agent, get_default_client, get_tool_support, LOCALCLAW_BACKEND
 from localclaw.tools.builtins import make_builtin_registry
 from localclaw.model_discovery import get_available_models, pick_best_model
+from localclaw.shared_args import add_shared_args, parse_shared_args
+
+# Parse CLI args (with env var fallbacks)
+parser = argparse.ArgumentParser(description="LocalClaw Expanded Benchmark")
+add_shared_args(parser)
+args = parser.parse_args()
+config = parse_shared_args(args)
 
 # Check for optional ACP support
-USE_ACP = os.environ.get("LOCALCLAW_ACP", "0") == "1"
+USE_ACP = config.acp
 if USE_ACP:
     try:
         from localclaw.acp_plugin import ACPPlugin
@@ -36,7 +44,7 @@ if USE_ACP:
         USE_ACP = False
 
 # Check for debug mode
-DEBUG = os.environ.get("LOCALCLAW_DEBUG", "0") == "1"
+DEBUG = config.debug
 
 BACKEND_NAME = LOCALCLAW_BACKEND.upper()
 
@@ -256,8 +264,8 @@ def test_model(client, model: str, results: dict, force_react: bool = False, acp
 
 
 def main():
-    # Check for force_react env var
-    force_react = os.environ.get("LOCALCLAW_FORCE_REACT", "").lower() in ("1", "true", "yes")
+    # Get force_react from config
+    force_react = config.force_react
     
     # Initialize ACP if enabled
     main_acp = None

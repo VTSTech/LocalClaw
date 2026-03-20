@@ -19,12 +19,20 @@ Written by VTSTech — https://www.vts-tech.org — https://github.com/VTSTech/L
 import os
 import sys
 import time
+import argparse
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from localclaw import Agent, get_default_client, get_tool_support, LOCALCLAW_BACKEND
+from localclaw.shared_args import add_shared_args, parse_shared_args
+
+# Parse CLI args (with env var fallbacks)
+parser = argparse.ArgumentParser(description="LocalClaw Shutdown Demo")
+add_shared_args(parser)
+args = parser.parse_args()
+config = parse_shared_args(args)
 
 # Check for ACP support
-USE_ACP = os.environ.get("LOCALCLAW_ACP", "0") == "1"
+USE_ACP = config.acp
 if not USE_ACP:
     print("⚠️ This demo requires ACP. Run with --acp flag or LOCALCLAW_ACP=1")
     print("   Example: localclaw test 13 --acp")
@@ -33,7 +41,7 @@ if not USE_ACP:
 from localclaw.acp_plugin import ACPPlugin
 
 BACKEND_NAME = LOCALCLAW_BACKEND.upper()
-DEBUG = os.environ.get("LOCALCLAW_DEBUG", "0") == "1"
+DEBUG = config.debug
 
 
 def main():

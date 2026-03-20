@@ -26,6 +26,7 @@ import os
 import sys
 import time
 import shutil
+import argparse
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from localclaw.skills import SkillLoader, SkillRegistry
@@ -40,11 +41,18 @@ from localclaw import (
 )
 from localclaw.tools.builtins import make_builtin_registry
 from localclaw.model_discovery import pick_best_model, get_available_models
+from localclaw.shared_args import add_shared_args, parse_shared_args
 
-# Check for environment flags
-USE_ACP = os.environ.get("LOCALCLAW_ACP", "0") == "1"
-DEBUG = os.environ.get("LOCALCLAW_DEBUG", "0") == "1"
-USE_MF_SYS = os.environ.get("LOCALCLAW_USE_MF_SYS", "0") == "1"
+# Parse CLI args (with env var fallbacks)
+parser = argparse.ArgumentParser(description="LocalClaw Skills Demo")
+add_shared_args(parser)
+args = parser.parse_args()
+config = parse_shared_args(args)
+
+# Check for flags from config
+USE_ACP = config.acp
+DEBUG = config.debug
+USE_MF_SYS = config.use_modelfile_system
 
 # Import ACP if needed
 if USE_ACP:
@@ -140,7 +148,7 @@ def main():
     print(f"   Models: {len(models)} available")
     
     # Pick best model dynamically
-    model = pick_best_model(preferred=os.environ.get("LOCALCLAW_MODEL"), client=client)
+    model = pick_best_model(preferred=config.model, client=client)
     if not model:
         model = models[0] if models else None
     
