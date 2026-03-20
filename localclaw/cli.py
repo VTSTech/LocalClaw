@@ -132,21 +132,23 @@ def _test_model_tool_support(client: OllamaClient, model: str, verbose: bool = F
     """
     Test if a model supports native tool calling.
     Uses the model's Modelfile system prompt (no custom prompts).
-    
-    Detection logic:
+
+    Detection logic (v2 - improved accuracy):
     1. HTTP 400 "does not support tools" → none (Ollama's explicit rejection)
-    2. Native tool_calls in response → native
-    3. API succeeded but no native tool_calls → react (model accepted tools)
-    
-    Key insight: If Ollama accepts the tools parameter without error, the model
-    CAN use tools. Only HTTP 400 "does not support tools" means truly no support.
-    
+    2. Native tool_calls in API response, calling correct function → native
+    3. No tool_calls but content has JSON tool call pattern → react (text-based)
+    4. No tool_calls, no tool-like JSON, but API accepted tools → react
+    5. Model ignored tools entirely, gave normal answer → react (still can try)
+
+    Key insight: "native" requires ACTUAL native tool_calls structure in API response.
+    Models that output JSON as text are "react", not "native".
+
     Returns: "native", "react", "none", or "error"
     """
     import re
-    
-    # Simple test tool
-    test_tool = {
+
+    # Test tool 1: Weather (simple, commonly supported)
+    weather_tool = {
         "type": "function",
         "function": {
             "name": "get_weather",
@@ -163,59 +165,125 @@ def _test_model_tool_support(client: OllamaClient, model: str, verbose: bool = F
             }
         }
     }
-    
+
     test_message = {
         "role": "user",
         "content": "What's the weather like in Tokyo?"
     }
-    
+
     if verbose:
         print(dim(f"    Testing {model}..."), end=" ", flush=True)
-    
+
     try:
         # Send request with tools but NO system prompt override
-        # This lets the model's Modelfile system prompt be used
         response = client.chat(
             model=model,
             messages=[test_message],
-            tools=[test_tool],
+            tools=[weather_tool],
             options={"num_predict": 100}  # Limit response size
         )
-        
-        # 2. Check for native tool_calls (definitive)
+
         message = response.get("message", {})
         tool_calls = message.get("tool_calls", [])
-        
+        content = message.get("content", "")
+
+        # 2. Check for NATIVE tool_calls in API response structure
+        # This is the ONLY path to "native" classification
         if tool_calls:
-            # Verify it's a valid tool call for our function
             for tc in tool_calls:
                 func = tc.get("function", {})
-                if func.get("name") == "get_weather":
+                func_name = func.get("name", "")
+                # Verify it's calling our tool (not hallucinating a different one)
+                if func_name == "get_weather":
+                    # Check for reasonable arguments
+                    args = func.get("arguments", {})
+                    if isinstance(args, dict) and ("location" in args or "city" in args or len(args) > 0):
+                        if verbose:
+                            print(green("✓ native"))
+                        return "native"
+                # Native tool_calls exist but wrong function - still native capability
+                # (model might be confused but HAS native support)
+                elif func_name:  # Any function name = native structure
                     if verbose:
                         print(green("✓ native"))
                     return "native"
-        
-        # 3. API succeeded but no native tool_calls → ReAct
-        # Key insight: If Ollama accepted the tools parameter without error,
-        # the model CAN use tools. Native tool_calls = native, otherwise ReAct.
-        # Only HTTP 400 "does not support tools" means truly "none".
+
+        # 3. Check for text-based tool calls in content
+        # Models that output JSON like {"name": "get_weather", ...} as TEXT
+        if _contains_text_tool_call(content):
+            if verbose:
+                print(yellow("→ ReAct (text JSON)"))
+            return "react"
+
+        # 4. API succeeded, no explicit rejection, no native tool_calls
+        # Model accepted tools parameter but didn't use native calling
+        # This is the "react" case - can still parse text-based tool calls
         if verbose:
             print(yellow("→ ReAct"))
         return "react"
-        
+
     except Exception as e:
         error_str = str(e)
-        
-        # 1. Check for explicit "does not support tools" rejection (most reliable)
+
+        # 1. Check for explicit "does not support tools" rejection
         if "does not support tools" in error_str.lower():
             if verbose:
                 print(dim("○ none"))
             return "none"
-        
+
         # Other HTTP errors or connection issues
         if verbose:
             print(red(f"✗ error: {error_str[:60]}"))
         return "error"
+
+
+def _contains_text_tool_call(content: str) -> bool:
+    """
+    Check if the response content contains a JSON tool call pattern.
+    Models that output tool calls as TEXT (not native API) show this pattern.
+
+    Examples:
+      {"name": "get_weather", "arguments": {"location": "Tokyo"}}
+      {"tool": "calculator", "arguments": {"expression": "2+2"}}
+      ```json
+      {"name": "some_function", "parameters": {...}}
+      ```
+    """
+    if not content:
+        return False
+
+    # Remove markdown code blocks if present
+    cleaned = re.sub(r"```(?:json)?", "", content).strip().rstrip("`").strip()
+
+    # Look for JSON object pattern
+    start = cleaned.find("{")
+    end = cleaned.rfind("}")
+    if start == -1 or end == -1:
+        return False
+
+    try:
+        import json
+        obj = json.loads(cleaned[start:end + 1])
+
+        # Check for tool call patterns
+        if not isinstance(obj, dict):
+            return False
+
+        # Pattern 1: {"name": "...", "arguments": {...}}
+        if "name" in obj and ("arguments" in obj or "parameters" in obj):
+            return True
+
+        # Pattern 2: {"tool": "...", "arguments": {...}}
+        if "tool" in obj and "arguments" in obj:
+            return True
+
+        # Pattern 3: {"function": "...", "args": {...}}
+        if "function" in obj and "args" in obj:
+            return True
+
+        return False
+    except (json.JSONDecodeError, ValueError):
+        return False
 
 # Global reference for A2A processing (set in cmd_chat)
 _acp_plugin = None
@@ -2070,4 +2138,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-    
