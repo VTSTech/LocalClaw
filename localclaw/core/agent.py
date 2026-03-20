@@ -1105,8 +1105,9 @@ class Agent:
         self.debug = debug
         self.use_compact_prompt = use_compact_prompt
 
-        # Determine tool support level: "native", "react", or "none"
-        # Priority: force_react > tested_models.json > heuristic
+        # Determine tool support level: "native", "react", "none", or "untested"
+        # Priority: force_react > tested_models.json
+        # "untested" defaults to "react" (safest default)
         if force_react:
             self._tool_support = "react"
         else:
@@ -1115,11 +1116,11 @@ class Agent:
                 from ..cli import get_tool_support
                 self._tool_support = get_tool_support(model, self.client)
             except ImportError:
-                # Fallback to heuristic
-                if self.client.model_supports_tools(model):
-                    self._tool_support = "native"
-                else:
-                    self._tool_support = "react"
+                self._tool_support = "untested"
+        
+        # Treat "untested" as "react" (safest default)
+        if self._tool_support == "untested":
+            self._tool_support = "react"
         
         # Determine if native tools should be used
         # "native" = pass tools to API, let model handle

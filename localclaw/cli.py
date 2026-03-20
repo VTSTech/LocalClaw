@@ -84,26 +84,26 @@ def get_tool_support(model: str, client=None) -> str:
     """
     Get the tool support level for a model.
     
-    Checks tested_models.json first, then falls back to heuristic.
+    Checks tested_models.json only. Run `localclaw models --tool_support` to test.
     
     Parameters
     ----------
     model : str
         Model name to check.
     client : OllamaClient, optional
-        Client for heuristic fallback. Creates one if needed.
+        Unused (kept for API compatibility).
     
     Returns
     -------
     str
-        One of: "native", "react", "none", or "unknown"
+        One of: "native", "react", "none", or "untested"
     
     Levels
     ------
     - "native": Model has native Ollama tool-calling support (passes tools to API)
     - "react": Model accepts tools API but needs text-based ReAct prompting  
     - "none": Model explicitly rejects tools (don't pass tools at all)
-    - "unknown": Not tested yet, fall back to heuristic
+    - "untested": Not tested yet - run `localclaw models --tool_support` to test
     
     Examples
     --------
@@ -114,26 +114,18 @@ def get_tool_support(model: str, client=None) -> str:
     ...     # Use ReAct text parsing
     ... elif support == "none":
     ...     # Don't use tools at all
+    ... elif support == "untested":
+    ...     # Not tested - defaults to ReAct mode
     """
-    # Check tested_models.json first
+    # Check tested_models.json only
     tested = _load_tested_models()
     if model in tested:
         result = tested[model].get("tool_support")
         if result in ("native", "react", "none"):
             return result
     
-    # Fall back to heuristic if client available
-    if client is None:
-        from .core.ollama_client import OllamaClient
-        client = OllamaClient()
-    
-    if hasattr(client, "model_supports_tools"):
-        if client.model_supports_tools(model):
-            return "native"  # Heuristic says native-capable family
-        else:
-            return "react"  # Unknown family, assume ReAct needed
-    
-    return "unknown"
+    # Not tested
+    return "untested"
 
 
 def _test_model_tool_support(client: OllamaClient, model: str, verbose: bool = False) -> str:
@@ -631,11 +623,13 @@ def cmd_models(args):
         elif tool_support == "react":
             support_str = yellow("ReAct")
         elif tool_support == "none":
-            support_str = red("none")
+            support_str = red("○ none")
         elif tool_support == "error":
             support_str = red("error")
+        elif tool_support == "untested":
+            support_str = dim("untested")
         else:
-            support_str = dim("ReAct (?)")
+            support_str = dim("untested")
         
         # Truncate long model names
         m_display = m[:40] + ".." if len(m) > 42 else m
