@@ -129,6 +129,17 @@ class OllamaClient:
         req = urllib.request.Request(url, method="GET")
         return json.loads(self._request(req).decode("utf-8"))
 
+    def _delete(self, endpoint: str, payload: dict) -> dict:
+        """Send a DELETE request with JSON payload."""
+        url = f"{self.base_url}{endpoint}"
+        data = json.dumps(payload).encode("utf-8")
+        req = urllib.request.Request(
+            url, data=data,
+            headers={"Content-Type": "application/json"},
+            method="DELETE",
+        )
+        return json.loads(self._request(req).decode("utf-8"))
+
     def _stream(self, endpoint: str, payload: dict) -> Iterator[dict]:
         """Yield JSON objects from a streaming Ollama response."""
         url = f"{self.base_url}{endpoint}"
@@ -321,6 +332,184 @@ class OllamaClient:
                 return True
         
         return False
+
+    # ------------------------------------------------------------------ #
+    #  Model Management API (ollama CLI equivalent)                       #
+    # ------------------------------------------------------------------ #
+
+    def pull_model(self, name: str, stream: bool = True) -> dict | Iterator[dict]:
+        """
+        Pull a model from the registry.
+        Equivalent to: ollama pull <name>
+
+        Parameters
+        ----------
+        name : str
+            Model name to pull (e.g., "llama3.2:3b")
+        stream : bool
+            If True, yields progress updates; if False, waits for completion
+
+        Returns
+        -------
+        dict | Iterator[dict]
+            If stream=False, returns final status dict.
+            If stream=True, yields progress dicts with 'status', 'completed', 'total' fields.
+        """
+        payload = {"name": name, "stream": stream}
+        if stream:
+            return self._stream("/api/pull", payload)
+        return self._post("/api/pull", payload)
+
+    def delete_model(self, name: str) -> dict:
+        """
+        Delete a model from local storage.
+        Equivalent to: ollama rm <name>
+
+        Parameters
+        ----------
+        name : str
+            Model name to delete
+
+        Returns
+        -------
+        dict
+            Response from the server
+        """
+        return self._delete("/api/delete", {"name": name})
+
+    def list_running(self) -> list[dict]:
+        """
+        List currently running models.
+        Equivalent to: ollama ps
+
+        Returns
+        -------
+        list[dict]
+            List of running models with details like name, size, processor, until
+        """
+        try:
+            data = self._get("/api/ps")
+            return data.get("models", [])
+        except OllamaError:
+            return []
+
+    def push_model(self, name: str, stream: bool = True) -> dict | Iterator[dict]:
+        """
+        Push a model to a registry.
+        Equivalent to: ollama push <name>
+
+        Parameters
+        ----------
+        name : str
+            Model name to push
+        stream : bool
+            If True, yields progress updates
+
+        Returns
+        -------
+        dict | Iterator[dict]
+            Progress updates or final status
+        """
+        payload = {"name": name, "stream": stream}
+        if stream:
+            return self._stream("/api/push", payload)
+        return self._post("/api/push", payload)
+
+    def create_model(
+        self,
+        name: str,
+        modelfile: str | None = None,
+        from_: str | None = None,
+        stream: bool = True
+    ) -> dict | Iterator[dict]:
+        """
+        Create a new model from a Modelfile or base model.
+        Equivalent to: ollama create <name> -f <modelfile>
+
+        Parameters
+        ----------
+        name : str
+            Name for the new model
+        modelfile : str, optional
+            Contents of the Modelfile
+        from_ : str, optional
+            Base model to create from (alternative to modelfile)
+        stream : bool
+            If True, yields progress updates
+
+        Returns
+        -------
+        dict | Iterator[dict]
+            Progress updates or final status
+        """
+        payload = {"name": name, "stream": stream}
+        if modelfile:
+            payload["modelfile"] = modelfile
+        if from_:
+            payload["from"] = from_
+        if stream:
+            return self._stream("/api/create", payload)
+        return self._post("/api/create", payload)
+
+    def unload_model(self, name: str) -> dict:
+        """
+        Unload a model from memory (stop keeping it warm).
+        Equivalent to: ollama stop <name>
+
+        Parameters
+        ----------
+        name : str
+            Model name to unload
+
+        Returns
+        -------
+        dict
+            Response from the server
+        """
+        # Note: Ollama uses /api/unload or can be done via generate with keep_alive=0
+        try:
+            return self._post("/api/generate", {"model": name, "keep_alive": 0})
+        except OllamaError:
+            # Fallback to unload endpoint if available
+            return self._post("/api/unload", {"name": name})
+
+    def copy_model(self, source: str, destination: str) -> dict:
+        """
+        Copy a model to a new name.
+        Equivalent to: ollama cp <source> <destination>
+
+        Parameters
+        ----------
+        source : str
+            Source model name
+        destination : str
+            New model name
+
+        Returns
+        -------
+        dict
+            Response from the server
+        """
+        return self._post("/api/copy", {"source": source, "destination": destination})
+
+    def get_model_details(self, name: str) -> dict:
+        """
+        Get detailed model information formatted for display.
+        Equivalent to: ollama show <name>
+
+        This is an alias for get_model_info but returns a cleaner format.
+
+        Parameters
+        ----------
+        name : str
+            Model name
+
+        Returns
+        -------
+        dict
+            Model details including family, size, quantization, etc.
+        """
+        return self.get_model_info(name)
 
     def __repr__(self):
         return f"OllamaClient(base_url={self.base_url!r})"

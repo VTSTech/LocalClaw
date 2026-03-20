@@ -1,26 +1,101 @@
 # 🦞 LocalClaw R03
 
-## GSM8K Benchmark Results (with Calculator Tool)
+## GSM8K Benchmark Results
 
-The following models have been tested on a **50-question GSM8K-style benchmark** using the Agent system with a calculator tool.
+The following models have been tested on a **50-question GSM8K-style benchmark** using the Agent system with tool support detection.
 
-### Native Tools (Modelfile Prompts, No Custom/System Prompt)
+---
+
+### GSM8K with Modelfile Prompts + Tool Support Detection (R03.1.0)
+
+Models are tested using their own **Modelfile system prompts** combined with LocalClaw's new tool support detection logic:
+
+- **`native`** models → Tools passed via API, standard math prompt
+- **`react`** models → Tools via text-based ReAct prompting
+- **`none`** models → **No tools**, uses `MATH_SYSTEM_PROMPT_NO_TOOLS` (pure reasoning)
+
+| Rank | Model | Score | Accuracy | Avg Time | Tool Support | Notes |
+|:----:|-------|------:|--------:|--------:|--------------|-------|
+| 🥇 | **`nchapman/dolphin3.0-qwen2.5:0.5b`** | **39/50** | **78.0%** | 8.9s | native | 🏆 **Best overall!** |
+| 🥈 | `qwen2.5:0.5b` | 36/50 | 72.0% | 19.3s | native | Strong performer |
+| 🥉 | `gemma3:270m` | 31/50 | 62.0% | **2.7s** | none | ⚡ **Fastest!** Pure reasoning (no tools) |
+| 4 | `granite4:350m` | 23/50 | 46.0% | 23.4s | native | Struggles with native tools |
+| 5 | `functiongemma:270m` | 19/50 | 38.0% | 9.6s | native | Designed for tools but underperforms |
+| 6 | `qwen3:0.6b` | 4/50 | 8.0% | 27.5s | react | ⚠️ Poor performance |
+
+---
+
+### Key Findings
+
+#### 1. Dolphin Fine-tunes Excel at Tool Calling
+
+| Model | Score | Time | vs Base Model |
+|-------|-------|------|---------------|
+| `dolphin3.0-qwen2.5:0.5b` | **78%** | 8.9s | — |
+| `qwen2.5:0.5b` (base) | 72% | 19.3s | +6% faster, 2x speed |
+
+**Insight**: Dolphin fine-tunes not only improve accuracy but also **halve inference time**.
+
+#### 2. Models Without Tool Support Can Still Perform Well
+
+| Model | Tool Support | Score | Method |
+|-------|--------------|-------|--------|
+| `gemma3:270m` | **none** | **62%** | Pure reasoning prompt |
+| `gemma3:270m` (old) | none | 4% | Wrong prompt (mentioned tools) |
+
+**Insight**: The new `MATH_SYSTEM_PROMPT_NO_TOOLS` improved gemma3:270m from **4% → 62%** (+58%) by removing tool references that confused the model.
+
+#### 3. FunctionGemma Paradox
+
+| Model | Designed For | Tool Support | Score |
+|-------|--------------|--------------|-------|
+| `functiongemma:270m` | Function calling | native | 38% |
+| `gemma3:270m` | General use | none | **62%** |
+
+**Insight**: `functiongemma` is designed for tool calling but underperforms its base model `gemma3` when tools are used. The base model using **pure reasoning** outperforms it!
+
+#### 4. Qwen3 Underperforms
+
+| Model | Params | Tool Support | Score | Issue |
+|-------|--------|--------------|-------|-------|
+| `qwen3:0.6b` | 600M | react | **8%** | Catastrophic failure |
+| `qwen2.5:0.5b` | 500M | native | 72% | Works well |
+
+**Insight**: Despite being newer, `qwen3:0.6b` performs poorly. Possible causes:
+- ReAct prompt format incompatibility
+- Modelfile system prompt conflicts
+- Tool support misdetected (should be `none`?)
+
+---
+
+### Tool Support Impact
+
+| Model | Tool Support | Prompt Used | Score |
+|-------|--------------|-------------|-------|
+| `gemma3:270m` | none | `MATH_SYSTEM_PROMPT_NO_TOOLS` | **62%** |
+| `granite4:350m` | native | Standard + tools | 46% |
+| `functiongemma:270m` | native | Standard + tools | 38% |
+
+**Key Insight**: For sub-500M models, **not using tools** often outperforms native tool calling!
+
+---
+
+## Previous Benchmark: Native Tools (Pre-R03.1.0)
+
+*These results used custom system prompts instead of Modelfile prompts.*
 
 | Rank | Model | Score | Accuracy | Avg Time | Notes |
 |:----:|-------|------:|--------:|--------:|-------|
-| 🥇 | **`nchapman/dolphin3.0-qwen2.5:0.5b`** | **34/50** | **68.0%** | 4.7s | Best native tool caller! |
+| 🥇 | `nchapman/dolphin3.0-qwen2.5:0.5b` | 34/50 | 68.0% | 4.7s | Best native tool caller |
 | 🥈 | `qwen2.5:0.5b` | 33/50 | 66.0% | 13.6s | Strong performer |
 | 🥉 | `qwen2.5-coder:0.5b-instruct-q4_k_m` | 25/50 | 50.0% | 12.6s | Good but slower |
 | 4 | `nchapman/dolphin3.0-llama3:1b` | 21/50 | 42.0% | 5.6s | Fast inference |
 | 5 | `granite4:350m` | 20/50 | 40.0% | 22.5s | Struggles with native tools |
-| 6 | `gemma3:270m` | 3/50 | 6.0% | 0.8s | Too small for complex tasks |
+| 6 | `gemma3:270m` | 3/50 | 6.0% | 0.8s | Wrong prompt (mentioned tools) |
 
-**Key Insight**: Dolphin fine-tunes show improved native tool calling performance.
-- `dolphin3.0-qwen2.5:0.5b` outperforms base `qwen2.5:0.5b` (68% vs 66%) while being ~3x faster
-- `dolphin3.0-llama3:1b` (42%) significantly trails the qwen-based dolphin (68%)
-- **gemma3:270m** is extremely fast (0.8s) but lacks reasoning capability for GSM8K
+---
 
-### With `--force-react` (Text-based ReAct)
+## Previous Benchmark: With `--force-react` (Text-based ReAct)
 
 | Rank | Model | Score | Time | Avg/Question | Notes |
 |:----:|-------|------:|-----:|-------------:|-------|
@@ -28,26 +103,6 @@ The following models have been tested on a **50-question GSM8K-style benchmark**
 | 🥈 | `granite4:350m` | 41/50 (82%) | 960s | ~19s | **Best sub-500M!** |
 | 🥉 | `nchapman/dolphin3.0-llama3:1b` | 33/50 (66%) | 847s | ~17s | Good reasoning |
 | 4 | `qwen2.5-coder:0.5b-instruct-q4_k_m` | 28/50 (56%) | 671s | ~13s | ⚠️ Timed out |
-| 5 | `granite` | 23/50 (46%) | 1312s | ~26s | Slow but stable |
-| - | `AgentricAi/AgentricAI_TLM:latest` | 0/50 (0%) | — | — | Needs native tools |
-
-### Key Finding: ReAct Mode Dramatically Improves Small Model Performance
-
-| Model | Native Tools | With `--force-react` | Improvement |
-|-------|--------------|---------------------|-------------|
-| `driaforall/tiny-agent-a:1.5b` | **70%** (33.8s) | **94%** (1470s) | **+24%** |
-| `granite4:350m` | 40% | **82%** | **+42%** |
-| `dolphin3.0-llama3:1b` | 42% | **66%** | **+24%** |
-| `qwen2.5-coder:0.5b` | 50% | 56% | +6% |
-| `qwen2.5:0.5b` | 66% | ? | ? |
-| `dolphin3.0-qwen2.5:0.5b` | 68% | ? | ? |
-| `granite` | ? | 46% | ? |
-
-**Key Insight**: ReAct mode is NOT universally better - it depends on the model's training.
-- Models trained for chat/dialogue (granite4, tiny-agent-a) benefit significantly
-- Models fine-tuned for tool calling (qwen2.5-coder) may perform worse with ReAct
-- **tiny-agent-a:1.5b** shows dramatic improvement: 70% → 94% with ReAct, though much slower (33.8s vs 1470s)
-- **granite4:350m** shows the biggest improvement: 40% → 82% with ReAct (+42%)
 
 ---
 
@@ -107,16 +162,33 @@ LocalClaw has been tested with **Microsoft BitNet-b1.58-2B-4T** — a 2B paramet
 
 ---
 
-### Recommendations
+## Recommendations
 
 | Use Case | Recommended Model | Why |
 |----------|-------------------|-----|
-| **Best overall** | **`tiny-agent-a:1.5b` + `--force-react`** | **94% GSM8K - highest score!** |
-| **Best native tools** | `dolphin3.0-qwen2.5:0.5b` | 68% GSM8K with fast 4.7s avg - no ReAct needed |
-| **Smallest capable** | `granite4:350m` + `--force-react` | 82% GSM8K - best sub-500M model with ReAct |
-| **General use** | `qwen2.5-coder:0.5b-instruct-q4_k_m` | Fast, great native tool calling |
+| **Best overall (GSM8K)** | **`dolphin3.0-qwen2.5:0.5b`** | **78% GSM8K**, fast (8.9s), native tools |
+| **Best speed** | `gemma3:270m` | **62% GSM8K** in just 2.7s (pure reasoning) |
+| **Best with ReAct** | `tiny-agent-a:1.5b` + `--force-react` | **94% GSM8K** (slower at ~29s/question) |
+| **Best sub-500M with ReAct** | `granite4:350m` + `--force-react` | 82% GSM8K |
+| **General use** | `qwen2.5:0.5b` | 72% GSM8K, reliable native tool calling |
 | **Large context** | `llama3.2:1b` | **128k context window** |
 | **CPU-only** | `BitNet-b1.58-2B-4T` | Efficient ternary weights, no GPU needed |
+
+---
+
+## Tool Support Quick Reference
+
+| Tool Support | Description | Prompt Strategy |
+|--------------|-------------|-----------------|
+| `native` | Ollama API tool-calling | Standard prompt + tools via API |
+| `react` | Text-based ReAct parsing | Standard prompt + ReAct suffix |
+| `none` | No tool support | `MATH_SYSTEM_PROMPT_NO_TOOLS` (pure reasoning) |
+| `untested` | Not yet tested | Defaults to ReAct (safest) |
+
+Test your models with:
+```bash
+localclaw models --tool_support
+```
 
 ---
 
@@ -124,7 +196,7 @@ LocalClaw has been tested with **Microsoft BitNet-b1.58-2B-4T** — a 2B paramet
 
 ```bash
 # Make sure Ollama is serving and you have a model pulled
-ollama pull qwen2.5-coder:0.5b-instruct-q4_k_m
+ollama pull qwen2.5:0.5b
 
 # List all available examples
 localclaw test --list
@@ -135,8 +207,34 @@ localclaw test quick
 # Full test suite (all examples)
 localclaw test all
 
+# Run GSM8K benchmark (50 math questions)
+localclaw test 14 --timeout 6400
+
 # Run a specific example
 localclaw test 01          # Basic agent demo
 localclaw test 02          # Tool agent demo
 localclaw test 04_acp      # Comprehensive test with ACP tracking
+```
+
+---
+
+## Testing Tool Support Detection
+
+```bash
+# Test all models for native tool support
+localclaw models --tool_support
+
+# Results are saved to tested_models.json for future reference
+```
+
+Example output:
+```
+🦞 LocalClaw R03 Models
+  Model                                      Family       Context    Tool Support
+  ──────────────────────────────────────────────────────────────────────────────
+  gemma3:270m                                gemma3       32K        ○ none
+  granite4:350m                              granite      32K        ✓ native
+  qwen2.5:0.5b                               qwen2        32K        ✓ native
+  qwen3:0.6b                                 qwen3        32K        ReAct
+  dolphin3.0-qwen2.5:0.5b                    qwen2        32K        ✓ native
 ```

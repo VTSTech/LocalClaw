@@ -299,6 +299,249 @@ def _count_messages(history) -> dict:
     }
 
 
+def _handle_ollama_command(user_input: str, client, args):
+    """
+    Handle /ollama commands - an alias for ollama CLI that works via HTTP API.
+    Supports both local and remote Ollama instances.
+
+    Commands:
+        /ollama                    Show connection status
+        /ollama list               List local models
+        /ollama pull <model>       Pull/download a model
+        /ollama rm <model>         Delete a model
+        /ollama show <model>       Show model details
+        /ollama ps                 List running models
+        /ollama stop <model>       Unload/stop a model
+        /ollama cp <src> <dst>     Copy a model
+        /ollama set-url <url>      Switch to a different Ollama server
+    """
+    # Parse the command
+    parts = user_input.split(maxsplit=2)
+    subcommand = parts[1] if len(parts) > 1 else None
+    arg1 = parts[2] if len(parts) > 2 else None
+
+    # No subcommand - show status
+    if not subcommand:
+        print()
+        print(cyan("  Ollama Connection"))
+        print(dim("  ─────────────────────────────────────"))
+        print(f"  URL:     {client.base_url}")
+        print(f"  Status:  {green('✓ Connected') if client.is_running() else red('✗ Not connected')}")
+        
+        # Show available models count
+        try:
+            models = client.list_models()
+            print(f"  Models:  {len(models)} available")
+            if models:
+                print(dim(f"           {', '.join(models[:5])}{'...' if len(models) > 5 else ''}"))
+        except Exception:
+            print(yellow("  Models:  Unable to list (check connection)"))
+        print()
+        return
+
+    # Handle subcommands
+    if subcommand == "list":
+        print()
+        print(cyan("  Local Models"))
+        print(dim("  ─────────────────────────────────────"))
+        try:
+            models = client.list_models()
+            if not models:
+                print(dim("  No models found."))
+                print(dim("  Use '/ollama pull <model>' to download one."))
+            else:
+                for m in sorted(models):
+                    # Try to get model info for size
+                    try:
+                        info = client.get_model_info(m)
+                        details = info.get("details", {})
+                        param_size = details.get("parameter_size", "")
+                        family = details.get("family", "")
+                        size_str = f" ({param_size})" if param_size else ""
+                        fam_str = f" [{family}]" if family else ""
+                        print(f"  {cyan(m)}{dim(size_str)}{dim(fam_str)}")
+                    except Exception:
+                        print(f"  {cyan(m)}")
+        except Exception as e:
+            print(red(f"  ✗ Error listing models: {e}"))
+        print()
+        return
+
+    if subcommand == "pull" and arg1:
+        print()
+        print(cyan(f"  Pulling model: {arg1}"))
+        print(dim("  ─────────────────────────────────────"))
+        try:
+            for progress in client.pull_model(arg1, stream=True):
+                status = progress.get("status", "")
+                completed = progress.get("completed", 0)
+                total = progress.get("total", 0)
+                digest = progress.get("digest", "")
+
+                if "pulling" in status.lower() and total > 0:
+                    percent = (completed / total) * 100
+                    bar_len = 30
+                    filled = int(bar_len * completed / total)
+                    bar = "█" * filled + "░" * (bar_len - filled)
+                    size_mb = total / (1024 * 1024)
+                    print(f"\r  {dim(status)} [{bar}] {percent:.1f}% ({size_mb:.0f} MB)", end="", flush=True)
+                elif digest:
+                    print(f"\r  {dim('digest:')} {digest[:16]}...", end="", flush=True)
+                elif status:
+                    print(f"\r  {dim(status)}" + " " * 40, end="", flush=True)
+
+                if progress.get("error"):
+                    print()
+                    print(red(f"  ✗ Error: {progress['error']}"))
+                    print()
+                    return
+
+            print()
+            print(green(f"  ✓ Successfully pulled {arg1}"))
+        except Exception as e:
+            print()
+            print(red(f"  ✗ Error pulling model: {e}"))
+        print()
+        return
+
+    if subcommand == "rm" and arg1:
+        print()
+        try:
+            client.delete_model(arg1)
+            print(green(f"  ✓ Deleted model: {arg1}"))
+        except Exception as e:
+            print(red(f"  ✗ Error deleting model: {e}"))
+        print()
+        return
+
+    if subcommand == "show" and arg1:
+        print()
+        print(cyan(f"  Model: {arg1}"))
+        print(dim("  ─────────────────────────────────────"))
+        try:
+            info = client.get_model_info(arg1)
+            
+            # Basic info
+            details = info.get("details", {})
+            if details:
+                family = details.get("family", "")
+                param_size = details.get("parameter_size", "")
+                quantization = details.get("quantization_level", "")
+                
+                if family:
+                    print(f"  Family:       {family}")
+                if param_size:
+                    print(f"  Parameters:   {param_size}")
+                if quantization:
+                    print(f"  Quantization: {quantization}")
+            
+            # System prompt
+            system = info.get("system", "")
+            if system:
+                print()
+                print(dim("  System prompt:"))
+                system_lines = system.split("\n")
+                for line in system_lines[:5]:
+                    print(dim(f"    {line[:70]}"))
+                if len(system_lines) > 5:
+                    more_lines = len(system_lines) - 5
+                    print(dim(f"    ... ({more_lines} more lines)"))
+            
+            # Parameters
+            params = info.get("parameters", "")
+            if params:
+                print()
+                print(dim("  Parameters:"))
+                for line in params.strip().split("\n")[:5]:
+                    if line.strip():
+                        print(dim(f"    {line.strip()}"))
+            
+            # Template
+            template = info.get("template", "")
+            if template:
+                print()
+                print(dim(f"  Template: {len(template)} chars"))
+                
+        except Exception as e:
+            print(red(f"  ✗ Error getting model info: {e}"))
+        print()
+        return
+
+    if subcommand == "ps":
+        print()
+        print(cyan("  Running Models"))
+        print(dim("  ─────────────────────────────────────"))
+        try:
+            running = client.list_running()
+            if not running:
+                print(dim("  No models currently running."))
+            else:
+                for m in running:
+                    name = m.get("name", "unknown")
+                    size = m.get("size", 0)
+                    size_gb = size / (1024 * 1024 * 1024)
+                    processor = m.get("details", {}).get("gpu", "unknown")
+                    until = m.get("expires_at", "")
+                    
+                    print(f"  {cyan(name)}")
+                    print(dim(f"    Size: {size_gb:.2f} GB  |  Processor: {processor}"))
+                    if until:
+                        print(dim(f"    Until: {until}"))
+        except Exception as e:
+            print(red(f"  ✗ Error listing running models: {e}"))
+        print()
+        return
+
+    if subcommand == "stop" and arg1:
+        print()
+        try:
+            client.unload_model(arg1)
+            print(green(f"  ✓ Unloaded model: {arg1}"))
+        except Exception as e:
+            print(red(f"  ✗ Error unloading model: {e}"))
+        print()
+        return
+
+    if subcommand == "cp" and arg1:
+        # Parse source and destination
+        cp_parts = arg1.split(maxsplit=1)
+        if len(cp_parts) < 2:
+            print(yellow("  Usage: /ollama cp <source> <destination>"))
+            print()
+            return
+        source, dest = cp_parts
+        try:
+            client.copy_model(source, dest)
+            print(green(f"  ✓ Copied {source} → {dest}"))
+        except Exception as e:
+            print(red(f"  ✗ Error copying model: {e}"))
+        print()
+        return
+
+    if subcommand == "set-url" and arg1:
+        # Switch to a different Ollama server
+        new_url = arg1.rstrip("/")
+        client.base_url = new_url
+        print()
+        print(green(f"  ✓ Switched to: {new_url}"))
+        
+        # Test connection
+        if client.is_running():
+            print(green("  ✓ Connection successful"))
+            models = client.list_models()
+            print(f"  Models available: {len(models)}")
+        else:
+            print(yellow("  ⚠ Could not connect to the new URL"))
+        print()
+        return
+
+    # Unknown subcommand
+    print()
+    print(yellow(f"  Unknown ollama command: {subcommand}"))
+    print(dim("  Available commands: list, pull, rm, show, ps, stop, cp, set-url"))
+    print()
+
+
 # ------------------------------------------------------------------ #
 #  Colour helpers                                                     #
 # ------------------------------------------------------------------ #
@@ -934,12 +1177,8 @@ def cmd_chat(args):
     
     print(bold(f"\n🦞 LocalClaw R03 chat") + dim(f"  {status} · Written by VTSTech · https://www.vts-tech.org · https://github.com/VTSTech/LocalClaw"))
     print(dim("  Type 'exit', 'quit', or Ctrl+C to quit."))
-    print(dim("  Type '/reset' to clear conversation history."))
-    print(dim("  Type '/tools' to list available tools."))
-    print(dim("  Type '/skills' to list active skills."))
-    print(dim("  Type '/status' to show session status."))
-    print(dim("  Type '/context' to show context information."))
-    print(dim("  Type '/a2a' to process pending A2A messages."))
+    print(dim("  Type '/help' to see all available commands."))
+    print(dim("  Type '/ollama' to manage Ollama models (works with remote Ollama)."))
     print(dim("  ─────────────────────────────────────"))
     
     # Show loaded skills if verbose
@@ -1140,6 +1379,15 @@ def cmd_chat(args):
                 print(dim("    /stats           Show session statistics"))
                 print(dim("    /messages        Show raw message history"))
                 print()
+                print("  " + bold("Ollama Management"))
+                print(dim("    /ollama          Show connection status"))
+                print(dim("    /ollama list     List available models"))
+                print(dim("    /ollama pull <m> Download a model"))
+                print(dim("    /ollama rm <m>   Delete a model"))
+                print(dim("    /ollama show <m> Show model details"))
+                print(dim("    /ollama ps       List running models"))
+                print(dim("    /ollama stop <m> Unload a model"))
+                print()
                 print("  " + bold("A2A Messaging"))
                 print(dim("    /a2a             Process pending A2A messages"))
                 print()
@@ -1152,6 +1400,13 @@ def cmd_chat(args):
                 print(dim("    /system          View system prompt"))
                 print(dim("    /temp <value>    Change temperature"))
                 print()
+                continue
+
+            # ═══════════════════════════════════════════════════════════════════
+            # OLLAMA CLI ALIAS - Works with local or remote Ollama via HTTP API
+            # ═══════════════════════════════════════════════════════════════════
+            if user_input == "/ollama" or user_input.startswith("/ollama "):
+                _handle_ollama_command(user_input, agent.client, args)
                 continue
 
             if user_input == "/undo":
