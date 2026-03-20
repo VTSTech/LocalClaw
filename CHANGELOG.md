@@ -6,6 +6,74 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [R03.1.0] - 03-19-2026
+
+### Added
+- **`get_tool_support()` function** - Exported tool support detection API
+  - Returns: `"native"`, `"react"`, `"none"`, or `"unknown"`
+  - Checks `tested_models.json` first, falls back to heuristic
+  - Usage: `from localclaw import get_tool_support`
+  - Enables external tools to query model capabilities before running agents
+
+- **Three-tier tool support system** in Agent class:
+  - `"native"` - Model has native Ollama tool-calling (pass tools to API)
+  - `"react"` - Model accepts tools but needs text-based ReAct prompting
+  - `"none"` - Model explicitly rejects tools (don't pass tools at all)
+
+- **Short-circuit path for non-tool models** - Models with `"none"` support:
+  - Skip tool-related prompt construction
+  - Skip ReAct loop entirely
+  - Return response directly without tool overhead
+  - Use Modelfile system prompt as-is (no custom prompts)
+
+### Changed
+- **Agent initialization** now uses `get_tool_support()` for detection:
+  - Priority: `force_react` > `tested_models.json` > heuristic
+  - New properties: `_tool_support`, `_native_tools`, `_no_tools`
+  - System prompt built based on detected support level
+
+- **Few-shot prompting** now only applies to `"react"` mode:
+  - Models with `"none"` support get no tool-related prompts
+  - Native tool models don't need few-shot examples
+
+- **ACP Plugin** updated to v1.0.5:
+  - Added `primary_agent` in `/api/whoami` response
+  - Nudges delivered only to primary agent (prevents context pollution)
+  - New field documentation in SKILL.md
+
+- **All examples updated** with tool support detection:
+  - `02_tool_agent.py` - Shows tool support level in output
+  - `14_gsm8k_benchmark.py` - Uses tool support for prompt selection
+  - Backend demos, model comparisons, benchmarks all updated
+
+### Technical Details
+- Agent `_tool_support` property determines execution path:
+  ```python
+  if self._no_tools:  # "none" level
+      # Direct response, no tools
+      response = self.client.chat(model, messages, tools=None)
+      return run
+  ```
+
+- System prompt construction by level:
+  - `"native"` - Base prompt only, tools passed to API
+  - `"react"` - Base prompt + tool descriptions + ReAct format + few-shot
+  - `"none"` - Base prompt only, no tools passed
+
+### Example Output
+```
+✓  Ollama is running
+   Using model: gemma3:270m
+   Tool support: none
+   Mode: No tools (model doesn't support tools)
+   
+=== Multi-tool agent demo (gemma3:270m) ===
+   Agent tool support: none
+   Native tools mode: False
+```
+
+---
+
 ## [R03.0.10] - 03-19-2026 4:10:37 PM
 
 ### Added
