@@ -296,12 +296,13 @@ LocalClaw has been tested with **Microsoft BitNet-b1.58-2B-4T** — a 2B paramet
 
 | Use Case | Recommended Model | Why |
 |----------|-------------------|-----|
+| **Best 1B (15-test)** | `llama3.2:1b` | **87% (13/15)**, fastest among top scorers |
+| **Best 1B for Math** | `granite3.1-moe:1b` | **3/3 Math**, 3/3 Calc, fastest top-3 (89.4s) |
 | **Best GSM8K (ReAct)** | `qwen2.5:0.5b` + `--force-react` | **84% GSM8K**, excellent tool use via ReAct |
 | **Best GSM8K (native)** | `dolphin3.0-qwen2.5:0.5b` | **78% GSM8K**, fast (8.9s), native tools |
-| **Best 15-test (tie)** | `dolphin3.0-qwen2.5:0.5b` / `granite4:350m` | **73% (11/15)**, dolphin faster |
-| **Best speed** | `gemma3:270m` | **2.7s avg**, pure reasoning (no tools) |
+| **Best speed (sub-500M)** | `gemma3:270m` | **2.7s avg**, pure reasoning (no tools) |
+| **Best speed (1B)** | `nchapman/dolphin3.0-llama3:1b` | **28.3s** total, good for Code tasks |
 | **Best Calc tool use** | `granite4:350m` | **3/3 Calc**, 76% GSM8K with ReAct |
-| **Best Math/Code** | `gemma3:270m` | **3/3 Math**, **3/3 Code** (no tools needed) |
 | **Large context** | `llama3.2:1b` | **128k context window** |
 | **CPU-only** | `BitNet-b1.58-2B-4T` | Efficient ternary weights, no GPU needed |
 
