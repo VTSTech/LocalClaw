@@ -1,4 +1,4 @@
-# 🦞 LocalClaw R03
+# 🦞 LocalClaw R03.1.0
 
 A minimal, hackable agentic framework engineered to run **entirely locally** with [Ollama](https://ollama.com) or [BitNet](https://github.com/microsoft/BitNet).
 
@@ -20,7 +20,7 @@ Inspired by the architecture of OpenClaw, rebuilt from scratch for local-first o
 | Document | Description |
 |----------|-------------|
 | [Architecture.md](https://github.com/VTSTech/LocalClaw/blob/main/Architecture.md) | Technical documentation for developers (directory structure, core design, orchestrator modes) |
-| [CHANGELOG.md](https://github.com/VTSTech/LocalClaw/blob/main/CHANGELOG.md) | Version history and release notes (R00–R03) |
+| [CHANGELOG.md](https://github.com/VTSTech/LocalClaw/blob/main/CHANGELOG.md) | Version history and release notes (R00–R03.1) |
 | [TESTS.md](https://github.com/VTSTech/LocalClaw/blob/main/TESTS.md) | Benchmark results, model recommendations, and testing guide |
 
 ---
@@ -56,7 +56,16 @@ cp -r localclaw /path/to/your/project/
 
 ## Quick Start
 
-### 1. Single prompt
+### 1. Test Model Tool Support (Recommended First Step)
+
+```bash
+# Test all models for native tool support
+localclaw models --tool_support
+
+# Results saved to tested_models.json for future reference
+```
+
+### 2. Single prompt
 
 ```bash
 # Simple Q&A
@@ -69,7 +78,7 @@ localclaw run "Tell me a joke." --stream
 localclaw run "Explain quantum computing" -m llama3.2:3b
 ```
 
-### 2. Interactive chat
+### 3. Interactive chat
 
 ```bash
 # Start interactive session
@@ -85,7 +94,7 @@ localclaw chat -m llama3.2:3b --skills skill-creator --tools write_file,shell
 localclaw chat -m qwen2.5-coder:0.5b --fast --verbose
 ```
 
-### 3. Using BitNet backend
+### 4. Using BitNet backend
 
 ```bash
 localclaw chat --backend bitnet --force-react
@@ -98,10 +107,49 @@ localclaw run "Calculate 17 * 23" --backend bitnet --tools calculator
 
 - **Zero dependencies** — uses Python stdlib only
 - **Ollama + BitNet backends** — switch with `--backend` flag
-- **Native tool calling** — auto-detected for supported models, ReAct fallback for others
+- **Three-tier tool support** — native, ReAct, or none (auto-detected per model)
 - **Agent Skills** — follows [Agent Skills specification](https://agentskills.io/)
-- **Small model support** — fuzzy matching, argument auto-fixing for models ≤1.5B params
+- **Small model optimized** — pure reasoning mode for sub-500M models
 - **Built-in security** — path validation, command blocklist, SSRF protection
+
+---
+
+## Tool Support Levels
+
+LocalClaw automatically detects each model's tool support level:
+
+| Level | Description | When to Use |
+|-------|-------------|-------------|
+| `native` | Ollama API tool-calling | Models trained for function calling |
+| `react` | Text-based ReAct prompting | Models that accept tools but need format guidance |
+| `none` | No tool support | Models that reject tools; use pure reasoning |
+
+### Testing Tool Support
+
+```bash
+# Test all models
+localclaw models --tool_support
+
+# Example output:
+  Model                                      Family       Context    Tool Support
+  ──────────────────────────────────────────────────────────────────────────────
+  gemma3:270m                                gemma3       32K        ○ none
+  granite4:350m                              granite      32K        ✓ native
+  qwen2.5-coder:0.5b-instruct-q4_k_m         qwen2        32K        ReAct
+  functiongemma:270m                         gemma3       32K        ✓ native
+```
+
+### Performance by Tool Support
+
+Recent GSM8K benchmark results (50 math questions):
+
+| Model | Params | Tool Support | Score |
+|-------|--------|--------------|-------|
+| `gemma3:270m` | 270M | none | **64%** |
+| `functiongemma:270m` | 270M | native | 36% |
+| `granite4:350m` | 350M | native | ~40% |
+
+**Key insight**: Sub-500M models often perform better with `none` (pure reasoning) than with tools!
 
 ---
 
@@ -130,6 +178,7 @@ localclaw run "Calculate 17 * 23" --backend bitnet --tools calculator
 | `-v`, `--verbose` | Show tool calls and timing |
 | `--acp` | Enable ACP (Agent Control Panel) integration |
 | `--use-mf-sys` | Use Modelfile system prompt instead of LocalClaw default |
+| `--force-react` | Force ReAct mode for all models |
 | `--debug` | Show debug info (parsed tool calls, fuzzy matching) |
 
 ### Models Command
@@ -138,7 +187,7 @@ localclaw run "Calculate 17 * 23" --backend bitnet --tools calculator
 # List models with family, context size, and tool support
 localclaw models
 
-# Test each model for native tool support
+# Test each model for native tool support (recommended)
 localclaw models --tool_support
 ```
 
@@ -146,18 +195,18 @@ Output shows:
 - **Model** - Model name
 - **Family** - Model family from Ollama API
 - **Context** - Context window size
-- **Tool Support** - `✓ native`, `ReAct`, `○ none`, or `ReAct (?)` (untested)
+- **Tool Support** - `✓ native`, `ReAct`, `○ none`, or `untested`
 
 ```
-🦞 LocalClaw R03 Models
+🦞 LocalClaw R03.1.0 Models
   Model                                      Family       Context    Tool Support
   ──────────────────────────────────────────────────────────────────────────────
-  driaforall/tiny-agent-a:1.5b               qwen2        32K        ReAct
   gemma3:270m                                gemma3       32K        ○ none
   granite4:350m                              granite      32K        ✓ native
   qwen2.5-coder:0.5b-instruct-q4_k_m         qwen2        32K        ReAct
+  functiongemma:270m                         gemma3       32K        untested
 
-  2 model(s) untested. Use --tool_support to detect native support.
+  1 model(s) untested. Use --tool_support to detect native support.
 ```
 
 ### Test Command Examples
@@ -169,16 +218,8 @@ localclaw test --list
 # Run a quick test suite
 localclaw test quick
 
-# Run a specific test
-localclaw test 01
-localclaw test 07
-
-# Run with ACP integration (activity tracking)
-localclaw test 01 --acp
-localclaw test 14_acp    # shorthand, auto-enables --acp
-
-# Run with Modelfile system prompt
-localclaw test 01 --use-mf-sys --model qwen2.5-coder:0.5b
+# Run GSM8K benchmark (50 math questions)
+localclaw test 14 --acp --timeout 6400
 
 # Run with debug output
 localclaw test 02 --debug --verbose
@@ -222,13 +263,16 @@ ollama serve
 
 # Pull a model:
 ollama pull qwen2.5-coder:0.5b-instruct-q4_k_m
+
+# Test tool support:
+localclaw models --tool_support
 ```
 
 ---
 
 ## About
 
-**🦞 LocalClaw R03** is written and maintained by **VTSTech**.
+**🦞 LocalClaw R03.1.0** is written and maintained by **VTSTech**.
 
 - 🌐 Website: [https://www.vts-tech.org](https://www.vts-tech.org)
 - 📦 GitHub: [https://github.com/VTSTech/LocalClaw](https://github.com/VTSTech/LocalClaw)
