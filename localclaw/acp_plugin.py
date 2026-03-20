@@ -979,13 +979,20 @@ class ACPPlugin:
         """Log final answer as an AI note and clean up."""
         content = getattr(step, "content", "")
 
-        self._log(f"Final answer: {content[:100]}...")
+        # Log full final answer (truncate only for debug display if very long)
+        if len(content) > 500:
+            self._log(f"Final answer: {content[:500]}...")
+        else:
+            self._log(f"Final answer: {content}")
 
-        # Log final answer as note
+        # Log final answer as CHAT activity for visibility in ACP
+        self.log_assistant_message(content)
+
+        # Also log as note for persistence
         self._request("/api/notes/add", "POST", {
             "category": "context",
-            "content": f"LocalClaw final: {content[:400]}",
-            "importance": "normal",
+            "content": f"LocalClaw final: {content[:2000]}",  # Increased from 400 to 2000
+            "importance": "high",  # Changed from normal to high
         })
 
         # Complete any orphaned activities
@@ -1068,14 +1075,14 @@ class ACPPlugin:
         metadata = self._build_metadata()
         metadata["chat_role"] = role
 
-        # Truncate for display
+        # Truncate for display target
         preview = content[:200] if content else ""
 
-        # Create activity
+        # Create activity - include full content in details (up to 4000 chars)
         resp = self._request("/api/action", "POST", {
             "action": "CHAT",
             "target": f"{role.title()}: {preview[:50]}...",
-            "details": content[:1000] if content else "",
+            "details": content[:4000] if content else "",  # Increased from 1000
             "priority": "normal",
             "metadata": metadata,
         })
@@ -1088,7 +1095,7 @@ class ACPPlugin:
             # Complete immediately for non-streaming
             self._request("/api/complete", "POST", {
                 "activity_id": activity_id,
-                "result": content[:500] if content else "",
+                "result": content[:2000] if content else "",  # Increased from 500
             })
             self._log(f"Logged {role} message")
 

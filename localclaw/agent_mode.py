@@ -308,6 +308,9 @@ class AgentMode:
         # Execution history
         self.execution_log: list[dict] = []
         
+        # Track final response from last task
+        self.final_response: Optional[str] = None
+        
         # Callbacks
         self.on_state_change: Optional[Callable[[AgentState, AgentState], None]] = None
         self.on_step_complete: Optional[Callable[[Step], None]] = None
@@ -346,6 +349,7 @@ class AgentMode:
         status = {
             "state": self.state.value,
             "queue_length": len(self.message_queue),
+            "final_response": self.final_response,
         }
         
         if self.plan:
@@ -670,6 +674,7 @@ Example: [{{"description": "Step 1"}}, {{"description": "Step 2"}}]"""
         })
         
         # Execute steps
+        final_response = None
         for i, step in enumerate(self.plan.steps):
             # Check for pause/stop between steps
             while self.state == AgentState.PAUSED:
@@ -680,6 +685,10 @@ Example: [{{"description": "Step 1"}}, {{"description": "Step 2"}}]"""
             
             # Execute the step
             success, msg = self.execute_step(step)
+            
+            # Track the final response (from last successful step)
+            if success and msg:
+                final_response = msg
             
             if not success:
                 # Step failed - ask agent to handle or abort
@@ -706,19 +715,23 @@ Example: [{{"description": "Step 1"}}, {{"description": "Step 2"}}]"""
                 elif remaining == 1:
                     self._inject_context("→ Final step. Wrap up and report completion.")
         
+        # Store final response
+        self.final_response = final_response
+        
         # Task complete
         self.execution_log.append({
             "type": "task_complete",
             "timestamp": datetime.now().isoformat(),
             "goal": goal,
             "total_steps": self.plan.total_steps,
+            "final_response": final_response,
         })
         
         if self.on_task_complete:
             self.on_task_complete(self.plan)
         
         self._set_state(AgentState.IDLE)
-        return True, f"Task completed: {goal}"
+        return True, final_response or f"Task completed: {goal}"
     
     def _inject_context(self, message: str):
         """
@@ -749,6 +762,19 @@ def format_status(status: dict) -> str:
         ])
         if status.get("current_step_description"):
             lines.append(f"  Current: {status['current_step_description']}")
+    
+    # Show final response if available
+    if status.get("final_response"):
+        lines.extend([
+            "",
+            "  Final Response:",
+        ])
+        # Show full response, wrapping long lines
+        response = status["final_response"]
+        for line in response.split("\n")[:10]:  # Limit to 10 lines
+            lines.append(f"    {line}")
+        if len(response.split("\n")) > 10:
+            lines.append(f"    ... ({len(response.split('\n')) - 10} more lines)")
     
     return "\n".join(lines)
 

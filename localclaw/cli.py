@@ -1846,6 +1846,19 @@ def cmd_agent(args):
         print(bold(green("  🏆 Task Complete!")))
         print(dim(f"     Goal: {plan.goal}"))
         print(dim(f"     Steps completed: {plan.completed_steps}/{plan.total_steps}"))
+        
+        # Show final response from agent
+        if agent_mode.final_response:
+            print()
+            print(cyan("  📝 Final Response:"))
+            response = agent_mode.final_response
+            for line in response.split("\n"):
+                print(f"     {line}")
+        
+        # Log final response to ACP
+        if acp_plugin and agent_mode.final_response:
+            acp_plugin.log_assistant_message(agent_mode.final_response)
+        
         # Show queued messages
         queued = agent_mode.process_queue()
         if queued:
@@ -2113,7 +2126,10 @@ def cmd_agent(args):
                 continue
 
             # Agent is IDLE - start a new task
-            # Run task in background thread
+            # Log user message to ACP
+            if acp_plugin:
+                acp_plugin.log_user_message(user_input)
+
             print()
             print(cyan(f"  📋 Starting task: {user_input[:60]}{'...' if len(user_input) > 60 else ''}"))
             print(dim("  Agent will work autonomously. Messages will be queued until completion."))
