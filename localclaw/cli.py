@@ -378,6 +378,21 @@ def _build_agent(args, client: OllamaClient):
                 print(f"Run {bold('localclaw skills')} to see available skills.")
                 sys.exit(1)
 
+    # Check tool support level for the model
+    #tool_support = "untested"
+    if tools_registry:
+        try:
+            tool_support = get_tool_support(args.model, client)
+        except Exception:
+            tool_support = "untested"
+        
+        # If model has no tool support, clear tools registry
+        if tool_support == "none":
+            if getattr(args, "verbose", False):
+                print(yellow(f"  ⚠ Model '{args.model}' has no tool support - tools will be ignored"))
+            # Agent will handle this internally, but we can warn the user
+            # Tools are kept for reference but Agent passes tools=None to API
+
     # Build system prompt — structured for small model reliability
     if getattr(args, "system", None):
         # Explicit override via --system flag
