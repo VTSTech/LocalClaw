@@ -130,7 +130,7 @@ class OllamaClient:
         return json.loads(self._request(req).decode("utf-8"))
 
     def _delete(self, endpoint: str, payload: dict) -> dict:
-        """Send a DELETE request with JSON payload."""
+        """Send a DELETE request with JSON payload. Handles empty responses."""
         url = f"{self.base_url}{endpoint}"
         data = json.dumps(payload).encode("utf-8")
         req = urllib.request.Request(
@@ -138,7 +138,15 @@ class OllamaClient:
             headers={"Content-Type": "application/json"},
             method="DELETE",
         )
-        return json.loads(self._request(req).decode("utf-8"))
+        try:
+            response_data = self._request(req).decode("utf-8")
+            if not response_data or not response_data.strip():
+                # Empty response = success for some endpoints like /api/delete
+                return {"status": "success"}
+            return json.loads(response_data)
+        except json.JSONDecodeError:
+            # Non-JSON response, treat as success if no error was raised
+            return {"status": "success"}
 
     def _stream(self, endpoint: str, payload: dict) -> Iterator[dict]:
         """Yield JSON objects from a streaming Ollama response."""
@@ -464,14 +472,23 @@ class OllamaClient:
         Returns
         -------
         dict
-            Response from the server
+            Response from the server, or {"status": "not_running"} if model wasn't loaded
         """
-        # Note: Ollama uses /api/unload or can be done via generate with keep_alive=0
+        # Ollama uses /api/generate with keep_alive=0 to unload
         try:
             return self._post("/api/generate", {"model": name, "keep_alive": 0})
-        except OllamaError:
-            # Fallback to unload endpoint if available
-            return self._post("/api/unload", {"name": name})
+        except OllamaError as e:
+            # Check if model wasn't loaded (HTTP 404 or similar)
+            error_str = str(e)
+            if "404" in error_str or "not found" in error_str.lower():
+                return {"status": "not_running", "message": f"Model '{name}' is not currently loaded"}
+            raise
+        except Exception as e:
+            # Handle any other errors
+            error_str = str(e)
+            if "404" in error_str:
+                return {"status": "not_running", "message": f"Model '{name}' is not currently loaded"}
+            raise OllamaError(f"Failed to unload model: {e}") from e
 
     def copy_model(self, source: str, destination: str) -> dict:
         """

@@ -563,8 +563,11 @@ def _handle_ollama_command(user_input: str, client, args):
     if subcommand == "stop" and arg1:
         print()
         try:
-            client.unload_model(arg1)
-            print(green(f"  ✓ Unloaded model: {arg1}"))
+            result = client.unload_model(arg1)
+            if result.get("status") == "not_running":
+                print(yellow(f"  ⚠ Model '{arg1}' is not currently running"))
+            else:
+                print(green(f"  ✓ Unloaded model: {arg1}"))
         except Exception as e:
             print(red(f"  ✗ Error unloading model: {e}"))
         print()
