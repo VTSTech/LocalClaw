@@ -110,7 +110,59 @@ Models are tested using their own **Modelfile system prompts** combined with Loc
 
 The following models have been tested with a **15-test benchmark** (3 tests per category: Math, Reasoning, Knowledge, Calc Tool, Code).
 
-### Rankings
+### Rankings (R03.1.0 - Updated)
+
+#### Modelfile Prompts (auto-detected tool support)
+
+| Rank | Model | Score | Time | Math | Reason | Know | Calc | Code |
+|:----:|-------|------:|-----:|:----:|:------:|:----:|:----:|:----:|
+| 🥇 | `nchapman/dolphin3.0-qwen2.5:0.5b` | **11/15 (73%)** | **27.1s** | 1/3 | **2/3** | **3/3** | 2/3 | **3/3** |
+| 🥈 | `granite4:350m` | **11/15 (73%)** | 78.4s | 1/3 | 2/3 | 2/3 | **3/3** | 3/3 |
+| 🥉 | `qwen2.5-coder:0.5b-instruct-q4_k_m` | 9/15 (60%) | 121.7s | 1/3 | 2/3 | 2/3 | 2/3 | 2/3 |
+| 4 | `gemma3:270m` | 8/15 (53%) | **22.8s** | **3/3** | 1/3 | 1/3 | 0/3 | **3/3** |
+| 5 | `qwen2.5:0.5b` | 8/15 (53%) | 61.0s | 1/3 | 2/3 | 2/3 | 1/3 | 2/3 |
+| 6 | `functiongemma:270m` | 2/15 (13%) | 55.1s | 0/3 | 0/3 | 0/3 | 0/3 | 2/3 |
+| 7 | `qwen3:0.6b` | 0/15 (0%) | 197.0s | 0/3 | 0/3 | 0/3 | 0/3 | 0/3 |
+
+#### With `--force-react` (text-based ReAct prompting)
+
+| Rank | Model | Score | Time | Math | Reason | Know | Calc | Code |
+|:----:|-------|------:|-----:|:----:|:------:|:----:|:----:|:----:|
+| 🥇 | `nchapman/dolphin3.0-qwen2.5:0.5b` | **11/15 (73%)** | **24.4s** | 1/3 | **2/3** | **3/3** | 2/3 | **3/3** |
+| 🥈 | `granite4:350m` | **11/15 (73%)** | 75.6s | 2/3 | 1/3 | 2/3 | **3/3** | **3/3** |
+| 🥉 | `qwen2.5-coder:0.5b-instruct-q4_k_m` | 9/15 (60%) | 111.6s | 1/3 | 2/3 | 2/3 | 2/3 | 2/3 |
+| 4 | `gemma3:270m` | 8/15 (53%) | 29.4s | **3/3** | 1/3 | 1/3 | 0/3 | 2/3 |
+| 5 | `qwen2.5:0.5b` | 8/15 (53%) | 54.5s | 1/3 | 2/3 | 2/3 | 1/3 | 2/3 |
+| 6 | `functiongemma:270m` | 2/15 (13%) | 56.1s | 0/3 | 0/3 | 0/3 | 0/3 | 2/3 |
+| 7 | `qwen3:0.6b` | 0/15 (0%) | 199.2s | 0/3 | 0/3 | 0/3 | 0/3 | 0/3 |
+
+### Mode Comparison: Modelfile vs --force-react
+
+| Model | Modelfile | ReAct | Δ Score | Δ Time | Better Mode |
+|-------|-----------|-------|---------|--------|-------------|
+| `dolphin3.0-qwen2.5:0.5b` | 11/15, 27.1s | 11/15, 24.4s | 0 | **-2.7s** | ReAct (faster) |
+| `granite4:350m` | 11/15, 78.4s | 11/15, 75.6s | 0 | **-2.8s** | ReAct (faster) |
+| `qwen2.5-coder:0.5b` | 9/15, 121.7s | 9/15, 111.6s | 0 | **-10.1s** | ReAct (faster) |
+| `gemma3:270m` | 8/15, 22.8s | 8/15, 29.4s | 0 | +6.6s | Modelfile (faster) |
+| `qwen2.5:0.5b` | 8/15, 61.0s | 8/15, 54.5s | 0 | **-6.5s** | ReAct (faster) |
+| `functiongemma:270m` | 2/15, 55.1s | 2/15, 56.1s | 0 | +1.0s | Tie |
+| `qwen3:0.6b` | 0/15, 197.0s | 0/15, 199.2s | 0 | +2.2s | Both fail |
+
+**Key Finding:** `--force-react` is faster for most models, except `gemma3:270m` which doesn't support tools (ReAct adds unnecessary overhead).
+
+### Category Champions
+
+| Category | 🏆 Champion (Modelfile) | 🏆 Champion (ReAct) |
+|----------|-------------------------|---------------------|
+| **Math** | `gemma3:270m` (3/3) | `gemma3:270m` (3/3) |
+| **Reasoning** | `dolphin3.0-qwen2.5:0.5b` (2/3) | `dolphin3.0-qwen2.5:0.5b` (2/3) |
+| **Knowledge** | `dolphin3.0-qwen2.5:0.5b` (3/3) | `dolphin3.0-qwen2.5:0.5b` (3/3) |
+| **Calc** | `granite4:350m` (3/3) | `granite4:350m` (3/3) |
+| **Code** | `gemma3:270m` (3/3) | `dolphin3.0-qwen2.5:0.5b` (3/3) |
+
+### Previous Rankings (Pre-R03.1.0)
+
+*These results used different system prompts and tool detection logic.*
 
 | Rank | Model | Score | Time | Math | Reason | Know | Calc | Code |
 |:----:|-------|------:|-----:|:----:|:------:|:----:|:----:|:----:|
@@ -118,12 +170,12 @@ The following models have been tested with a **15-test benchmark** (3 tests per 
 | 🥈 | **`BitNet-b1.58-2B-4T`** (BitNet) | **13/15 (87%)** | ~394s | **3/3** | 2/3 | 2/3 | **3/3** | **3/3** |
 | 🥉 | `granite3.1-moe:1b` | **12/15 (80%)** | ~60s | **3/3** | 2/3 | **3/3** | 1/3 | **3/3** |
 | 4 | `llama3.2:1b` | **12/15 (80%)** | ~600s | **3/3** | 1/3 | 2/3 | **3/3** | **3/3** |
-| 5 | `gemma3:270m` | 10/15 (67%) | ~75s | **3/3** | 1/3 | 1/3 | 2/3 | **3/3** |
-| 6 | `qwen3:0.6b` | ~9/12 | ~130s | 2/3 | **3/3** | **3/3** | 0/3 | — |
-| 7 | `granite4:350m` | 8/15 (53%) | ~97s | 2/3 | 1/3 | 2/3 | 0/3 | **3/3** |
-| 8 | `qwen2.5:0.5b` | 10/15 (67%) | ~107s | 1/3 | **3/3** | **3/3** | 0/3 | **3/3** |
-| 9 | `qwen2-math:1.5b` | 12/15 (80%) | ~611s | **3/3** | **3/3** | **3/3** | ❌ | **3/3** |
-| 10 | `tinyllama:latest` | 9/15 (60%) | ~587s | 2/3 | 2/3 | **3/3** | 0/3 | 2/3 |
+| 5 | `qwen2-math:1.5b` | 12/15 (80%) | ~611s | **3/3** | **3/3** | **3/3** | ❌ | **3/3** |
+| 6 | `gemma3:270m` | 10/15 (67%) | ~75s | **3/3** | 1/3 | 1/3 | 2/3 | **3/3** |
+| 7 | `qwen2.5:0.5b` | 10/15 (67%) | ~107s | 1/3 | **3/3** | **3/3** | 0/3 | **3/3** |
+| 8 | `qwen3:0.6b` | ~9/12 | ~130s | 2/3 | **3/3** | **3/3** | 0/3 | — |
+| 9 | `tinyllama:latest` | 9/15 (60%) | ~587s | 2/3 | 2/3 | **3/3** | 0/3 | 2/3 |
+| 10 | `granite4:350m` | 8/15 (53%) | ~97s | 2/3 | 1/3 | 2/3 | 0/3 | **3/3** |
 | 11 | `smollm:135m` | 7/15 (47%) | ~285s | 0/3 | 2/3 | 2/3 | 0/3 | **3/3** |
 | 12 | `functiongemma:270m` | 1/15 (7%) | ~90s | 0/3 | 0/3 | 0/3 | 0/3 | 1/3 |
 
@@ -166,8 +218,11 @@ LocalClaw has been tested with **Microsoft BitNet-b1.58-2B-4T** — a 2B paramet
 
 | Use Case | Recommended Model | Why |
 |----------|-------------------|-----|
+| **Best overall (15-test)** | **`dolphin3.0-qwen2.5:0.5b`** | **73% (11/15)**, fastest (27.1s), native tools |
 | **Best overall (GSM8K)** | **`dolphin3.0-qwen2.5:0.5b`** | **78% GSM8K**, fast (8.9s), native tools |
-| **Best speed** | `gemma3:270m` | **62% GSM8K** in just 2.7s (pure reasoning) |
+| **Best speed** | `gemma3:270m` | **22.8s** total, pure reasoning (no tools) |
+| **Best Calc tool use** | `granite4:350m` | **3/3 Calc**, native tool support |
+| **Best Math/Code** | `gemma3:270m` | **3/3 Math**, **3/3 Code** (no tools needed) |
 | **Best with ReAct** | `tiny-agent-a:1.5b` + `--force-react` | **94% GSM8K** (slower at ~29s/question) |
 | **Best sub-500M with ReAct** | `granite4:350m` + `--force-react` | 82% GSM8K |
 | **General use** | `qwen2.5:0.5b` | 72% GSM8K, reliable native tool calling |
