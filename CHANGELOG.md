@@ -6,12 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
-## [R03.1.0] - 03-19-2026
+## [R03.1.0] - 03-19-2026 10:32:24 PM
 
 ### Added
 - **`get_tool_support()` function** - Exported tool support detection API
-  - Returns: `"native"`, `"react"`, `"none"`, or `"unknown"`
-  - Checks `tested_models.json` first, falls back to heuristic
+  - Returns: `"native"`, `"react"`, `"none"`, or `"untested"`
+  - Checks `tested_models.json` only (no heuristic fallback)
   - Usage: `from localclaw import get_tool_support`
   - Enables external tools to query model capabilities before running agents
 
@@ -19,58 +19,70 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
   - `"native"` - Model has native Ollama tool-calling (pass tools to API)
   - `"react"` - Model accepts tools but needs text-based ReAct prompting
   - `"none"` - Model explicitly rejects tools (don't pass tools at all)
+  - `"untested"` - Not yet tested, defaults to `"react"` (safest)
+
+- **`MATH_SYSTEM_PROMPT_NO_TOOLS`** - New prompt for models without tool support
+  - Pure reasoning prompt (no tool references)
+  - Step-by-step examples for arithmetic
+  - Prevents confusion for models that can't use tools
 
 - **Short-circuit path for non-tool models** - Models with `"none"` support:
   - Skip tool-related prompt construction
   - Skip ReAct loop entirely
   - Return response directly without tool overhead
-  - Use Modelfile system prompt as-is (no custom prompts)
 
 ### Changed
-- **Agent initialization** now uses `get_tool_support()` for detection:
-  - Priority: `force_react` > `tested_models.json` > heuristic
-  - New properties: `_tool_support`, `_native_tools`, `_no_tools`
-  - System prompt built based on detected support level
+- **Removed heuristic fallback** from `get_tool_support()`:
+  - Family-based assumptions were inaccurate (e.g., dolphin fine-tunes lost native support)
+  - Now requires explicit testing via `localclaw models --tool_support`
+  - Untested models show `"untested"` in models table
 
-- **Few-shot prompting** now only applies to `"react"` mode:
-  - Models with `"none"` support get no tool-related prompts
-  - Native tool models don't need few-shot examples
+- **Agent initialization** now uses `get_tool_support()` for detection:
+  - Priority: `force_react` > `tested_models.json` > default to `"react"`
+  - New properties: `_tool_support`, `_native_tools`, `_no_tools`
+  - `"untested"` treated as `"react"` (safest default)
+
+- **GSM8K benchmark** uses proper prompts by tool support level:
+  - `"none"` → `MATH_SYSTEM_PROMPT_NO_TOOLS` (pure reasoning)
+  - `"react"` → `MATH_SYSTEM_PROMPT` + ReAct suffix
+  - `"native"` → `MATH_SYSTEM_PROMPT` (tools via API)
 
 - **ACP Plugin** updated to v1.0.5:
   - Added `primary_agent` in `/api/whoami` response
   - Nudges delivered only to primary agent (prevents context pollution)
-  - New field documentation in SKILL.md
 
-- **All examples updated** with tool support detection:
-  - `02_tool_agent.py` - Shows tool support level in output
-  - `14_gsm8k_benchmark.py` - Uses tool support for prompt selection
-  - Backend demos, model comparisons, benchmarks all updated
+### Fixed
+- **Models with `"none"` tool support now get appropriate prompts**
+  - Previously used compact prompt that mentioned "calculator tool"
+  - Now uses pure reasoning prompt without tool references
+  - **Result**: `gemma3:270m` improved from 4% to **64%** on GSM8K (+60%)
 
-### Technical Details
-- Agent `_tool_support` property determines execution path:
-  ```python
-  if self._no_tools:  # "none" level
-      # Direct response, no tools
-      response = self.client.chat(model, messages, tools=None)
-      return run
-  ```
+### Tool Support Levels
 
-- System prompt construction by level:
-  - `"native"` - Base prompt only, tools passed to API
-  - `"react"` - Base prompt + tool descriptions + ReAct format + few-shot
-  - `"none"` - Base prompt only, no tools passed
+| Level | Description | Prompt | Tools Passed |
+|-------|-------------|--------|--------------|
+| `"native"` | Native API tool-calling | MATH_SYSTEM_PROMPT | Calculator |
+| `"react"` | Text-based ReAct parsing | MATH_SYSTEM_PROMPT + suffix | Calculator |
+| `"none"` | No tool support | MATH_SYSTEM_PROMPT_NO_TOOLS | None |
+| `"untested"` | Not yet tested | MATH_SYSTEM_PROMPT + suffix | Calculator |
 
 ### Example Output
 ```
-✓  Ollama is running
-   Using model: gemma3:270m
-   Tool support: none
-   Mode: No tools (model doesn't support tools)
-   
-=== Multi-tool agent demo (gemma3:270m) ===
-   Agent tool support: none
-   Native tools mode: False
+🦞 LocalClaw R03 Models
+  Model                                      Family       Context    Tool Support
+  ──────────────────────────────────────────────────────────────────────────────
+  gemma3:270m                                gemma3       32K        ○ none
+  granite4:350m                              granite      32K        ✓ native
+  qwen2.5-coder:0.5b-instruct-q4_k_m         qwen2        32K        ReAct
+  functiongemma:270m                         gemma3       32K        untested
+
+  1 model(s) untested. Use --tool_support to detect native support.
 ```
+
+### Benchmark Impact
+| Model | Tool Support | Before | After | Change |
+|-------|--------------|--------|-------|--------|
+| `gemma3:270m` | none | 4% | **64%** | **+60%** |
 
 ---
 
