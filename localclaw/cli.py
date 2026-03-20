@@ -32,6 +32,7 @@ import argparse
 import datetime
 import json
 import os
+import re
 import sys
 import textwrap
 import time
@@ -145,7 +146,6 @@ def _test_model_tool_support(client: OllamaClient, model: str, verbose: bool = F
 
     Returns: "native", "react", "none", or "error"
     """
-    import re
 
     # Test tool 1: Weather (simple, commonly supported)
     weather_tool = {
