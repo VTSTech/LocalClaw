@@ -24,6 +24,7 @@ import sys
 import os
 import time
 import re
+import argparse
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from localclaw import (
@@ -37,11 +38,18 @@ from localclaw import (
 )
 from localclaw.tools.builtins import make_builtin_registry
 from localclaw.model_discovery import pick_best_model, get_available_models
+from localclaw.shared_args import add_shared_args, parse_shared_args
 
-# Check for environment flags
-USE_ACP = os.environ.get("LOCALCLAW_ACP", "0") == "1"
-DEBUG = os.environ.get("LOCALCLAW_DEBUG", "0") == "1"
-USE_MF_SYS = os.environ.get("LOCALCLAW_USE_MF_SYS", "0") == "1"
+# Parse CLI args (with env var fallbacks)
+parser = argparse.ArgumentParser(description="LocalClaw Tool Tests")
+add_shared_args(parser)
+args = parser.parse_args()
+config = parse_shared_args(args)
+
+# Check for flags from config
+USE_ACP = config.acp
+DEBUG = config.debug
+USE_MF_SYS = config.use_modelfile_system
 
 # Import ACP if needed
 if USE_ACP:
@@ -54,8 +62,8 @@ if USE_ACP:
 BACKEND_NAME = LOCALCLAW_BACKEND.upper()
 
 
-# Model to test (discovered dynamically or set via environment)
-preferred = os.environ.get("LOCALCLAW_MODEL")
+# Model to test (discovered dynamically or set via config)
+preferred = config.model
 MODEL = None  # Will be set in main()
 VERBOSE = os.environ.get("LOCALCLAW_VERBOSE", "1") == "1"
 TIMEOUT = int(os.environ.get("LOCALCLAW_TIMEOUT", "120"))  # seconds per test

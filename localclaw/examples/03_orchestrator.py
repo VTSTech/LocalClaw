@@ -18,6 +18,7 @@ With CLI:
 
 import sys
 import os
+import argparse
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from localclaw import (
@@ -32,11 +33,18 @@ from localclaw import (
     LOCALCLAW_BACKEND,
 )
 from localclaw.tools.builtins import BUILTIN_REGISTRY
+from localclaw.shared_args import add_shared_args, parse_shared_args
 
-# Check for environment flags
-USE_ACP = os.environ.get("LOCALCLAW_ACP", "0") == "1"
-DEBUG = os.environ.get("LOCALCLAW_DEBUG", "0") == "1"
-USE_MF_SYS = os.environ.get("LOCALCLAW_USE_MF_SYS", "0") == "1"
+# Parse CLI args (with env var fallbacks)
+parser = argparse.ArgumentParser(description="LocalClaw Orchestrator")
+add_shared_args(parser)
+args = parser.parse_args()
+config = parse_shared_args(args)
+
+# Check for flags from config
+USE_ACP = config.acp
+DEBUG = config.debug
+USE_MF_SYS = config.use_modelfile_system
 
 # Import ACP if needed
 if USE_ACP:
@@ -72,8 +80,8 @@ def _pick(preferences):
                 return m
     return models[0]
 
-# Use LOCALCLAW_MODEL if set, otherwise pick best
-preferred = os.environ.get("LOCALCLAW_MODEL")
+# Use config.model if set, otherwise pick best
+preferred = config.model
 
 # For BitNet, just use whatever model is available
 if LOCALCLAW_BACKEND == "bitnet":

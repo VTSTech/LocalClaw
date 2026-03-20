@@ -27,6 +27,7 @@ With CLI:
 import sys
 import os
 import re
+import argparse
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from localclaw import (
@@ -42,11 +43,18 @@ from localclaw import (
 )
 from localclaw.tools.builtins import BUILTIN_REGISTRY
 from localclaw.model_discovery import pick_best_model
+from localclaw.shared_args import add_shared_args, parse_shared_args
 
-# Check for environment flags
-USE_ACP = os.environ.get("LOCALCLAW_ACP", "0") == "1"
-DEBUG = os.environ.get("LOCALCLAW_DEBUG", "0") == "1"
-FORCE_REACT = os.environ.get("LOCALCLAW_FORCE_REACT", "0") == "1"
+# Parse CLI args (with env var fallbacks)
+parser = argparse.ArgumentParser(description="LocalClaw Tool Agent")
+add_shared_args(parser)
+args = parser.parse_args()
+config = parse_shared_args(args)
+
+# Check for flags from config
+USE_ACP = config.acp
+DEBUG = config.debug
+FORCE_REACT = config.force_react
 
 # Import ACP if needed
 if USE_ACP:
@@ -68,7 +76,7 @@ if not client.is_running():
         print("   Start it with: ollama serve")
     sys.exit(1)
 
-preferred = os.environ.get("LOCALCLAW_MODEL")
+preferred = config.model
 MODEL = pick_best_model(preferred=preferred, client=client)
 if not MODEL:
     models = get_available_models(client)

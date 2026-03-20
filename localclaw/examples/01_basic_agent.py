@@ -23,6 +23,7 @@ With CLI:
 
 import sys
 import os
+import argparse
 
 # Ensure the project root (which contains the localclaw/ package) is on the path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -36,9 +37,16 @@ from localclaw import (
     DEFAULT_MODEL,
     LOCALCLAW_BACKEND,
 )
+from localclaw.shared_args import add_shared_args, parse_shared_args
+
+# Parse CLI args (with env var fallbacks)
+parser = argparse.ArgumentParser(description="LocalClaw Basic Agent")
+add_shared_args(parser)
+args = parser.parse_args()
+config = parse_shared_args(args)
 
 # Check for optional ACP support
-USE_ACP = os.environ.get("LOCALCLAW_ACP", "0") == "1"
+USE_ACP = config.acp
 if USE_ACP:
     try:
         from localclaw import ACPPlugin
@@ -47,7 +55,7 @@ if USE_ACP:
         USE_ACP = False
 
 # Check for debug mode
-DEBUG = os.environ.get("LOCALCLAW_DEBUG", "0") == "1"
+DEBUG = config.debug
 
 # ── 1. Verify backend is running ────────────────────────────────────
 client = get_default_client()
@@ -66,8 +74,8 @@ models = get_available_models(client)
 print(f"   Available models: {models}\n")
 
 # ── 2. Create ACP plugin if requested ─────────────────────────────
-# Use model from env var or default
-MODEL = os.environ.get("LOCALCLAW_MODEL", DEFAULT_MODEL)
+# Use model from config or default
+MODEL = config.model or DEFAULT_MODEL
 
 # If default model not found, use first available
 if MODEL not in models:
